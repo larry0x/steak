@@ -1,6 +1,7 @@
 use cosmwasm_std::{Addr, Coin, CosmosMsg, QuerierWrapper, StakingMsg, StdResult, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use terra_cosmwasm::TerraMsgWrapper;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub(crate) struct Delegation {
@@ -18,7 +19,7 @@ impl Delegation {
     }
 
     /// Create a `CosmosMsg` to make the delegation
-    pub fn into_cosmos_msg(&self) -> CosmosMsg {
+    pub fn into_cosmos_msg(&self) -> CosmosMsg<TerraMsgWrapper> {
         CosmosMsg::Staking(StakingMsg::Delegate {
             validator: self.validator.clone(),
             amount: Coin::new(self.amount.u128(), "uluna"),
@@ -35,7 +36,7 @@ impl Delegation {
             validator: validator.clone(),
             amount: querier
                 .query_delegation(delegator_addr, validator)?
-                .map(|d| d.amount.amount)
+                .map(|fd| fd.amount.amount)
                 .unwrap_or_else(Uint128::zero),
         })
     }

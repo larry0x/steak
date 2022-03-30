@@ -1,7 +1,8 @@
-use cosmwasm_std::Empty;
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, Empty, StdResult, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use terra_cosmwasm::TerraMsgWrapper;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -30,6 +31,8 @@ pub enum ExecuteMsg {
     ///
     /// Currently set to permissioned to deter sandwich attacks. Will explore other options
     Harvest {},
+    /// Callbacks; can only be invoked by the contract itself
+    Callback(CallbackMsg),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -41,7 +44,22 @@ pub enum ReceiveMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum CallbackMsg {}
+pub enum CallbackMsg {
+    /// Swap Terra stablecoins held by the contract to Luna
+    Swap {},
+    /// Following the swaps, stake the Luna acquired to the whitelisted validators
+    Restake {},
+}
+
+impl CallbackMsg {
+    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg<TerraMsgWrapper>> {
+        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: String::from(contract_addr),
+            msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
+            funds: vec![],
+        }))
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]

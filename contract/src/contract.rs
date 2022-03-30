@@ -1,13 +1,14 @@
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, CosmosMsg, Deps, DepsMut, DistributionMsg, Env, MessageInfo, Response,
+    StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
+use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
+use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper};
 
 use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::math::{compute_delegations, compute_mint_amount};
-use crate::msg::{ConfigResponse, InstantiateMsg, ReceiveMsg};
+use crate::msg::{CallbackMsg, ConfigResponse, InstantiateMsg};
 use crate::state::State;
 
 //--------------------------------------------------------------------------------------------------
@@ -53,45 +54,41 @@ pub fn instantiate(
     )))
 }
 
+pub fn register_steak_token(
+    deps: DepsMut,
+    response: SubMsgExecutionResponse,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    let event = response
+        .events
+        .iter()
+        .find(|event| event.ty == "instantiate_contract")
+        .ok_or_else(|| StdError::generic_err("cannot find `instantiate_contract` event"))?;
+
+    let contract_addr_str = &event
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "contract_address")
+        .ok_or_else(|| StdError::generic_err("cannot find `contract_address` attribute"))?
+        .value;
+
+    let contract_addr = deps.api.addr_validate(contract_addr_str)?;
+    state.steak_token.save(deps.storage, &contract_addr)?;
+
+    Ok(Response::new())
+}
+
 //--------------------------------------------------------------------------------------------------
 // Execution
 //--------------------------------------------------------------------------------------------------
 
-pub fn execute_receive(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    cw20_msg: Cw20ReceiveMsg,
-) -> StdResult<Response> {
-    let api = deps.api;
-    match from_binary(&cw20_msg.msg)? {
-        ReceiveMsg::Unstake {} => {
-            let state = State::default();
-
-            let steak_token = state.steak_token.load(deps.storage)?;
-            if info.sender != steak_token {
-                return Err(StdError::generic_err(format!(
-                    "expecting STEAK token, received {}",
-                    info.sender
-                )));
-            }
-
-            execute_unstake(
-                deps,
-                env,
-                api.addr_validate(&cw20_msg.sender)?,
-                cw20_msg.amount,
-            )
-        },
-    }
-}
-
-pub fn execute_stake(
+pub fn stake(
     deps: DepsMut,
     env: Env,
     staker_addr: Addr,
     uluna_to_stake: Uint128,
-) -> StdResult<Response> {
+) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
@@ -122,53 +119,83 @@ pub fn execute_stake(
         .add_attribute("amount_staked", uluna_to_stake))
 }
 
-pub fn execute_unstake(
+pub fn unstake(
     _deps: DepsMut,
     _env: Env,
     _staker_addr: Addr,
     _usteak_to_burn: Uint128,
-) -> StdResult<Response> {
+) -> StdResult<Response<TerraMsgWrapper>> {
     Err(StdError::generic_err("WIP"))
 }
 
-pub fn execute_harvest(deps: DepsMut, _env: Env, worker_addr: Addr) -> StdResult<Response> {
+pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
 
+    // Only whitelisted workers can harvest
     let worker_addrs = state.workers.load(deps.storage)?;
     if !worker_addrs.contains(&worker_addr) {
         return Err(StdError::generic_err("sender is not a whitelisted worker"));
     }
 
-    Err(StdError::generic_err("WIP"))
+    // For each of the whitelisted validators, create a message to withdraw delegation reward
+    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = deps
+        .querier
+        .query_all_delegations(&env.contract.address)?
+        .into_iter()
+        .map(|d| {
+            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                validator: d.validator,
+            })
+        })
+        .collect();
+
+    // Following the reward withdrawal, we dispatch two callbacks: to swap all rewards to Luna, and
+    // to stake these Luna to the whitelisted validators
+    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Restake {}]
+        .iter()
+        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
+        .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
+
+    Ok(Response::new()
+        .add_messages(msgs)
+        .add_messages(callback_msgs)
+        .add_attribute("action", "steak_hub/execute/harvest"))
 }
 
-//--------------------------------------------------------------------------------------------------
-// Replies
-//--------------------------------------------------------------------------------------------------
+pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    // Query the amounts of Terra stablecoins available to be swapped
+    let coins = deps.querier.query_all_balances(&env.contract.address)?;
 
-pub fn after_deploying_token(
-    deps: DepsMut,
-    response: SubMsgExecutionResponse,
-) -> StdResult<Response> {
+    // For each of denom that is not `uluna`, create a message to swap it into Luna
+    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = coins
+        .into_iter()
+        .filter(|coin| coin.denom != "uluna")
+        .map(|coin| create_swap_msg(coin, String::from("uluna")))
+        .collect();
+
+    Ok(Response::new()
+        .add_messages(msgs)
+        .add_attribute("action", "steak_hub/callback/swap"))
+}
+
+pub fn restake(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
+    let validators = state.validators.load(deps.storage)?;
 
-    let event = response
-        .events
-        .iter()
-        .find(|event| event.ty == "instantiate_contract")
-        .ok_or_else(|| StdError::generic_err("cannot find `instantiate_contract` event"))?;
+    // Query the amount of `uluna` available to be staked
+    let uluna_to_stake = deps
+        .querier
+        .query_balance(&env.contract.address, "uluna")?
+        .amount;
 
-    let contract_addr_str = &event
-        .attributes
-        .iter()
-        .find(|attr| attr.key == "contract_address")
-        .ok_or_else(|| StdError::generic_err("cannot find `contract_address` attribute"))?
-        .value;
+    // Compute the amount of `uluna` to be delegated to each validator, based on the amounts of
+    // delegations they currently have
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let new_delegations = compute_delegations(uluna_to_stake, &delegations);
 
-    let contract_addr = deps.api.addr_validate(contract_addr_str)?;
-    state.steak_token.save(deps.storage, &contract_addr)?;
-
-    Ok(Response::new())
+    Ok(Response::new()
+        .add_messages(new_delegations.iter().map(|d| d.into_cosmos_msg()))
+        .add_attribute("action", "steak_hub/callback/restake"))
 }
 
 //--------------------------------------------------------------------------------------------------
