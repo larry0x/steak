@@ -25,8 +25,8 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
-    /// Stake specified amount of Luna
-    Stake {},
+    /// Bond specified amount of Luna
+    Bond {},
     /// Claim staking rewards, swap all for Luna, and restake
     ///
     /// Currently set to permissioned to deter sandwich attacks. Will explore other options

@@ -38,7 +38,7 @@ pub mod entry {
     ) -> StdResult<Response<TerraMsgWrapper>> {
         match msg {
             ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
-            ExecuteMsg::Stake {} => contract::stake(
+            ExecuteMsg::Bond {} => contract::bond(
                 deps,
                 env,
                 info.sender,

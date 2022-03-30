@@ -83,11 +83,11 @@ pub fn register_steak_token(
 // Execution
 //--------------------------------------------------------------------------------------------------
 
-pub fn stake(
+pub fn bond(
     deps: DepsMut,
     env: Env,
     staker_addr: Addr,
-    uluna_to_stake: Uint128,
+    uluna_to_bond: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let steak_token = state.steak_token.load(deps.storage)?;
@@ -99,10 +99,10 @@ pub fn stake(
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
     // Compute the amount of `uluna` to be delegated to each validator
-    let new_delegations = compute_delegations(uluna_to_stake, &delegations);
+    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
     // Compute the amount of `usteak` to mint
-    let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_stake, &delegations);
+    let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
 
     Ok(Response::new()
         .add_messages(new_delegations.iter().map(|d| d.into_cosmos_msg()))
@@ -114,9 +114,9 @@ pub fn stake(
             })?,
             funds: vec![],
         }))
-        .add_attribute("action", "steak_hub/execute/stake")
+        .add_attribute("action", "steak_hub/execute/bond")
         .add_attribute("staker", staker_addr)
-        .add_attribute("amount_staked", uluna_to_stake))
+        .add_attribute("amount_bonded", uluna_to_bond))
 }
 
 pub fn unstake(
