@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "resolveJsonModule": true
+  },
+  "include": ["**/*.test.ts", "**/*.spec.ts", "**/*.ts"]
+}
