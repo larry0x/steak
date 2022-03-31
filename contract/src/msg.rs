@@ -33,7 +33,7 @@ pub enum ExecuteMsg {
     Bond {},
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
-    /// Execute the current pending batch of unbonding requests to be unbonded
+    /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
     /// Withdraw Luna that have finished unbonding in previous batches
     WithdrawUnbonded {},
