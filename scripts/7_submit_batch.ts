@@ -21,7 +21,7 @@ const argv = yargs(process.argv)
 
   const { txhash } = await sendTxWithConfirm(worker, [
     new MsgExecuteContract(worker.key.accAddress, argv["steak-hub"], {
-      harvest: {},
+      submit_batch: {},
     }),
   ]);
   console.log(`Success! Txhash: ${txhash}`);

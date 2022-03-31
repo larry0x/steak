@@ -8,7 +8,7 @@ const argv = yargs(process.argv)
       type: "string",
       demandOption: true,
     },
-    "contract-address": {
+    "steak-hub": {
       type: "string",
       demandOption: true,
     },
@@ -26,7 +26,7 @@ const argv = yargs(process.argv)
   const { txhash } = await sendTxWithConfirm(user, [
     new MsgExecuteContract(
       user.key.accAddress,
-      argv["contract-address"],
+      argv["steak-hub"],
       {
         stake: {},
       },
