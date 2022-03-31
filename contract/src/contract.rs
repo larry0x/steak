@@ -112,18 +112,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[entry_point]
-pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response> {
-    let state = State::default();
-    state.epoch_period.save(deps.storage, &(4 * 60 * 60))?; // 4 hours; for testing
-    state.unbond_period.save(deps.storage, &(24 * 60 * 60))?; // 24 hrs; for testing
-    state.pending_batch.save(
-        deps.storage,
-        &PendingBatch {
-            id: 1,
-            usteak_to_burn: Uint128::zero(),
-            est_unbond_start_time: env.block.time.seconds(),
-        },
-    )?;
-
-    Ok(Response::new())
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::new()) // do nothing
 }
