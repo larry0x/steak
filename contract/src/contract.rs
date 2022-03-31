@@ -128,7 +128,7 @@ pub fn bond(
             })?,
             funds: vec![],
         }))
-        .add_attribute("action", "steak_hub/execute/bond")
+        .add_attribute("action", "steak_hub/bond")
         .add_attribute("staker", staker_addr)
         .add_attribute("uluna_bonded", uluna_to_bond))
 }
@@ -167,7 +167,7 @@ pub fn queue_unbond(
 
     Ok(Response::new()
         .add_messages(msgs)
-        .add_attribute("action", "steak_hub/execute/unbond")
+        .add_attribute("action", "steak_hub/queue_unbond")
         .add_attribute("staker", staker_addr)
         .add_attribute("usteak_to_burn", usteak_to_burn))
 }
@@ -231,7 +231,7 @@ pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
             })?,
             funds: vec![],
         }))
-        .add_attribute("action", "steak_hub/execute/unbond")
+        .add_attribute("action", "steak_hub/unbond")
         .add_attribute("batch_id", current_batch.id.to_string())
         .add_attribute("usteak_burned", current_batch.usteak_to_burn)
         .add_attribute("uluna_unbonded", uluna_to_unbond))
@@ -277,7 +277,7 @@ pub fn withdraw_unbonded(
             to_address: staker_addr.clone().into(),
             amount: vec![Coin::new(uluna_to_refund.u128(), "uluna")],
         }))
-        .add_attribute("action", "steak_hub/execute/withdraw_unbonded")
+        .add_attribute("action", "steak_hub/withdraw_unbonded")
         .add_attribute("staker", staker_addr)
         .add_attribute("uluna_refunded", uluna_to_refund))
 }
@@ -313,7 +313,7 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
     Ok(Response::new()
         .add_messages(msgs)
         .add_messages(callback_msgs)
-        .add_attribute("action", "steak_hub/execute/harvest"))
+        .add_attribute("action", "steak_hub/harvest"))
 }
 
 pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -329,7 +329,7 @@ pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
 
     Ok(Response::new()
         .add_messages(msgs)
-        .add_attribute("action", "steak_hub/callback/swap"))
+        .add_attribute("action", "steak_hub/swap"))
 }
 
 pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -349,7 +349,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
 
     Ok(Response::new()
         .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
-        .add_attribute("action", "steak_hub/callback/reinvest"))
+        .add_attribute("action", "steak_hub/reinvest"))
 }
 
 //--------------------------------------------------------------------------------------------------
