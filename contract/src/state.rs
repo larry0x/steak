@@ -38,7 +38,7 @@ pub(crate) struct State<'a> {
     /// The staking module's unbonding time, in seconds
     pub unbond_period: Item<'a, u64>,
     /// The current batch of unbonding requests queded to be executed
-    pub current_batch: Item<'a, PendingBatch>,
+    pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
     pub previous_batches: Map<'a, U64Key, Batch>,
     /// Unbonding requests that have not been finalized
@@ -53,7 +53,7 @@ impl Default for State<'static> {
             validators: Item::new("validators"),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),
-            current_batch: Item::new("current_batch"),
+            pending_batch: Item::new("pending_batch"),
             previous_batches: Map::new("previous_batches"),
             active_requests: Map::new("active_requests"),
         }

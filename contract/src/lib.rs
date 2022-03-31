@@ -120,7 +120,7 @@ pub mod entry {
         let state = State::default();
         state.epoch_period.save(deps.storage, &(4 * 60 * 60))?; // 4 hours; for testing
         state.unbond_period.save(deps.storage, &(24 * 60 * 60))?; // 24 hrs; for testing
-        state.current_batch.save(
+        state.pending_batch.save(
             deps.storage,
             &PendingBatch {
                 id: 1,

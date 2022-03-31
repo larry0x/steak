@@ -37,7 +37,7 @@ pub fn instantiate(
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
 
-    state.current_batch.save(
+    state.pending_batch.save(
         deps.storage,
         &PendingBatch {
             id: 1,
@@ -216,14 +216,14 @@ pub fn queue_unbond(
     let state = State::default();
 
     // Update the pending batch data
-    let mut current_batch = state.current_batch.load(deps.storage)?;
-    current_batch.usteak_to_burn = current_batch.usteak_to_burn.checked_add(usteak_to_burn)?;
-    state.current_batch.save(deps.storage, &current_batch)?;
+    let mut pending_batch = state.pending_batch.load(deps.storage)?;
+    pending_batch.usteak_to_burn = pending_batch.usteak_to_burn.checked_add(usteak_to_burn)?;
+    state.pending_batch.save(deps.storage, &pending_batch)?;
 
     // Update the user's requested unbonding amount
     state
         .active_requests
-        .update(deps.storage, (&staker_addr, current_batch.id.into()), |x| {
+        .update(deps.storage, (&staker_addr, pending_batch.id.into()), |x| {
             x.unwrap_or_else(Uint128::zero)
                 .checked_add(usteak_to_burn)
                 .map_err(StdError::overflow)
@@ -231,7 +231,7 @@ pub fn queue_unbond(
 
     // If the current batch's estimated unbonding start time is reached, then submit it for unbonding
     let mut msgs: Vec<CosmosMsg<TerraMsgWrapper>> = vec![];
-    if env.block.time.seconds() >= current_batch.est_unbond_start_time {
+    if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.into(),
             msg: to_binary(&ExecuteMsg::Unbond {})?,
@@ -251,11 +251,11 @@ pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
 
     // The current batch can only be unbonded once the estimated unbonding time has been reached
     let current_time = env.block.time.seconds();
-    let current_batch = state.current_batch.load(deps.storage)?;
-    if current_time < current_batch.est_unbond_start_time {
+    let pending_batch = state.pending_batch.load(deps.storage)?;
+    if current_time < pending_batch.est_unbond_start_time {
         return Err(StdError::generic_err(format!(
             "batch can only be submitted for unbonding after {}",
-            current_batch.est_unbond_start_time
+            pending_batch.est_unbond_start_time
         )));
     }
 
@@ -269,7 +269,7 @@ pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
 
     // Compute the amount of `uluna` to unbond
     let uluna_to_unbond =
-        compute_unbond_amount(usteak_supply, current_batch.usteak_to_burn, &delegations);
+        compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
 
     // Compute the amount of `uluna` to undelegate from each validator
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
@@ -277,20 +277,20 @@ pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     // Save the current pending batch to the previous batches map
     state.previous_batches.save(
         deps.storage,
-        current_batch.id.into(),
+        pending_batch.id.into(),
         &Batch {
             uluna_unbonded: uluna_to_unbond,
-            usteak_burned: current_batch.usteak_to_burn,
+            usteak_burned: pending_batch.usteak_to_burn,
             unbond_start_time: current_time,
         },
     )?;
 
     // Create the next pending batch
     let epoch_period = state.epoch_period.load(deps.storage)?;
-    state.current_batch.save(
+    state.pending_batch.save(
         deps.storage,
         &PendingBatch {
-            id: current_batch.id + 1,
+            id: pending_batch.id + 1,
             usteak_to_burn: Uint128::zero(),
             est_unbond_start_time: current_time + epoch_period,
         },
@@ -301,13 +301,13 @@ pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: steak_token.into(),
             msg: to_binary(&Cw20ExecuteMsg::Burn {
-                amount: current_batch.usteak_to_burn,
+                amount: pending_batch.usteak_to_burn,
             })?,
             funds: vec![],
         }))
         .add_attribute("action", "steak_hub/unbond")
-        .add_attribute("batch_id", current_batch.id.to_string())
-        .add_attribute("usteak_burned", current_batch.usteak_to_burn)
+        .add_attribute("batch_id", pending_batch.id.to_string())
+        .add_attribute("usteak_burned", pending_batch.usteak_to_burn)
         .add_attribute("uluna_unbonded", uluna_to_unbond))
 }
 
@@ -368,4 +368,13 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         workers: worker_addrs.iter().map(|addr| addr.to_string()).collect(),
         validators: state.validators.load(deps.storage)?,
     })
+}
+
+//--------------------------------------------------------------------------------------------------
+// Tests
+//--------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    // WIP
 }
