@@ -10,19 +10,19 @@ pub(crate) struct PendingBatch {
     pub id: u64,
     /// Total amount of `usteak` to be burned in this batch
     pub usteak_to_burn: Uint128,
-    /// Estimated time that this batch will be submitted for unbonding
+    /// Estimated time when this batch will be submitted for unbonding
     pub est_unbond_start_time: u64,
 }
 
 /// Represents a batch that has already been submitted for unbonding
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub(crate) struct Batch {
-    /// Total amount of `usteak` burned in this batch
-    pub usteak_burned: Uint128,
-    /// Total amount of `uluna` unbonded in this batch
-    pub uluna_unbonded: Uint128,
-    /// The time when this batch started unbonding
-    pub unbond_start_time: u64,
+    /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
+    pub total_shares: Uint128,
+    /// Amount of `uluna` in this batch that have not been claimed
+    pub uluna_unclaimed: Uint128,
+    /// Estimated time when this batch will finish unbonding
+    pub est_unbond_end_time: u64,
 }
 
 /// Represents the contract's storage
@@ -41,8 +41,8 @@ pub(crate) struct State<'a> {
     pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
     pub previous_batches: Map<'a, U64Key, Batch>,
-    /// Unbonding requests that have not been finalized
-    pub active_requests: Map<'a, (&'a Addr, U64Key), Uint128>,
+    /// The user's unbonding share in a specific batch. 1 usteak burned = 1 share in that batch
+    pub unbond_shares: Map<'a, (&'a Addr, U64Key), Uint128>,
 }
 
 impl Default for State<'static> {
@@ -55,7 +55,7 @@ impl Default for State<'static> {
             unbond_period: Item::new("unbond_period"),
             pending_batch: Item::new("pending_batch"),
             previous_batches: Map::new("previous_batches"),
-            active_requests: Map::new("active_requests"),
+            unbond_shares: Map::new("unbond_shares"),
         }
     }
 }

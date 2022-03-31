@@ -222,7 +222,7 @@ pub fn queue_unbond(
 
     // Update the user's requested unbonding amount
     state
-        .active_requests
+        .unbond_shares
         .update(deps.storage, (&staker_addr, pending_batch.id.into()), |x| {
             x.unwrap_or_else(Uint128::zero)
                 .checked_add(usteak_to_burn)
@@ -248,10 +248,13 @@ pub fn queue_unbond(
 
 pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
+    let steak_token = state.steak_token.load(deps.storage)?;
+    let validators = state.validators.load(deps.storage)?;
+    let unbond_period = state.unbond_period.load(deps.storage)?;
+    let pending_batch = state.pending_batch.load(deps.storage)?;
 
     // The current batch can only be unbonded once the estimated unbonding time has been reached
     let current_time = env.block.time.seconds();
-    let pending_batch = state.pending_batch.load(deps.storage)?;
     if current_time < pending_batch.est_unbond_start_time {
         return Err(StdError::generic_err(format!(
             "batch can only be submitted for unbonding after {}",
@@ -261,9 +264,6 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
 
     // Query the delegations made by Steak Hub to validators, as well as the total supply of Steak
     // token, which we will use to compute stuff
-    let steak_token = state.steak_token.load(deps.storage)?;
-    let validators = state.validators.load(deps.storage)?;
-
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
@@ -279,9 +279,9 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         deps.storage,
         pending_batch.id.into(),
         &Batch {
-            uluna_unbonded: uluna_to_unbond,
-            usteak_burned: pending_batch.usteak_to_burn,
-            unbond_start_time: current_time,
+            total_shares: pending_batch.usteak_to_burn,
+            uluna_unclaimed: uluna_to_unbond,
+            est_unbond_end_time: current_time + unbond_period,
         },
     )?;
 
@@ -318,42 +318,57 @@ pub fn withdraw_unbonded(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let current_time = env.block.time.seconds();
-    let unbond_period = state.unbond_period.load(deps.storage)?;
 
     // Grab the IDs of all previous batches where the user has an active request in, ordered
     // ascendingly, i.e. the oldest batch first
-    let ids: Vec<U64Key> = state
-        .active_requests
+    let unbond_shares_with_ids = state
+        .unbond_shares
         .prefix(&staker_addr)
-        .keys(deps.storage, None, None, Order::Ascending)
-        .map(U64Key::from)
-        .collect();
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|item| {
+            let (k, v) = item?;
+            Ok((U64Key::from(k), Uint128::from(v)))
+        })
+        .collect::<StdResult<Vec<(U64Key, Uint128)>>>()?;
 
     // For each batch, check whether it has finished unbonding. It yes, increment the amount of `uluna`
     // to refund the user, and remove this unbonding request from the active queue
-    let mut uluna_to_refund = Uint128::zero();
-    for id in ids {
-        let batch = state.previous_batches.load(deps.storage, id.clone())?;
-        let key = (&staker_addr, id);
-        let request = state.active_requests.load(deps.storage, key.clone())?;
-        if batch.unbond_start_time + unbond_period <= current_time {
-            uluna_to_refund = uluna_to_refund.checked_add(
-                batch
-                    .uluna_unbonded
-                    .multiply_ratio(request, batch.usteak_burned),
-            )?;
-            state.active_requests.remove(deps.storage, key);
+    //
+    // If a batch has been completely refunded (i.e. total shares = 0), remove it from storage
+    let mut total_uluna_to_refund = Uint128::zero();
+    for (id, share) in unbond_shares_with_ids {
+        let mut batch = state.previous_batches.load(deps.storage, id.clone())?;
+        if batch.est_unbond_end_time <= current_time {
+            let uluna_to_refund = batch
+                .uluna_unclaimed
+                .multiply_ratio(share, batch.total_shares);
+
+            batch.total_shares += share;
+            batch.uluna_unclaimed -= uluna_to_refund;
+            if batch.total_shares.is_zero() {
+                state.previous_batches.remove(deps.storage, id.clone());
+            } else {
+                state
+                    .previous_batches
+                    .save(deps.storage, id.clone(), &batch)?;
+            }
+
+            state
+                .unbond_shares
+                .remove(deps.storage, (&staker_addr, id.clone()));
+
+            total_uluna_to_refund += uluna_to_refund;
         }
     }
 
     Ok(Response::new()
         .add_message(CosmosMsg::Bank(BankMsg::Send {
             to_address: staker_addr.clone().into(),
-            amount: vec![Coin::new(uluna_to_refund.u128(), "uluna")],
+            amount: vec![Coin::new(total_uluna_to_refund.u128(), "uluna")],
         }))
         .add_attribute("action", "steak_hub/withdraw_unbonded")
         .add_attribute("staker", staker_addr)
-        .add_attribute("uluna_refunded", uluna_to_refund))
+        .add_attribute("uluna_refunded", total_uluna_to_refund))
 }
 
 //--------------------------------------------------------------------------------------------------
