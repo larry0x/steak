@@ -1,15 +1,18 @@
 use cosmwasm_std::{
-    to_binary, Addr, CosmosMsg, Deps, DepsMut, DistributionMsg, Env, MessageInfo, Response,
-    StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Deps, DepsMut, DistributionMsg, Env, MessageInfo,
+    Order, Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
+use cw_storage_plus::U64Key;
 use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper};
 
 use crate::helpers::{query_cw20_total_supply, query_delegations};
-use crate::math::{compute_delegations, compute_mint_amount};
-use crate::msg::{CallbackMsg, ConfigResponse, InstantiateMsg};
-use crate::state::State;
+use crate::math::{
+    compute_delegations, compute_mint_amount, compute_unbond_amount, compute_undelegations,
+};
+use crate::msg::{CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg};
+use crate::state::{Batch, PendingBatch, State};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -31,6 +34,17 @@ pub fn instantiate(
 
     state.workers.save(deps.storage, &worker_addrs)?;
     state.validators.save(deps.storage, &msg.validators)?;
+    state.epoch_period.save(deps.storage, &msg.epoch_period)?;
+    state.unbond_period.save(deps.storage, &msg.unbond_period)?;
+
+    state.current_batch.save(
+        deps.storage,
+        &PendingBatch {
+            id: 1,
+            usteak_to_burn: Uint128::zero(),
+            est_unbond_start_time: env.block.time.seconds() + msg.epoch_period,
+        },
+    )?;
 
     Ok(Response::new().add_submessage(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Instantiate {
@@ -98,14 +112,14 @@ pub fn bond(
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    // Compute the amount of `uluna` to be delegated to each validator
-    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
-
     // Compute the amount of `usteak` to mint
     let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
 
+    // Compute the amount of `uluna` to be delegated to each validator
+    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
+
     Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.into_cosmos_msg()))
+        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: steak_token.into(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
@@ -116,16 +130,156 @@ pub fn bond(
         }))
         .add_attribute("action", "steak_hub/execute/bond")
         .add_attribute("staker", staker_addr)
-        .add_attribute("amount_bonded", uluna_to_bond))
+        .add_attribute("uluna_bonded", uluna_to_bond))
 }
 
-pub fn unstake(
-    _deps: DepsMut,
-    _env: Env,
-    _staker_addr: Addr,
-    _usteak_to_burn: Uint128,
+pub fn queue_unbond(
+    deps: DepsMut,
+    env: Env,
+    staker_addr: Addr,
+    usteak_to_burn: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    Err(StdError::generic_err("WIP"))
+    let state = State::default();
+
+    // Update the pending batch data
+    let mut current_batch = state.current_batch.load(deps.storage)?;
+    current_batch.usteak_to_burn = current_batch.usteak_to_burn.checked_add(usteak_to_burn)?;
+    state.current_batch.save(deps.storage, &current_batch)?;
+
+    // Update the user's requested unbonding amount
+    state
+        .active_requests
+        .update(deps.storage, (&staker_addr, current_batch.id.into()), |x| {
+            x.unwrap_or_else(Uint128::zero)
+                .checked_add(usteak_to_burn)
+                .map_err(StdError::overflow)
+        })?;
+
+    // If the current batch's estimated unbonding start time is reached, then submit it for unbonding
+    let mut msgs: Vec<CosmosMsg<TerraMsgWrapper>> = vec![];
+    if env.block.time.seconds() >= current_batch.est_unbond_start_time {
+        msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.into(),
+            msg: to_binary(&ExecuteMsg::Unbond {})?,
+            funds: vec![],
+        }));
+    }
+
+    Ok(Response::new()
+        .add_messages(msgs)
+        .add_attribute("action", "steak_hub/execute/unbond")
+        .add_attribute("staker", staker_addr)
+        .add_attribute("usteak_to_burn", usteak_to_burn))
+}
+
+pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    // The current batch can only be unbonded once the estimated unbonding time has been reached
+    let current_time = env.block.time.seconds();
+    let current_batch = state.current_batch.load(deps.storage)?;
+    if current_time < current_batch.est_unbond_start_time {
+        return Err(StdError::generic_err(format!(
+            "batch can only be submitted for unbonding after {}",
+            current_batch.est_unbond_start_time
+        )));
+    }
+
+    // Query the delegations made by Steak Hub to validators, as well as the total supply of Steak
+    // token, which we will use to compute stuff
+    let steak_token = state.steak_token.load(deps.storage)?;
+    let validators = state.validators.load(deps.storage)?;
+
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
+
+    // Compute the amount of `uluna` to unbond
+    let uluna_to_unbond =
+        compute_unbond_amount(usteak_supply, current_batch.usteak_to_burn, &delegations);
+
+    // Compute the amount of `uluna` to undelegate from each validator
+    let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
+
+    // Save the current pending batch to the previous batches map
+    state.previous_batches.save(
+        deps.storage,
+        current_batch.id.into(),
+        &Batch {
+            uluna_unbonded: uluna_to_unbond,
+            usteak_burned: current_batch.usteak_to_burn,
+            unbond_start_time: current_time,
+        },
+    )?;
+
+    // Create the next pending batch
+    let epoch_period = state.epoch_period.load(deps.storage)?;
+    state.current_batch.save(
+        deps.storage,
+        &PendingBatch {
+            id: current_batch.id + 1,
+            usteak_to_burn: Uint128::zero(),
+            est_unbond_start_time: current_time + epoch_period,
+        },
+    )?;
+
+    Ok(Response::new()
+        .add_messages(new_undelegations.iter().map(|d| d.to_cosmos_msg()))
+        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: steak_token.into(),
+            msg: to_binary(&Cw20ExecuteMsg::Burn {
+                amount: current_batch.usteak_to_burn,
+            })?,
+            funds: vec![],
+        }))
+        .add_attribute("action", "steak_hub/execute/unbond")
+        .add_attribute("batch_id", current_batch.id.to_string())
+        .add_attribute("usteak_burned", current_batch.usteak_to_burn)
+        .add_attribute("uluna_unbonded", uluna_to_unbond))
+}
+
+pub fn withdraw_unbonded(
+    deps: DepsMut,
+    env: Env,
+    staker_addr: Addr,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+    let current_time = env.block.time.seconds();
+    let unbond_period = state.unbond_period.load(deps.storage)?;
+
+    // Grab the IDs of all previous batches where the user has an active request in, ordered
+    // ascendingly, i.e. the oldest batch first
+    let ids: Vec<U64Key> = state
+        .active_requests
+        .prefix(&staker_addr)
+        .keys(deps.storage, None, None, Order::Ascending)
+        .map(U64Key::from)
+        .collect();
+
+    // For each batch, check whether it has finished unbonding. It yes, increment the amount of `uluna`
+    // to refund the user, and remove this unbonding request from the active queue
+    let mut uluna_to_refund = Uint128::zero();
+    for id in ids {
+        let batch = state.previous_batches.load(deps.storage, id.clone())?;
+        let key = (&staker_addr, id);
+        let request = state.active_requests.load(deps.storage, key.clone())?;
+        if batch.unbond_start_time + unbond_period <= current_time {
+            uluna_to_refund = uluna_to_refund.checked_add(
+                batch
+                    .uluna_unbonded
+                    .multiply_ratio(request, batch.usteak_burned),
+            )?;
+            state.active_requests.remove(deps.storage, key);
+        }
+    }
+
+    Ok(Response::new()
+        .add_message(CosmosMsg::Bank(BankMsg::Send {
+            to_address: staker_addr.clone().into(),
+            amount: vec![Coin::new(uluna_to_refund.u128(), "uluna")],
+        }))
+        .add_attribute("action", "steak_hub/execute/withdraw_unbonded")
+        .add_attribute("staker", staker_addr)
+        .add_attribute("uluna_refunded", uluna_to_refund))
 }
 
 pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
@@ -151,7 +305,7 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
 
     // Following the reward withdrawal, we dispatch two callbacks: to swap all rewards to Luna, and
     // to stake these Luna to the whitelisted validators
-    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Restake {}]
+    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
         .iter()
         .map(|callback| callback.into_cosmos_msg(&env.contract.address))
         .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
@@ -178,12 +332,12 @@ pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
         .add_attribute("action", "steak_hub/callback/swap"))
 }
 
-pub fn restake(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
 
     // Query the amount of `uluna` available to be staked
-    let uluna_to_stake = deps
+    let uluna_to_bond = deps
         .querier
         .query_balance(&env.contract.address, "uluna")?
         .amount;
@@ -191,11 +345,11 @@ pub fn restake(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> 
     // Compute the amount of `uluna` to be delegated to each validator, based on the amounts of
     // delegations they currently have
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let new_delegations = compute_delegations(uluna_to_stake, &delegations);
+    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
     Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.into_cosmos_msg()))
-        .add_attribute("action", "steak_hub/callback/restake"))
+        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
+        .add_attribute("action", "steak_hub/callback/reinvest"))
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -208,6 +362,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(ConfigResponse {
         steak_token: state.steak_token.load(deps.storage)?.into(),
         workers: worker_addrs.iter().map(|addr| addr.to_string()).collect(),
-        validators: state.validators.load(deps.storage)?.into(),
+        validators: state.validators.load(deps.storage)?,
     })
 }

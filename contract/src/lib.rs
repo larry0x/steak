@@ -7,6 +7,8 @@ pub mod types;
 
 #[cfg(not(feature = "library"))]
 pub mod entry {
+    use crate::state::PendingBatch;
+
     use super::contract;
     use super::helpers::{parse_received_fund, unwrap_reply};
     use super::msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
@@ -14,7 +16,7 @@ pub mod entry {
 
     use cosmwasm_std::{
         entry_point, from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply,
-        Response, StdError, StdResult,
+        Response, StdError, StdResult, Uint128,
     };
     use cw20::Cw20ReceiveMsg;
     use terra_cosmwasm::TerraMsgWrapper;
@@ -44,6 +46,8 @@ pub mod entry {
                 info.sender,
                 parse_received_fund(&info.funds, "uluna")?,
             ),
+            ExecuteMsg::Unbond {} => contract::unbond(deps, env),
+            ExecuteMsg::WithdrawUnbonded {} => contract::withdraw_unbonded(deps, env, info.sender),
             ExecuteMsg::Harvest {} => contract::harvest(deps, env, info.sender),
             ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
         }
@@ -57,7 +61,7 @@ pub mod entry {
     ) -> StdResult<Response<TerraMsgWrapper>> {
         let api = deps.api;
         match from_binary(&cw20_msg.msg)? {
-            ReceiveMsg::Unstake {} => {
+            ReceiveMsg::QueueUnbond {} => {
                 let state = State::default();
 
                 let steak_token = state.steak_token.load(deps.storage)?;
@@ -68,7 +72,7 @@ pub mod entry {
                     )));
                 }
 
-                contract::unstake(
+                contract::queue_unbond(
                     deps,
                     env,
                     api.addr_validate(&cw20_msg.sender)?,
@@ -92,7 +96,7 @@ pub mod entry {
 
         match cb_msg {
             CallbackMsg::Swap {} => contract::swap(deps, env),
-            CallbackMsg::Restake {} => contract::restake(deps, env),
+            CallbackMsg::Reinvest {} => contract::reinvest(deps, env),
         }
     }
 
@@ -112,7 +116,19 @@ pub mod entry {
     }
 
     #[entry_point]
-    pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+        let state = State::default();
+        state.epoch_period.save(deps.storage, &(4 * 60 * 60))?; // 4 hours; for testing
+        state.unbond_period.save(deps.storage, &(24 * 60 * 60))?; // 24 hrs; for testing
+        state.current_batch.save(
+            deps.storage,
+            &PendingBatch {
+                id: 1,
+                usteak_to_burn: Uint128::zero(),
+                est_unbond_start_time: env.block.time.seconds(),
+            },
+        )?;
+
         Ok(Response::new())
     }
 }
