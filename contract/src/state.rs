@@ -1,61 +1,62 @@
-use cosmwasm_std::{Addr, Uint128};
-use cw_storage_plus::{Item, Map, U64Key};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use cosmwasm_std::Addr;
+use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex, U64Key};
 
-/// Represents a batch of unbonding requests that has not yet been submitted for unbonding
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub(crate) struct PendingBatch {
-    /// ID of this batch
-    pub id: u64,
-    /// Total amount of `usteak` to be burned in this batch
-    pub usteak_to_burn: Uint128,
-    /// Estimated time when this batch will be submitted for unbonding
-    pub est_unbond_start_time: u64,
-}
+use crate::msg::{Batch, PendingBatch, UnbondShare};
 
-/// Represents a batch that has already been submitted for unbonding
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub(crate) struct Batch {
-    /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
-    pub total_shares: Uint128,
-    /// Amount of `uluna` in this batch that have not been claimed
-    pub uluna_unclaimed: Uint128,
-    /// Estimated time when this batch will finish unbonding
-    pub est_unbond_end_time: u64,
-}
-
-/// Represents the contract's storage
 pub(crate) struct State<'a> {
     /// Address of the Steak token
     pub steak_token: Item<'a, Addr>,
-    /// Accounts who can call the harvest function
-    pub workers: Item<'a, Vec<Addr>>,
-    /// Validators who will receive the delegations
-    pub validators: Item<'a, Vec<String>>,
     /// How often the unbonding queue is to be executed
     pub epoch_period: Item<'a, u64>,
     /// The staking module's unbonding time, in seconds
     pub unbond_period: Item<'a, u64>,
+    /// Accounts who can call the harvest function
+    pub workers: Item<'a, Vec<Addr>>,
+    /// Validators who will receive the delegations
+    pub validators: Item<'a, Vec<String>>,
     /// The current batch of unbonding requests queded to be executed
     pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
     pub previous_batches: Map<'a, U64Key, Batch>,
-    /// The user's unbonding share in a specific batch. 1 usteak burned = 1 share in that batch
-    pub unbond_shares: Map<'a, (&'a Addr, U64Key), Uint128>,
+    /// Shares in an unbonding batch, with the batch ID and the user address as composite key,
+    /// additionally indexed by the user address
+    pub unbond_shares: IndexedMap<'a, (U64Key, &'a Addr), UnbondShare, UnbondSharesIndexes<'a>>,
 }
 
 impl Default for State<'static> {
     fn default() -> Self {
+        let indexes = UnbondSharesIndexes {
+            user: MultiIndex::new(
+                unbond_shares_user_index,
+                "unbond_shares",
+                "unbond_shares__user",
+            ),
+        };
         Self {
             steak_token: Item::new("steak_token"),
-            workers: Item::new("workers"),
-            validators: Item::new("validators"),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),
+            workers: Item::new("workers"),
+            validators: Item::new("validators"),
             pending_batch: Item::new("pending_batch"),
             previous_batches: Map::new("previous_batches"),
-            unbond_shares: Map::new("unbond_shares"),
+            unbond_shares: IndexedMap::new("unbond_shares", indexes),
         }
     }
+}
+
+pub(crate) struct UnbondSharesIndexes<'a> {
+    // pk goes to second tuple element
+    pub user: MultiIndex<'a, (String, Vec<u8>), UnbondShare>,
+}
+
+impl<'a> IndexList<UnbondShare> for UnbondSharesIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<UnbondShare>> + '_> {
+        let v: Vec<&dyn Index<UnbondShare>> = vec![&self.user];
+        Box::new(v.into_iter())
+    }
+}
+
+pub(crate) fn unbond_shares_user_index(d: &UnbondShare, k: Vec<u8>) -> (String, Vec<u8>) {
+    (d.user.clone(), k)
 }

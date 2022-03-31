@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, Empty, StdResult, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, Empty, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -73,13 +73,106 @@ impl CallbackMsg {
 pub enum QueryMsg {
     /// The contract's configurations. Response: `ConfigResponse`
     Config {},
+    /// The current batch on unbonding requests pending submission. Response: `crate::state::PendingBatch`
+    PendingBatch {},
+    /// Enumerate previous batches that have previously been submitted for unbonding but have not yet
+    /// been fully withdrawn. Response: `Vec<crate::state::Batch>`
+    PreviousBatches {
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
+    /// Enumerate all outstanding unbonding shares in a specific batch. Response: `Vec<UnbondSharesResponseByBatchItem>`
+    UnbondSharesByBatch {
+        id: u64,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
+    /// Enumreate all outstanding unbonding shares that belong to a specific user. Response: `Vec<UnbondSharesByUserResponseItem>`
+    UnbondSharesByUser {
+        user: String,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
+    /// Address of the Steak token
     pub steak_token: String,
+    /// How often the unbonding queue is to be executed, in seconds
+    pub epoch_period: u64,
+    /// The staking module's unbonding time, in seconds
+    pub unbond_period: u64,
+    /// Accounts who can call the harvest function
     pub workers: Vec<String>,
+    /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PendingBatch {
+    /// ID of this batch
+    pub id: u64,
+    /// Total amount of `usteak` to be burned in this batch
+    pub usteak_to_burn: Uint128,
+    /// Estimated time when this batch will be submitted for unbonding
+    pub est_unbond_start_time: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Batch {
+    /// ID of this batch
+    pub id: u64,
+    /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
+    pub total_shares: Uint128,
+    /// Amount of `uluna` in this batch that have not been claimed
+    pub uluna_unclaimed: Uint128,
+    /// Estimated time when this batch will finish unbonding
+    pub est_unbond_end_time: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UnbondShare {
+    /// ID of the batch
+    pub id: u64,
+    /// The user's address
+    pub user: String,
+    /// The user's share in the batch
+    pub shares: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UnbondSharesByBatchResponseItem {
+    /// The user's address
+    pub user: String,
+    /// The user's share in the batch
+    pub shares: Uint128,
+}
+
+impl From<UnbondShare> for UnbondSharesByBatchResponseItem {
+    fn from(s: UnbondShare) -> Self {
+        Self {
+            user: s.user,
+            shares: s.shares
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UnbondSharesByUserResponseItem {
+    /// ID of the batch
+    pub id: u64,
+    /// The user's share in the batch
+    pub shares: Uint128,
+}
+
+impl From<UnbondShare> for UnbondSharesByUserResponseItem {
+    fn from(s: UnbondShare) -> Self {
+        Self {
+            id: s.id,
+            shares: s.shares
+        }
+    }
 }
 
 /// We currently don't take any input parameter for migration
