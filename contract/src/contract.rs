@@ -94,7 +94,7 @@ pub fn register_steak_token(
 }
 
 //--------------------------------------------------------------------------------------------------
-// Execution
+// Bonding and harvesting logics
 //--------------------------------------------------------------------------------------------------
 
 pub fn bond(
@@ -132,6 +132,80 @@ pub fn bond(
         .add_attribute("staker", staker_addr)
         .add_attribute("uluna_bonded", uluna_to_bond))
 }
+
+pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    // Only whitelisted workers can harvest
+    let worker_addrs = state.workers.load(deps.storage)?;
+    if !worker_addrs.contains(&worker_addr) {
+        return Err(StdError::generic_err("sender is not a whitelisted worker"));
+    }
+
+    // For each of the whitelisted validators, create a message to withdraw delegation reward
+    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = deps
+        .querier
+        .query_all_delegations(&env.contract.address)?
+        .into_iter()
+        .map(|d| {
+            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                validator: d.validator,
+            })
+        })
+        .collect();
+
+    // Following the reward withdrawal, we dispatch two callbacks: to swap all rewards to Luna, and
+    // to stake these Luna to the whitelisted validators
+    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
+        .iter()
+        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
+        .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
+
+    Ok(Response::new()
+        .add_messages(msgs)
+        .add_messages(callback_msgs)
+        .add_attribute("action", "steak_hub/harvest"))
+}
+
+pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    // Query the amounts of Terra stablecoins available to be swapped
+    let coins = deps.querier.query_all_balances(&env.contract.address)?;
+
+    // For each of denom that is not `uluna`, create a message to swap it into Luna
+    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = coins
+        .into_iter()
+        .filter(|coin| coin.denom != "uluna")
+        .map(|coin| create_swap_msg(coin, String::from("uluna")))
+        .collect();
+
+    Ok(Response::new()
+        .add_messages(msgs)
+        .add_attribute("action", "steak_hub/swap"))
+}
+
+pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+    let validators = state.validators.load(deps.storage)?;
+
+    // Query the amount of `uluna` available to be staked
+    let uluna_to_bond = deps
+        .querier
+        .query_balance(&env.contract.address, "uluna")?
+        .amount;
+
+    // Compute the amount of `uluna` to be delegated to each validator, based on the amounts of
+    // delegations they currently have
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
+
+    Ok(Response::new()
+        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
+        .add_attribute("action", "steak_hub/reinvest"))
+}
+
+//--------------------------------------------------------------------------------------------------
+// Unbonding logics
+//--------------------------------------------------------------------------------------------------
 
 pub fn queue_unbond(
     deps: DepsMut,
@@ -280,76 +354,6 @@ pub fn withdraw_unbonded(
         .add_attribute("action", "steak_hub/withdraw_unbonded")
         .add_attribute("staker", staker_addr)
         .add_attribute("uluna_refunded", uluna_to_refund))
-}
-
-pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-
-    // Only whitelisted workers can harvest
-    let worker_addrs = state.workers.load(deps.storage)?;
-    if !worker_addrs.contains(&worker_addr) {
-        return Err(StdError::generic_err("sender is not a whitelisted worker"));
-    }
-
-    // For each of the whitelisted validators, create a message to withdraw delegation reward
-    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = deps
-        .querier
-        .query_all_delegations(&env.contract.address)?
-        .into_iter()
-        .map(|d| {
-            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
-                validator: d.validator,
-            })
-        })
-        .collect();
-
-    // Following the reward withdrawal, we dispatch two callbacks: to swap all rewards to Luna, and
-    // to stake these Luna to the whitelisted validators
-    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
-        .iter()
-        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
-        .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
-
-    Ok(Response::new()
-        .add_messages(msgs)
-        .add_messages(callback_msgs)
-        .add_attribute("action", "steak_hub/harvest"))
-}
-
-pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
-    // Query the amounts of Terra stablecoins available to be swapped
-    let coins = deps.querier.query_all_balances(&env.contract.address)?;
-
-    // For each of denom that is not `uluna`, create a message to swap it into Luna
-    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = coins
-        .into_iter()
-        .filter(|coin| coin.denom != "uluna")
-        .map(|coin| create_swap_msg(coin, String::from("uluna")))
-        .collect();
-
-    Ok(Response::new()
-        .add_messages(msgs)
-        .add_attribute("action", "steak_hub/swap"))
-}
-
-pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-    let validators = state.validators.load(deps.storage)?;
-
-    // Query the amount of `uluna` available to be staked
-    let uluna_to_bond = deps
-        .querier
-        .query_balance(&env.contract.address, "uluna")?
-        .amount;
-
-    // Compute the amount of `uluna` to be delegated to each validator, based on the amounts of
-    // delegations they currently have
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
-
-    Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
-        .add_attribute("action", "steak_hub/reinvest"))
 }
 
 //--------------------------------------------------------------------------------------------------
