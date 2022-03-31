@@ -2,8 +2,8 @@ use cosmwasm_std::{Deps, Order, StdResult};
 use cw_storage_plus::{Bound, U64Key};
 
 use crate::msg::{
-    Batch, ConfigResponse, PendingBatch, UnbondSharesByBatchResponseItem,
-    UnbondSharesByUserResponseItem,
+    Batch, ConfigResponse, PendingBatch, UnbondRequestsByBatchResponseItem,
+    UnbondRequestsByUserResponseItem,
 };
 use crate::state::State;
 
@@ -48,19 +48,19 @@ pub fn query_previous_batches(
         .collect()
 }
 
-pub fn query_unbond_shares_by_batch(
+pub fn query_unbond_requests_by_batch(
     deps: Deps,
     id: u64,
     start_after: Option<String>,
     limit: Option<u32>,
-) -> StdResult<Vec<UnbondSharesByBatchResponseItem>> {
+) -> StdResult<Vec<UnbondRequestsByBatchResponseItem>> {
     let state = State::default();
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = start_after.map(Bound::exclusive);
 
     state
-        .unbond_shares
+        .unbond_requests
         .prefix(id.into())
         .range(deps.storage, start, None, Order::Ascending)
         .take(limit)
@@ -71,19 +71,19 @@ pub fn query_unbond_shares_by_batch(
         .collect()
 }
 
-pub fn query_unbond_shares_by_user(
+pub fn query_unbond_requests_by_user(
     deps: Deps,
     user: String,
     start_after: Option<u64>,
     limit: Option<u32>,
-) -> StdResult<Vec<UnbondSharesByUserResponseItem>> {
+) -> StdResult<Vec<UnbondRequestsByUserResponseItem>> {
     let state = State::default();
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = start_after.map(|id| Bound::exclusive(U64Key::from(id)));
 
     state
-        .unbond_shares
+        .unbond_requests
         .idx
         .user
         .prefix(user)
@@ -91,10 +91,7 @@ pub fn query_unbond_shares_by_user(
         .take(limit)
         .map(|item| {
             let (_, v) = item?;
-            Ok(UnbondSharesByUserResponseItem {
-                id: v.id,
-                shares: v.shares,
-            })
+            Ok(v.into())
         })
         .collect()
 }

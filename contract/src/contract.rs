@@ -98,16 +98,16 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             start_after,
             limit,
         } => to_binary(&queries::query_previous_batches(deps, start_after, limit)?),
-        QueryMsg::UnbondSharesByBatch {
+        QueryMsg::UnbondRequestsByBatch {
             id,
             start_after,
             limit,
-        } => to_binary(&queries::query_unbond_shares_by_batch(deps, id, start_after, limit)?),
-        QueryMsg::UnbondSharesByUser {
+        } => to_binary(&queries::query_unbond_requests_by_batch(deps, id, start_after, limit)?),
+        QueryMsg::UnbondRequestsByUser {
             user,
             start_after,
             limit,
-        } => to_binary(&queries::query_unbond_shares_by_user(deps, user, start_after, limit)?),
+        } => to_binary(&queries::query_unbond_requests_by_user(deps, user, start_after, limit)?),
     }
 }
 

@@ -10,7 +10,7 @@ use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::math::{
     compute_delegations, compute_mint_amount, compute_unbond_amount, compute_undelegations,
 };
-use crate::msg::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondShare};
+use crate::msg::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 use crate::state::State;
 
 //--------------------------------------------------------------------------------------------------
@@ -212,17 +212,17 @@ pub fn queue_unbond(
     state.pending_batch.save(deps.storage, &pending_batch)?;
 
     // Update the user's requested unbonding amount
-    state.unbond_shares.update(
+    state.unbond_requests.update(
         deps.storage,
         (pending_batch.id.into(), &staker_addr),
         |x| -> StdResult<_> {
-            let mut unbond_share = x.unwrap_or_else(|| UnbondShare {
+            let mut request = x.unwrap_or_else(|| UnbondRequest {
                 id: pending_batch.id,
                 user: staker_addr.to_string(),
                 shares: Uint128::zero(),
             });
-            unbond_share.shares += usteak_to_burn;
-            Ok(unbond_share)
+            request.shares += usteak_to_burn;
+            Ok(request)
         },
     )?;
 
@@ -317,13 +317,13 @@ pub fn withdraw_unbonded(
     let state = State::default();
     let current_time = env.block.time.seconds();
 
-    // Fetch the user's unclaimed unbonding shares
+    // Fetch the user's unclaimed unbonding requests
     //
-    // NOTE: If the user has too many unclaimed shares, this may not fit in the WASM memory... But
+    // NOTE: If the user has too many unclaimed requests, this may not fit in the WASM memory... But
     // this practically is never going to happen in practice. Who would create hundreds of unbonding
     // requests and never claim them?
-    let unbond_shares = state
-        .unbond_shares
+    let requests = state
+        .unbond_requests
         .idx
         .user
         .prefix(staker_addr.to_string())
@@ -332,29 +332,29 @@ pub fn withdraw_unbonded(
             let (_, v) = item?;
             Ok(v)
         })
-        .collect::<StdResult<Vec<UnbondShare>>>()?;
+        .collect::<StdResult<Vec<UnbondRequest>>>()?;
 
-    // Enumerate through the user's all unclaimed unbonding shares. For each share, check whether
+    // Enumerate through the user's all unclaimed unbonding requests. For each request, check whether
     // its batch has finished unbonding. It yes, increment the amount of uluna to refund the user,
-    // and remove this unbonding request from the active queue
+    // and remove this request from the active queue
     //
     // If a batch has been completely refunded (i.e. total shares = 0), remove it from storage
     let mut total_uluna_to_refund = Uint128::zero();
-    for unbond_share in &unbond_shares {
-        let mut batch = state.previous_batches.load(deps.storage, unbond_share.id.into())?;
+    for request in &requests {
+        let mut batch = state.previous_batches.load(deps.storage, request.id.into())?;
         if batch.est_unbond_end_time < current_time {
             let uluna_to_refund =
-                batch.uluna_unclaimed.multiply_ratio(unbond_share.shares, batch.total_shares);
+                batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
             
             total_uluna_to_refund += uluna_to_refund;
-            batch.total_shares -= unbond_share.shares;
+            batch.total_shares -= request.shares;
             batch.uluna_unclaimed -= uluna_to_refund;
 
             if batch.total_shares.is_zero() {
-                state.previous_batches.remove(deps.storage, unbond_share.id.into());
+                state.previous_batches.remove(deps.storage, request.id.into());
             }
 
-            state.unbond_shares.remove(deps.storage, (unbond_share.id.into(), &staker_addr))?;
+            state.unbond_requests.remove(deps.storage, (request.id.into(), &staker_addr))?;
         }
     }
 

@@ -81,14 +81,14 @@ pub enum QueryMsg {
         start_after: Option<u64>,
         limit: Option<u32>,
     },
-    /// Enumerate all outstanding unbonding shares in a specific batch. Response: `Vec<UnbondSharesResponseByBatchItem>`
-    UnbondSharesByBatch {
+    /// Enumerate all outstanding unbonding requests in a given batch. Response: `Vec<UnbondRequestsResponseByBatchItem>`
+    UnbondRequestsByBatch {
         id: u64,
         start_after: Option<String>,
         limit: Option<u32>,
     },
-    /// Enumreate all outstanding unbonding shares that belong to a specific user. Response: `Vec<UnbondSharesByUserResponseItem>`
-    UnbondSharesByUser {
+    /// Enumreate all outstanding unbonding requests from given a user. Response: `Vec<UnbondRequestsByUserResponseItem>`
+    UnbondRequestsByUser {
         user: String,
         start_after: Option<u64>,
         limit: Option<u32>,
@@ -132,7 +132,7 @@ pub struct Batch {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct UnbondShare {
+pub struct UnbondRequest {
     /// ID of the batch
     pub id: u64,
     /// The user's address
@@ -142,15 +142,15 @@ pub struct UnbondShare {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct UnbondSharesByBatchResponseItem {
+pub struct UnbondRequestsByBatchResponseItem {
     /// The user's address
     pub user: String,
     /// The user's share in the batch
     pub shares: Uint128,
 }
 
-impl From<UnbondShare> for UnbondSharesByBatchResponseItem {
-    fn from(s: UnbondShare) -> Self {
+impl From<UnbondRequest> for UnbondRequestsByBatchResponseItem {
+    fn from(s: UnbondRequest) -> Self {
         Self {
             user: s.user,
             shares: s.shares
@@ -159,15 +159,15 @@ impl From<UnbondShare> for UnbondSharesByBatchResponseItem {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct UnbondSharesByUserResponseItem {
+pub struct UnbondRequestsByUserResponseItem {
     /// ID of the batch
     pub id: u64,
     /// The user's share in the batch
     pub shares: Uint128,
 }
 
-impl From<UnbondShare> for UnbondSharesByUserResponseItem {
-    fn from(s: UnbondShare) -> Self {
+impl From<UnbondRequest> for UnbondRequestsByUserResponseItem {
+    fn from(s: UnbondRequest) -> Self {
         Self {
             id: s.id,
             shares: s.shares

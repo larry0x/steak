@@ -1,7 +1,7 @@
 use cosmwasm_std::Addr;
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex, U64Key};
 
-use crate::msg::{Batch, PendingBatch, UnbondShare};
+use crate::msg::{Batch, PendingBatch, UnbondRequest};
 
 pub(crate) struct State<'a> {
     /// Address of the Steak token
@@ -20,16 +20,16 @@ pub(crate) struct State<'a> {
     pub previous_batches: Map<'a, U64Key, Batch>,
     /// Shares in an unbonding batch, with the batch ID and the user address as composite key,
     /// additionally indexed by the user address
-    pub unbond_shares: IndexedMap<'a, (U64Key, &'a Addr), UnbondShare, UnbondSharesIndexes<'a>>,
+    pub unbond_requests: IndexedMap<'a, (U64Key, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
 }
 
 impl Default for State<'static> {
     fn default() -> Self {
-        let indexes = UnbondSharesIndexes {
+        let indexes = UnbondRequestsIndexes {
             user: MultiIndex::new(
-                unbond_shares_user_index,
-                "unbond_shares",
-                "unbond_shares__user",
+                |d: &UnbondRequest, k: Vec<u8>| (d.user.clone(), k),
+                "unbond_requests",
+                "unbond_requests__user",
             ),
         };
         Self {
@@ -40,23 +40,19 @@ impl Default for State<'static> {
             validators: Item::new("validators"),
             pending_batch: Item::new("pending_batch"),
             previous_batches: Map::new("previous_batches"),
-            unbond_shares: IndexedMap::new("unbond_shares", indexes),
+            unbond_requests: IndexedMap::new("unbond_requests", indexes),
         }
     }
 }
 
-pub(crate) struct UnbondSharesIndexes<'a> {
+pub(crate) struct UnbondRequestsIndexes<'a> {
     // pk goes to second tuple element
-    pub user: MultiIndex<'a, (String, Vec<u8>), UnbondShare>,
+    pub user: MultiIndex<'a, (String, Vec<u8>), UnbondRequest>,
 }
 
-impl<'a> IndexList<UnbondShare> for UnbondSharesIndexes<'a> {
-    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<UnbondShare>> + '_> {
-        let v: Vec<&dyn Index<UnbondShare>> = vec![&self.user];
+impl<'a> IndexList<UnbondRequest> for UnbondRequestsIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<UnbondRequest>> + '_> {
+        let v: Vec<&dyn Index<UnbondRequest>> = vec![&self.user];
         Box::new(v.into_iter())
     }
-}
-
-pub(crate) fn unbond_shares_user_index(d: &UnbondShare, k: Vec<u8>) -> (String, Vec<u8>) {
-    (d.user.clone(), k)
 }
