@@ -46,9 +46,9 @@ pub mod entry {
                 info.sender,
                 parse_received_fund(&info.funds, "uluna")?,
             ),
-            ExecuteMsg::Unbond {} => contract::unbond(deps, env),
-            ExecuteMsg::WithdrawUnbonded {} => contract::withdraw_unbonded(deps, env, info.sender),
             ExecuteMsg::Harvest {} => contract::harvest(deps, env, info.sender),
+            ExecuteMsg::SubmitBatch {} => contract::submit_batch(deps, env),
+            ExecuteMsg::WithdrawUnbonded {} => contract::withdraw_unbonded(deps, env, info.sender),
             ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
         }
     }

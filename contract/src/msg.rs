@@ -31,18 +31,12 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
     Bond {},
-    /// Execute unbond requests in the current unbonding queue
-    ///
-    /// Cosmos SDK's staking module has a limit of 7 active unbondings per validator-delegator pair.
-    /// Therefore, to support unbonding requests from many users, Steak Hub has to group these
-    /// requests in batches.
-    Unbond {},
+    /// Claim staking rewards, swap all for Luna, and restake
+    Harvest {},
+    /// Execute the current pending batch of unbonding requests to be unbonded
+    SubmitBatch {},
     /// Withdraw Luna that have finished unbonding in previous batches
     WithdrawUnbonded {},
-    /// Claim staking rewards, swap all for Luna, and restake
-    ///
-    /// Currently set to permissioned to deter sandwich attacks. Will explore other options
-    Harvest {},
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
 }

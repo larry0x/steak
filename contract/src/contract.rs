@@ -234,7 +234,7 @@ pub fn queue_unbond(
     if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.into(),
-            msg: to_binary(&ExecuteMsg::Unbond {})?,
+            msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
             funds: vec![],
         }));
     }
@@ -246,7 +246,7 @@ pub fn queue_unbond(
         .add_attribute("usteak_to_burn", usteak_to_burn))
 }
 
-pub fn unbond(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
 
     // The current batch can only be unbonded once the estimated unbonding time has been reached
