@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use cosmwasm_std::{
@@ -185,7 +186,7 @@ pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
         .map(|coin| coin.denom)
         .collect();
 
-    let known_denoms: Vec<String> = TerraQuerier::new(&deps.querier)
+    let known_denoms: HashSet<String> = TerraQuerier::new(&deps.querier)
         .query_exchange_rates(String::from("uluna"), all_denoms)?
         .exchange_rates
         .into_iter()
