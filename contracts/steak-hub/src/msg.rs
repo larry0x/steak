@@ -8,6 +8,8 @@ use terra_cosmwasm::TerraMsgWrapper;
 pub struct InstantiateMsg {
     /// Code ID of the CW20 token contract
     pub cw20_code_id: u64,
+    /// Account to be used as admin for the Steak token contract
+    pub admin: String,
     /// Name of the liquid staking token
     pub name: String,
     /// Symbol of the liquid staking token

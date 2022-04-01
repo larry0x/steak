@@ -14,10 +14,10 @@ use crate::{execute, queries};
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
-    execute::instantiate(deps, env, info, msg)
+    execute::instantiate(deps, env, msg)
 }
 
 #[entry_point]

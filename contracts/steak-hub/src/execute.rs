@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, MessageInfo, Order,
-    Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Order, Response,
+    StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
@@ -20,12 +20,7 @@ use crate::types::Coins;
 // Instantiation
 //--------------------------------------------------------------------------------------------------
 
-pub fn instantiate(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    msg: InstantiateMsg,
-) -> StdResult<Response> {
+pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Response> {
     let state = State::default();
 
     let worker_addrs = msg
@@ -51,7 +46,7 @@ pub fn instantiate(
 
     Ok(Response::new().add_submessage(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Instantiate {
-            admin: Some(info.sender.into()), // for now we use the deployer as the admin
+            admin: Some(msg.admin),
             code_id: msg.cw20_code_id,
             msg: to_binary(&Cw20InstantiateMsg {
                 name: msg.name,
