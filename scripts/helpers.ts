@@ -77,17 +77,24 @@ export function getContractAddresses(network: string) {
 }
 
 /**
+ * @notice Pause script execution until user confirms
+ */
+export async function waitForConfirm(msg: string) {
+  const proceed = await promptly.confirm(`${msg} [y/N]:`);
+  if (!proceed) {
+    console.log("User aborted!");
+    process.exit(1);
+  }
+}
+
+/**
  * @notice Same with `sendTransaction`, but requires confirmation for CLI before broadcasting
  */
 export async function sendTxWithConfirm(signer: Wallet, msgs: Msg[]) {
   const tx = await signer.createAndSignTx({ msgs, ...DEFAULT_GAS_SETTINGS });
   console.log("\n" + JSON.stringify(tx).replace(/\\/g, "") + "\n");
 
-  const proceed = await promptly.confirm("Confirm transaction before broadcasting [y/N]:");
-  if (!proceed) {
-    console.log("User aborted!");
-    process.exit(1);
-  }
+  await waitForConfirm("Confirm transaction before broadcasting");
 
   const result = await signer.lcd.tx.broadcast(tx);
   if (isTxError(result)) {

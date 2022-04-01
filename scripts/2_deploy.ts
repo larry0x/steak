@@ -4,6 +4,7 @@ import yargs from "yargs/yargs";
 import {
   createLCDClient,
   createWallet,
+  waitForConfirm,
   storeCodeWithConfirm,
   instantiateWithConfirm,
 } from "./helpers";
@@ -43,6 +44,7 @@ const argv = yargs(process.argv)
   if (!codeId) {
     codeId = await storeCodeWithConfirm(deployer, path.resolve(argv["binary"]));
     console.log(`Code uploaded! Code ID: ${codeId}`);
+    await waitForConfirm("Proceed to deploy contract?");
   }
 
   const result = await instantiateWithConfirm(
