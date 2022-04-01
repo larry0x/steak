@@ -16,9 +16,20 @@ pub(crate) fn query_cw20_total_supply(
     querier: &QuerierWrapper,
     token_addr: &Addr,
 ) -> StdResult<Uint128> {
-    let token_info: TokenInfoResponse =
-        querier.query_wasm_smart(token_addr, &Cw20QueryMsg::TokenInfo {})?;
+    let token_info: TokenInfoResponse = querier.query_wasm_smart(token_addr, &Cw20QueryMsg::TokenInfo {})?;
     Ok(token_info.total_supply)
+}
+
+/// Query the amounts of Luna a staker is delegating to a specific validator
+pub(crate) fn query_delegation(
+    querier: &QuerierWrapper,
+    validator: &str,
+    delegator_addr: &Addr,
+) -> StdResult<Delegation> {
+    Ok(Delegation {
+        validator: String::from(validator),
+        amount: querier.query_delegation(delegator_addr, validator)?.map(|fd| fd.amount.amount).unwrap_or_else(Uint128::zero),
+    })
 }
 
 /// Query the amounts of Luna a staker is delegating to each of the validators specified
@@ -29,7 +40,7 @@ pub(crate) fn query_delegations(
 ) -> StdResult<Vec<Delegation>> {
     validators
         .iter()
-        .map(|validator| Delegation::query(querier, validator, delegator_addr))
+        .map(|validator| query_delegation(querier, validator, delegator_addr))
         .collect()
 }
 

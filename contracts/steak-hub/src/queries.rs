@@ -43,7 +43,7 @@ pub fn query_state(deps: Deps, env: Env) -> StdResult<StateResponse> {
         total_usteak,
         total_uluna,
         exchange_rate,
-        unlocked_coins: state.unlocked_coins.load(deps.storage)?.0
+        unlocked_coins: state.unlocked_coins.load(deps.storage)?
     })
 }
 

@@ -29,9 +29,12 @@ pub fn execute(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
-        ExecuteMsg::Bond {} => {
-            execute::bond(deps, env, info.sender, parse_received_fund(&info.funds, "uluna")?)
-        },
+        ExecuteMsg::Bond {} => execute::bond(
+            deps, 
+            env, 
+            info.sender, 
+            parse_received_fund(&info.funds, "uluna")?,
+        ),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env, info.sender),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::WithdrawUnbonded {} => execute::withdraw_unbonded(deps, env, info.sender),
