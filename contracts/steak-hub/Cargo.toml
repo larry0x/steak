@@ -12,11 +12,6 @@ crate-type = ["cdylib", "rlib"]
 [features]
 backtraces = ["cosmwasm-std/backtraces"]
 
-[profile.release]
-rpath = false
-lto = true
-overflow-checks = true
-
 [dependencies]
 cosmwasm-std = { version = "0.16", features = ["staking"] }
 cw20 = "0.9"

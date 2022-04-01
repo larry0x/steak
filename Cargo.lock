@@ -59,13 +59,14 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-std"
-version = "0.16.3"
+version = "0.16.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c80dbbb380c23a4f10ae6178dd411ed90c9f9931ddf4932156cc5e5ab78d1c19"
+checksum = "b8eeb09d759020f5793fa7f61bb107bf651cf355735b62845b686ab05b78e164"
 dependencies = [
  "base64",
  "cosmwasm-crypto",
  "cosmwasm-derive",
+ "forward_ref",
  "schemars",
  "serde",
  "serde-json-wasm",
@@ -261,6 +262,12 @@ dependencies = [
  "rand_core 0.6.3",
  "subtle",
 ]
+
+[[package]]
+name = "forward_ref"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8cbd1169bd7b4a0a20d92b9af7a7e0422888bd38a6f5ec29c1fd8c1558a272e"
 
 [[package]]
 name = "generic-array"
@@ -585,9 +592,9 @@ checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
 
 [[package]]
 name = "uint"
-version = "0.9.3"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12f03af7ccf01dd611cc450a0d10dbc9b745770d096473e2faf0ca6e2d66d1e0"
+checksum = "6470ab50f482bde894a037a57064480a246dbfdd5960bd65a44824693f08da5f"
 dependencies = [
  "byteorder",
  "crunchy",
