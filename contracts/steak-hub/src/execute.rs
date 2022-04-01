@@ -2,8 +2,8 @@ use std::collections::HashSet;
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Order, Response,
-    StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Event, Order,
+    Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
@@ -134,9 +134,7 @@ pub fn bond(
     Ok(Response::new()
         .add_submessages(delegate_submsgs)
         .add_message(mint_msg)
-        .add_attribute("action", "steak_hub/bond")
-        .add_attribute("staker", staker_addr)
-        .add_attribute("uluna_bonded", uluna_to_bond))
+        .add_attribute("action", "steak_hub/bond"))
 }
 
 pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
@@ -201,11 +199,11 @@ pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
         .collect();
 
     let swap_submsgs: Vec<SubMsg<TerraMsgWrapper>> = coins_to_offer
-        .iter()
+        .into_iter()
         .map(|coin| {
             SubMsg::reply_on_success(
-                create_swap_msg(coin.clone(), String::from("uluna")),
-                2,
+                create_swap_msg(coin, String::from("uluna")),
+                3,
             )
         })
         .collect();
@@ -215,8 +213,7 @@ pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
 
     Ok(Response::new()
         .add_submessages(swap_submsgs)
-        .add_attribute("action", "steak_hub/swap")
-        .add_attribute("coins_offered", Coins(coins_to_offer).to_string()))
+        .add_attribute("action", "steak_hub/swap"))
 }
 
 pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -236,54 +233,59 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     unlocked_coins.retain(|coin| coin.denom != "uluna");
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
 
+    let event = Event::new("harvest")
+        .add_attribute("time", env.block.time.seconds().to_string())
+        .add_attribute("height", env.block.height.to_string())
+        .add_attribute("uluna_harvested", uluna_to_bond);
+
     Ok(Response::new()
         .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
-        .add_attribute("action", "steak_hub/reinvest")
-        .add_attribute("uluna_bonded", uluna_to_bond))
+        .add_event(event)
+        .add_attribute("action", "steak_hub/reinvest"))
 }
 
 pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
     response: SubMsgExecutionResponse,
+    event_type: &str,
+    receiver_key: &str,
+    received_coins_key: &str
 ) -> StdResult<Response> {
-    let state = State::default();
-
     let event = response
         .events
         .iter()
-        .find(|event| event.ty == "coin_received")
-        .ok_or_else(|| StdError::generic_err("cannot find `coin_received` event"))?;
+        .find(|event| event.ty == event_type)
+        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` event", event_type)))?;
 
     let receiver = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == "receiver")
-        .ok_or_else(|| StdError::generic_err("cannot find `receiver` attribute"))?
+        .find(|attr| attr.key == receiver_key)
+        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", receiver_key)))?
         .value;
 
-    let coins_received_str = &event
+    let received_coins_str = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == "amount")
-        .ok_or_else(|| StdError::generic_err("cannot find `amount` attribute"))?
+        .find(|attr| attr.key == received_coins_key)
+        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", received_coins_key)))?
         .value;
 
-    let coins_received = if *receiver == env.contract.address {
-        Coins::from_str(coins_received_str)?
+    let received_coins = if *receiver == env.contract.address {
+        Coins::from_str(received_coins_str)?
     } else {
         Coins(vec![])
     };
 
+    let state = State::default();
     state.unlocked_coins.update(deps.storage, |coins| -> StdResult<_> {
-        let coins = Coins(coins).add_many(&coins_received)?;
+        let coins = Coins(coins).add_many(&received_coins)?;
         Ok(coins.0)
     })?;
 
     Ok(Response::new()
-        .add_attribute("action", "steak_hub/register_unlocked_coins")
-        .add_attribute("receiver", receiver)
-        .add_attribute("coins_received", coins_received.to_string()))
+        .add_attribute("action", "steak_hub/register_received_coins"))
 }
 
 //--------------------------------------------------------------------------------------------------

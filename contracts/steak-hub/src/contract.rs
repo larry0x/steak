@@ -30,9 +30,9 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
         ExecuteMsg::Bond {} => execute::bond(
-            deps, 
-            env, 
-            info.sender, 
+            deps,
+            env,
+            info.sender,
             parse_received_fund(&info.funds, "uluna")?,
         ),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env, info.sender),
@@ -70,13 +70,13 @@ fn callback(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    cb_msg: CallbackMsg,
+    callback_msg: CallbackMsg,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     if env.contract.address != info.sender {
         return Err(StdError::generic_err("callbacks can only be invoked by the contract itself"));
     }
 
-    match cb_msg {
+    match callback_msg {
         CallbackMsg::Swap {} => execute::swap(deps, env),
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
@@ -86,8 +86,23 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
-        2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?),
-        id => Err(StdError::generic_err(format!("invalid reply id: {}", id))),
+        2 => execute::register_received_coins(
+            deps,
+            env,
+            unwrap_reply(reply)?,
+            "coin_received",
+            "receiver",
+            "amount",
+        ),
+        3 => execute::register_received_coins(
+            deps,
+            env,
+            unwrap_reply(reply)?,
+            "swap",
+            "recipient",
+            "swap_coin",
+        ),
+        id => Err(StdError::generic_err(format!("invalid reply id: {}; must be 1-3", id))),
     }
 }
 
