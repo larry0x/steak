@@ -6,7 +6,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
+use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
 
 use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::math::{
@@ -179,26 +179,36 @@ pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
-    let coins_to_offer: Vec<Coin> =
-        unlocked_coins.iter().cloned().filter(|coin| coin.denom != "uluna").collect();
+    let all_denoms: Vec<String> = unlocked_coins
+        .iter()
+        .cloned()
+        .map(|coin| coin.denom)
+        .collect();
+
+    let known_denoms: Vec<String> = TerraQuerier::new(&deps.querier)
+        .query_exchange_rates(String::from("uluna"), all_denoms)?
+        .exchange_rates
+        .into_iter()
+        .map(|item| item.quote_denom)
+        .collect();
+
+    let coins_to_offer: Vec<Coin> = unlocked_coins
+        .iter()
+        .cloned()
+        .filter(|coin| known_denoms.contains(&coin.denom))
+        .collect();
 
     let swap_submsgs: Vec<SubMsg<TerraMsgWrapper>> = coins_to_offer
         .iter()
         .map(|coin| {
             SubMsg::reply_on_success(
-                CosmosMsg::Custom(TerraMsgWrapper {
-                    route: TerraRoute::Market,
-                    msg_data: TerraMsg::Swap {
-                        offer_coin: coin.clone(),
-                        ask_denom: String::from("uluna"),
-                    },
-                }),
+                create_swap_msg(coin.clone(), String::from("uluna")),
                 2,
             )
         })
         .collect();
 
-    unlocked_coins.retain(|coin| coin.denom == "uluna");
+    unlocked_coins.retain(|coin| !known_denoms.contains(&coin.denom));
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
 
     Ok(Response::new()
@@ -221,7 +231,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
-    unlocked_coins.retain(|coin| coin.denom == "uluna");
+    unlocked_coins.retain(|coin| coin.denom != "uluna");
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
 
     Ok(Response::new()
