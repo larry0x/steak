@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, Empty, StdResult, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, Empty, StdResult, Uint128, WasmMsg, Decimal, Coin};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,8 @@ impl CallbackMsg {
 pub enum QueryMsg {
     /// The contract's configurations. Response: `ConfigResponse`
     Config {},
+    /// The contract's current state. Response: `StateResponse`
+    State {},
     /// The current batch on unbonding requests pending submission. Response: `crate::state::PendingBatch`
     PendingBatch {},
     /// Enumerate previous batches that have previously been submitted for unbonding but have not yet
@@ -107,6 +109,18 @@ pub struct ConfigResponse {
     pub workers: Vec<String>,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StateResponse {
+    /// Total supply to the Steak token
+    pub total_usteak: Uint128,
+    /// Total amount of uluna staked
+    pub total_uluna: Uint128,
+    /// The exchange rate between usteak and uluna, in terms of uluna per usteak
+    pub exchange_rate: Decimal,
+    /// Staking rewards currently held by the contract that are ready to be reinvested
+    pub unlocked_coins: Vec<Coin>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

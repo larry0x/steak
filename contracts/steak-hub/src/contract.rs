@@ -80,17 +80,19 @@ fn callback(
 }
 
 #[entry_point]
-pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> StdResult<Response> {
+pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
+        2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?),
         id => Err(StdError::generic_err(format!("invalid reply id: {}", id))),
     }
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&queries::query_config(deps)?),
+        QueryMsg::State {} => to_binary(&queries::query_state(deps, env)?),
         QueryMsg::PendingBatch {} => to_binary(&queries::query_pending_batch(deps)?),
         QueryMsg::PreviousBatches {
             start_after,

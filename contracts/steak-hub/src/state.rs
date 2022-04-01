@@ -2,6 +2,7 @@ use cosmwasm_std::Addr;
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex, U64Key};
 
 use crate::msg::{Batch, PendingBatch, UnbondRequest};
+use crate::types::Coins;
 
 pub(crate) struct State<'a> {
     /// Address of the Steak token
@@ -14,6 +15,8 @@ pub(crate) struct State<'a> {
     pub workers: Item<'a, Vec<Addr>>,
     /// Validators who will receive the delegations
     pub validators: Item<'a, Vec<String>>,
+    /// Coins that can be reinvested
+    pub unlocked_coins: Item<'a, Coins>,
     /// The current batch of unbonding requests queded to be executed
     pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
@@ -38,6 +41,7 @@ impl Default for State<'static> {
             unbond_period: Item::new("unbond_period"),
             workers: Item::new("workers"),
             validators: Item::new("validators"),
+            unlocked_coins: Item::new("unlocked_coins"),
             pending_batch: Item::new("pending_batch"),
             previous_batches: Map::new("previous_batches"),
             unbond_requests: IndexedMap::new("unbond_requests", indexes),

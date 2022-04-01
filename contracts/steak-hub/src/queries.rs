@@ -1,9 +1,10 @@
-use cosmwasm_std::{Deps, Order, StdResult};
+use cosmwasm_std::{Deps, Order, StdResult, Env, Uint128, Decimal};
 use cw_storage_plus::{Bound, U64Key};
 
+use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::msg::{
     Batch, ConfigResponse, PendingBatch, UnbondRequestsByBatchResponseItem,
-    UnbondRequestsByUserResponseItem,
+    UnbondRequestsByUserResponseItem, StateResponse,
 };
 use crate::state::State;
 
@@ -19,6 +20,30 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         unbond_period: state.unbond_period.load(deps.storage)?,
         workers: worker_addrs.iter().map(|addr| addr.to_string()).collect(),
         validators: state.validators.load(deps.storage)?,
+    })
+}
+
+pub fn query_state(deps: Deps, env: Env) -> StdResult<StateResponse> {
+    let state = State::default();
+
+    let steak_token = state.steak_token.load(deps.storage)?;
+    let total_usteak = query_cw20_total_supply(&deps.querier, &steak_token)?;
+
+    let validators = state.validators.load(deps.storage)?;
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let total_uluna: Uint128 = delegations.iter().map(|d| d.amount).sum();
+
+    let exchange_rate = if total_usteak.is_zero() {
+        Decimal::one()
+    } else {
+        Decimal::from_ratio(total_uluna, total_usteak)
+    };
+
+    Ok(StateResponse {
+        total_usteak,
+        total_uluna,
+        exchange_rate,
+        unlocked_coins: state.unlocked_coins.load(deps.storage)?.0
     })
 }
 

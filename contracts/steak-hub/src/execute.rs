@@ -1,10 +1,12 @@
+use std::str::FromStr;
+
 use cosmwasm_std::{
     to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, MessageInfo, Order,
-    Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    Response, StakingMsg, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper};
+use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
 
 use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::math::{
@@ -12,6 +14,7 @@ use crate::math::{
 };
 use crate::msg::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 use crate::state::State;
+use crate::types::Coins;
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -28,10 +31,11 @@ pub fn instantiate(
     let worker_addrs =
         msg.workers.iter().map(|s| deps.api.addr_validate(s)).collect::<StdResult<Vec<Addr>>>()?;
 
-    state.workers.save(deps.storage, &worker_addrs)?;
-    state.validators.save(deps.storage, &msg.validators)?;
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
+    state.workers.save(deps.storage, &worker_addrs)?;
+    state.validators.save(deps.storage, &msg.validators)?;
+    state.unlocked_coins.save(deps.storage, &Coins(vec![]))?;
 
     state.pending_batch.save(
         deps.storage,
@@ -114,16 +118,31 @@ pub fn bond(
     // Compute the amount of `uluna` to be delegated to each validator
     let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
+    let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_delegations
+        .iter()
+        .map(|d| {
+            SubMsg::reply_on_success(
+                CosmosMsg::Staking(StakingMsg::Delegate {
+                    validator: d.validator.clone(),
+                    amount: Coin::new(d.amount.u128(), "uluna"),
+                }),
+                2,
+            )
+        })
+        .collect();
+
+    let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: steak_token.into(),
+        msg: to_binary(&Cw20ExecuteMsg::Mint {
+            recipient: staker_addr.clone().into(),
+            amount: usteak_to_mint,
+        })?,
+        funds: vec![],
+    });
+
     Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
-        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: steak_token.into(),
-            msg: to_binary(&Cw20ExecuteMsg::Mint {
-                recipient: staker_addr.clone().into(),
-                amount: usteak_to_mint,
-            })?,
-            funds: vec![],
-        }))
+        .add_submessages(delegate_submsgs)
+        .add_message(mint_msg)
         .add_attribute("action", "steak_hub/bond")
         .add_attribute("staker", staker_addr)
         .add_attribute("uluna_bonded", uluna_to_bond))
@@ -139,14 +158,17 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
     }
 
     // For each of the whitelisted validators, create a message to withdraw delegation reward
-    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = deps
+    let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = deps
         .querier
         .query_all_delegations(&env.contract.address)?
         .into_iter()
         .map(|d| {
-            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
-                validator: d.validator,
-            })
+            SubMsg::reply_on_success(
+                CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                    validator: d.validator,
+                }),
+                2,
+            )
         })
         .collect();
 
@@ -158,40 +180,121 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
         .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
 
     Ok(Response::new()
-        .add_messages(msgs)
+        .add_submessages(delegate_submsgs)
         .add_messages(callback_msgs)
         .add_attribute("action", "steak_hub/harvest"))
 }
 
-pub fn swap(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
-    // Query the amounts of Terra stablecoins available to be swapped
-    let coins = deps.querier.query_all_balances(&env.contract.address)?;
+pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+    let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
-    // For each of denom that is not `uluna`, create a message to swap it into Luna
-    let msgs: Vec<CosmosMsg<TerraMsgWrapper>> = coins
-        .into_iter()
-        .filter(|coin| coin.denom != "uluna")
-        .map(|coin| create_swap_msg(coin, String::from("uluna")))
+    let coins_to_offer: Vec<Coin> =
+        unlocked_coins.0.iter().cloned().filter(|coin| coin.denom != "uluna").collect();
+
+    let swap_submsgs: Vec<SubMsg<TerraMsgWrapper>> = coins_to_offer
+        .iter()
+        .map(|coin| {
+            SubMsg::reply_on_success(
+                CosmosMsg::Custom(TerraMsgWrapper {
+                    route: TerraRoute::Market,
+                    msg_data: TerraMsg::Swap {
+                        offer_coin: coin.clone(),
+                        ask_denom: String::from("uluna"),
+                    },
+                }),
+                2,
+            )
+        })
         .collect();
 
-    Ok(Response::new().add_messages(msgs).add_attribute("action", "steak_hub/swap"))
+    unlocked_coins.0.retain(|coin| coin.denom == "uluna");
+    state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
+
+    Ok(Response::new()
+        .add_submessages(swap_submsgs)
+        .add_attribute("action", "steak_hub/swap")
+        .add_attribute("coins_offered", Coins(coins_to_offer).to_string()))
 }
 
 pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
+    let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
-    // Query the amount of `uluna` available to be staked
-    let uluna_to_bond = deps.querier.query_balance(&env.contract.address, "uluna")?.amount;
+    let uluna_to_bond = unlocked_coins
+        .0
+        .iter()
+        .find(|coin| coin.denom == "uluna")
+        .ok_or_else(|| StdError::generic_err("no uluna available to be bonded"))?
+        .amount;
 
-    // Compute the amount of `uluna` to be delegated to each validator, based on the amounts of
-    // delegations they currently have
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
+    // No need to parse received coins here. We already claimed all staking rewards previously in
+    // the same atomic execution, so we're sure there is no claimable reward this time.
+    let delegate_msgs: Vec<CosmosMsg<TerraMsgWrapper>> = new_delegations
+        .iter()
+        .map(|d| {
+            CosmosMsg::Staking(StakingMsg::Delegate {
+                validator: d.validator.clone(),
+                amount: Coin::new(d.amount.u128(), "uluna"),
+            })
+        })
+        .collect();
+
+    unlocked_coins.0.retain(|coin| coin.denom == "uluna");
+    state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
+
     Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
-        .add_attribute("action", "steak_hub/reinvest"))
+        .add_messages(delegate_msgs)
+        .add_attribute("action", "steak_hub/reinvest")
+        .add_attribute("uluna_bonded", uluna_to_bond))
+}
+
+pub fn register_received_coins(
+    deps: DepsMut,
+    env: Env,
+    response: SubMsgExecutionResponse,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    let event = response
+        .events
+        .iter()
+        .find(|event| event.ty == "coin_received")
+        .ok_or_else(|| StdError::generic_err("cannot find `coin_received` event"))?;
+
+    let receiver = &event
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "receiver")
+        .ok_or_else(|| StdError::generic_err("cannot find `receiver` attribute"))?
+        .value;
+
+    let coins_received_str = &event
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "amount")
+        .ok_or_else(|| StdError::generic_err("cannot find `amount` attribute"))?
+        .value;
+
+    let coins_received = if *receiver == env.contract.address {
+        Coins::from_str(coins_received_str)?
+    } else {
+        Coins(vec![])
+    };
+
+    state.unlocked_coins.update(deps.storage, |mut coins| -> StdResult<_> {
+        coins.add_many(&coins_received)?;
+        Ok(coins)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "steak_hub/register_unlocked_coins")
+        .add_attribute("receiver", receiver)
+        .add_attribute("coins_received", coins_received.to_string()))
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -345,7 +448,7 @@ pub fn withdraw_unbonded(
         if batch.est_unbond_end_time < current_time {
             let uluna_to_refund =
                 batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
-            
+
             total_uluna_to_refund += uluna_to_refund;
             batch.total_shares -= request.shares;
             batch.uluna_unclaimed -= uluna_to_refund;
