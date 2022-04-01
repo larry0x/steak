@@ -16,7 +16,7 @@
 .idea
 
 # Environment
-*.env
+*.env*
 
 # Scripts
 node_modules/
