@@ -29,7 +29,7 @@ const argv = yargs(process.argv)
     binary: {
       type: "string",
       demandOption: false,
-      default: "../contract/artifacts/steak_hub.wasm",
+      default: "../artifacts/steak_hub.wasm",
     },
   })
   .parseSync();

@@ -28,7 +28,7 @@ const argv = yargs(process.argv)
       user.key.accAddress,
       argv["steak-hub"],
       {
-        stake: {},
+        bond: {},
       },
       {
         uluna: argv["amount"],
