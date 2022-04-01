@@ -184,6 +184,7 @@ pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
         .iter()
         .cloned()
         .map(|coin| coin.denom)
+        .filter(|denom| denom != "uluna")
         .collect();
 
     let known_denoms: HashSet<String> = TerraQuerier::new(&deps.querier)
