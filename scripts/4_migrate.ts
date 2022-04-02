@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import yargs from "yargs/yargs";
 import { MsgMigrateContract } from "@terra-money/terra.js";
+import * as keystore from "./keystore";
 import {
   createLCDClient,
   createWallet,
@@ -15,6 +16,15 @@ const argv = yargs(process.argv)
     network: {
       type: "string",
       demandOption: true,
+    },
+    key: {
+      type: "string",
+      demandOption: true,
+    },
+    "key-dir": {
+      type: "string",
+      demandOption: false,
+      default: keystore.DEFAULT_KEY_DIR,
     },
     "contract-address": {
       type: "string",
@@ -38,7 +48,7 @@ const argv = yargs(process.argv)
 
 (async function () {
   const terra = createLCDClient(argv["network"]);
-  const admin = createWallet(terra);
+  const admin = await createWallet(terra, argv["key"], argv["key-dir"]);
   const msg = argv["msg"] ? JSON.parse(fs.readFileSync(path.resolve(argv["msg"]), "utf8")) : {};
 
   let codeId = argv["code-id"];

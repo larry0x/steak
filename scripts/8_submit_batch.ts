@@ -1,5 +1,6 @@
 import yargs from "yargs/yargs";
 import { MsgExecuteContract } from "@terra-money/terra.js";
+import * as keystore from "./keystore";
 import { createLCDClient, createWallet, sendTxWithConfirm } from "./helpers";
 
 const argv = yargs(process.argv)
@@ -8,11 +9,16 @@ const argv = yargs(process.argv)
       type: "string",
       demandOption: true,
     },
-    "contract-address": {
+    key: {
       type: "string",
       demandOption: true,
     },
-    amount: {
+    "key-dir": {
+      type: "string",
+      demandOption: false,
+      default: keystore.DEFAULT_KEY_DIR,
+    },
+    "contract-address": {
       type: "string",
       demandOption: true,
     },
@@ -21,19 +27,12 @@ const argv = yargs(process.argv)
 
 (async function () {
   const terra = createLCDClient(argv["network"]);
-  const user = createWallet(terra);
+  const worker = await createWallet(terra, argv["key"], argv["key-dir"]);
 
-  const { txhash } = await sendTxWithConfirm(user, [
-    new MsgExecuteContract(
-      user.key.accAddress,
-      argv["contract-address"],
-      {
-        bond: {},
-      },
-      {
-        uluna: argv["amount"],
-      }
-    ),
+  const { txhash } = await sendTxWithConfirm(worker, [
+    new MsgExecuteContract(worker.key.accAddress, argv["contract-address"], {
+      submit_batch: {},
+    }),
   ]);
   console.log(`Success! Txhash: ${txhash}`);
 })();

@@ -1,16 +1,15 @@
 import * as fs from "fs";
 import * as promptly from "promptly";
-import dotenv from "dotenv";
 import {
   isTxError,
   LCDClient,
   LocalTerra,
-  MnemonicKey,
   Msg,
   MsgInstantiateContract,
   MsgStoreCode,
   Wallet,
 } from "@terra-money/terra.js";
+import * as keystore from "./keystore";
 
 const DEFAULT_GAS_SETTINGS = {
   gasPrices: "0.15uusd",
@@ -39,18 +38,15 @@ export function createLCDClient(network: string): LCDClient {
 }
 
 /**
- * @notice Create a `Wallet` instance by loading the mnemonic phrase stored in `.env`
+ * @notice Create a `Wallet` instance by loading the private key stored in the keystore
  */
-export function createWallet(terra: LCDClient): Wallet {
-  dotenv.config();
-  if (!process.env.MNEMONIC) {
-    throw new Error("mnemonic not provided");
-  }
-  return terra.wallet(
-    new MnemonicKey({
-      mnemonic: process.env.MNEMONIC,
-    })
-  );
+export async function createWallet(
+  terra: LCDClient,
+  keyName: string,
+  keyDir: string
+): Promise<Wallet> {
+  const password = await promptly.password("Enter password used to encrypt the private key:");
+  return terra.wallet(keystore.load(keyName, keyDir, password));
 }
 
 /**
@@ -92,7 +88,7 @@ export async function waitForConfirm(msg: string) {
  */
 export async function sendTxWithConfirm(signer: Wallet, msgs: Msg[]) {
   const tx = await signer.createAndSignTx({ msgs, ...DEFAULT_GAS_SETTINGS });
-  console.log("\n" + JSON.stringify(tx).replace(/\\/g, "") + "\n");
+  // console.log("\n" + JSON.stringify(tx).replace(/\\/g, "") + "\n");
 
   await waitForConfirm("Confirm transaction before broadcasting");
 

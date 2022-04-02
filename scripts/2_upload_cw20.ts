@@ -1,5 +1,6 @@
 import * as path from "path";
 import yargs from "yargs/yargs";
+import * as keystore from "./keystore";
 import { createLCDClient, createWallet, storeCodeWithConfirm } from "./helpers";
 
 const argv = yargs(process.argv)
@@ -7,6 +8,15 @@ const argv = yargs(process.argv)
     network: {
       type: "string",
       demandOption: true,
+    },
+    key: {
+      type: "string",
+      demandOption: true,
+    },
+    "key-dir": {
+      type: "string",
+      demandOption: false,
+      default: keystore.DEFAULT_KEY_DIR,
     },
     binary: {
       type: "string",
@@ -18,7 +28,7 @@ const argv = yargs(process.argv)
 
 (async function () {
   const terra = createLCDClient(argv["network"]);
-  const deployer = createWallet(terra);
+  const deployer = await createWallet(terra, argv["key"], argv["key-dir"]);
 
   const codeId = await storeCodeWithConfirm(deployer, path.resolve(argv["binary"]));
   console.log(`Success! Code ID: ${codeId}`);

@@ -30,5 +30,6 @@ artifacts/
 # Private TypeScript files are preceeded by an underscore
 **/_*.ts
 
-# Data files
+# Data and key files
 scripts/data/
+scripts/keys/
