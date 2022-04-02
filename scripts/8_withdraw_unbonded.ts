@@ -8,7 +8,7 @@ const argv = yargs(process.argv)
       type: "string",
       demandOption: true,
     },
-    "steak-hub": {
+    "contract-address": {
       type: "string",
       demandOption: true,
     },
@@ -20,7 +20,7 @@ const argv = yargs(process.argv)
   const worker = createWallet(terra);
 
   const { txhash } = await sendTxWithConfirm(worker, [
-    new MsgExecuteContract(worker.key.accAddress, argv["steak-hub"], {
+    new MsgExecuteContract(worker.key.accAddress, argv["contract-address"], {
       withdraw_unbonded: {},
     }),
   ]);

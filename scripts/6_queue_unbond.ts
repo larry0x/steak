@@ -12,10 +12,6 @@ const argv = yargs(process.argv)
       type: "string",
       demandOption: true,
     },
-    "steak-token": {
-      type: "string",
-      demandOption: true,
-    },
     amount: {
       type: "string",
       demandOption: true,
@@ -27,8 +23,12 @@ const argv = yargs(process.argv)
   const terra = createLCDClient(argv["network"]);
   const worker = createWallet(terra);
 
+  const config: { steak_token: string } = await terra.wasm.contractQuery(argv["steak-hub"], {
+    config: {},
+  });
+
   const { txhash } = await sendTxWithConfirm(worker, [
-    new MsgExecuteContract(worker.key.accAddress, argv["steak-token"], {
+    new MsgExecuteContract(worker.key.accAddress, config["steak_token"], {
       send: {
         contract: argv["steak-hub"],
         amount: argv["amount"],
