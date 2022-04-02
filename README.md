@@ -1,6 +1,6 @@
 # Steak 🥩
 
-Terra liquidity staking derivative. Of the community, by the community, for the community.
+Terra liquid staking derivative. Of the community, by the community, for the community.
 
 See [`docs`](./docs) directory for a technical overview of the contract.
 
