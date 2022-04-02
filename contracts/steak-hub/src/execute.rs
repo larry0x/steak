@@ -149,7 +149,7 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
         return Err(StdError::generic_err("sender is not a whitelisted worker"));
     }
 
-    let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = deps
+    let withdraw_submsgs: Vec<SubMsg<TerraMsgWrapper>> = deps
         .querier
         .query_all_delegations(&env.contract.address)?
         .into_iter()
@@ -169,7 +169,7 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
         .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
 
     Ok(Response::new()
-        .add_submessages(delegate_submsgs)
+        .add_submessages(withdraw_submsgs)
         .add_messages(callback_msgs)
         .add_attribute("action", "steakhub/harvest"))
 }
