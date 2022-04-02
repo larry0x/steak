@@ -10,16 +10,16 @@ async function addKey(keyName: string, keyDir: string, coinType: number) {
     fs.mkdirSync(keyDir, { recursive: true });
   }
 
-  const mnemonic = await promptly.prompt("Enter your BIP-39 mnemonic phrase:");
+  const mnemonic = await promptly.prompt("Enter BIP-39 seed phrase:");
 
-  const password = await promptly.password("Enter a password to encrypt your key:");
+  const password = await promptly.password("Enter a password to encrypt the key:");
   const repeat = await promptly.password("Repeat the password:");
   if (password != repeat) {
     throw new Error("Passwords don't match!");
   }
 
   const accAddress = keystore.save(keyName, keyDir, mnemonic, coinType, password);
-  console.log("Successfully added key! Address:", accAddress);
+  console.log("Success! Address:", accAddress);
 }
 
 function listKeys(keyDir: string) {
@@ -37,7 +37,7 @@ function listKeys(keyDir: string) {
 
 function removeKey(keyName: string, keyDir: string) {
   keystore.remove(keyName, keyDir);
-  console.log("Successfully removed key!");
+  console.log("Success!");
 }
 
 yargs(hideBin(process.argv))

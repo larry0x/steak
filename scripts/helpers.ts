@@ -45,7 +45,7 @@ export async function createWallet(
   keyName: string,
   keyDir: string
 ): Promise<Wallet> {
-  const password = await promptly.password("Enter password used to encrypt the private key:");
+  const password = await promptly.password("Enter password to decrypt the key:");
   return terra.wallet(keystore.load(keyName, keyDir, password));
 }
 
