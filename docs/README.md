@@ -16,7 +16,7 @@ exchange_rate = total_uluna_staked / total_usteak_supply
 
 Unlocked coin refers to coins held by the Steak Hub contract (referred to as "the contract" hereafter) that can be reinvested. The contract tracks the amounts of unlocked coins using a `Vec<cosmwasm_std::Coin>` variable stored under the `unlocked_coins` key.
 
-Each time the Hub contract delegates to or undelegates from a validator, the claimable staking rewards are automatically transferred to the contract. The amounts of coins transferred are recorded in the `coin_received` event. When handling the response, the contract uses parses this event and update the `unlocked_coins` variable accordingly.
+Each time the Hub contract delegates to or undelegates from a validator, the claimable staking rewards are automatically transferred to the contract. The amounts of coins transferred are recorded in the `coin_received` event. When handling the response, the contract parses this event and updates the `unlocked_coins` variable accordingly.
 
 When harvesting, the contract needs to swap Terra stablecoins into Luna. the contract offers all unlocked coins that have exchange rates defined against Luna to be swapped, and deduct them from `unlocked_coins` accordingly. When handling the response, the contract parses the `swap` event and increments the unlocked Luna amount.
 
