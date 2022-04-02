@@ -61,7 +61,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
                 marketing: None,
             })?,
             funds: vec![],
-            label: String::from("steak_token"),
+            label: "steak_token".to_string(),
         }),
         1,
     )))
@@ -186,7 +186,7 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
         .collect();
 
     let known_denoms: HashSet<String> = TerraQuerier::new(&deps.querier)
-        .query_exchange_rates(String::from("uluna"), all_denoms)?
+        .query_exchange_rates("uluna".to_string(), all_denoms)?
         .exchange_rates
         .into_iter()
         .map(|item| item.quote_denom)
@@ -198,7 +198,7 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
         .filter(|coin| known_denoms.contains(&coin.denom))
         .map(|coin| {
             SubMsg::reply_on_success(
-                create_swap_msg(coin, String::from("uluna")),
+                create_swap_msg(coin, "uluna".to_string()),
                 3,
             )
         })

@@ -63,7 +63,7 @@ pub enum CallbackMsg {
 impl CallbackMsg {
     pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg<TerraMsgWrapper>> {
         Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: String::from(contract_addr),
+            contract_addr: contract_addr.to_string(),
             msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
             funds: vec![],
         }))

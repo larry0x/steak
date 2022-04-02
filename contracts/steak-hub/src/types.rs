@@ -63,7 +63,7 @@ pub(crate) struct Delegation {
 impl Delegation {
     pub fn new<T: Into<Uint128>>(validator: &str, amount: T) -> Self {
         Self {
-            validator: String::from(validator),
+            validator: validator.to_string(),
             amount: amount.into(),
         }
     }
@@ -88,7 +88,7 @@ pub(crate) struct Undelegation {
 impl Undelegation {
     pub fn new<T: Into<Uint128>>(validator: &str, amount: T) -> Self {
         Self {
-            validator: String::from(validator),
+            validator: validator.to_string(),
             amount: amount.into(),
         }
     }

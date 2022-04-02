@@ -27,7 +27,7 @@ pub(crate) fn query_delegation(
     delegator_addr: &Addr,
 ) -> StdResult<Delegation> {
     Ok(Delegation {
-        validator: String::from(validator),
+        validator: validator.to_string(),
         amount: querier.query_delegation(delegator_addr, validator)?.map(|fd| fd.amount.amount).unwrap_or_else(Uint128::zero),
     })
 }
