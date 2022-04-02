@@ -1,4 +1,3 @@
-use std::fmt;
 use std::str::FromStr;
 
 use cosmwasm_std::{Coin, CosmosMsg, StakingMsg, StdError, StdResult, Uint128};
@@ -16,29 +15,18 @@ impl FromStr for Coins {
     type Err = StdError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() == 0 {
+        if s.is_empty() {
             return Ok(Self(vec![]));
         }
 
         Ok(Self(
-            s.split(",")
-                .filter(|coin_str| coin_str.len() > 0) // coin with zero amount may appeat as an empty string in the event log
+            s.split(',')
+                .filter(|coin_str| !coin_str.is_empty()) // coin with zero amount may appeat as an empty string in the event log
                 .collect::<Vec<&str>>()
                 .iter()
                 .map(|s| parse_coin(s))
                 .collect::<StdResult<Vec<Coin>>>()?,
         ))
-    }
-}
-
-impl fmt::Display for Coins {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let coins_str = if self.0.len() == 0 {
-            String::from("null")
-        } else {
-            self.0.iter().map(|coin| coin.to_string()).collect::<Vec<String>>().join(",")
-        };
-        write!(f, "{}", coins_str)
     }
 }
 

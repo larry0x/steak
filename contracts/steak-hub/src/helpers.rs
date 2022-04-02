@@ -53,10 +53,10 @@ pub(crate) fn query_delegations(
 /// Parsing the string with regex doesn't work, because the resulting binary would be too big for 
 /// including the `regex` library. Example:
 /// https://github.com/PFC-Validator/terra-rust/blob/v1.1.8/terra-rust-api/src/client/core_types.rs#L34-L55
-/// 
+///
 /// We opt for a dirtier solution. Enumerate characters in the string, and break before the first
 /// character that is not a number. Split the string at that index.
-/// 
+///
 /// This assumes the denom never starts with a number, which is true on Terra.
 pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
     for (i, c) in s.chars().enumerate() {
@@ -73,7 +73,6 @@ pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
 /// Find the amount of a denom sent along a message, assert it is non-zero, and no other denom were
 /// sent together
 pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint128> {
-    // Deposit must contain only 1 coin; this coin must be Luna; the amount must be non-zero
     if funds.len() > 1 {
         return Err(StdError::generic_err("more than one coins deposited"));
     }

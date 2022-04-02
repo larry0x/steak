@@ -55,13 +55,17 @@ fn receive(
 
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
-                return Err(StdError::generic_err(format!(
-                    "expecting STEAK token, received {}",
-                    info.sender
-                )));
+                return Err(StdError::generic_err(
+                    format!("expecting Steak token, received {}", info.sender)
+                ));
             }
 
-            execute::queue_unbond(deps, env, api.addr_validate(&cw20_msg.sender)?, cw20_msg.amount)
+            execute::queue_unbond(
+                deps,
+                env,
+                api.addr_validate(&cw20_msg.sender)?,
+                cw20_msg.amount
+            )
         },
     }
 }
@@ -77,7 +81,7 @@ fn callback(
     }
 
     match callback_msg {
-        CallbackMsg::Swap {} => execute::swap(deps, env),
+        CallbackMsg::Swap {} => execute::swap(deps),
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
 }

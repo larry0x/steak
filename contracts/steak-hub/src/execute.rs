@@ -106,15 +106,10 @@ pub fn bond(
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
 
-    // Query the delegations made by Steak Hub to validators, as well as the total supply of Steak
-    // token, which we will use to compute stuff
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    // Compute the amount of `usteak` to mint
     let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
-
-    // Compute the amount of `uluna` to be delegated to each validator
     let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
     let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_delegations
@@ -125,7 +120,7 @@ pub fn bond(
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: staker_addr.clone().into(),
+            recipient: staker_addr.into(),
             amount: usteak_to_mint,
         })?,
         funds: vec![],
@@ -146,7 +141,6 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
         return Err(StdError::generic_err("sender is not a whitelisted worker"));
     }
 
-    // For each of the whitelisted validators, create a message to withdraw delegation reward
     let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = deps
         .querier
         .query_all_delegations(&env.contract.address)?
@@ -161,8 +155,6 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
         })
         .collect();
 
-    // Following the reward withdrawal, we dispatch two callbacks: to swap all rewards to Luna, and
-    // to stake these Luna to the whitelisted validators
     let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
         .iter()
         .map(|callback| callback.into_cosmos_msg(&env.contract.address))
@@ -174,7 +166,7 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
         .add_attribute("action", "steak_hub/harvest"))
 }
 
-pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
@@ -192,14 +184,10 @@ pub fn swap(deps: DepsMut, _env: Env) -> StdResult<Response<TerraMsgWrapper>> {
         .map(|item| item.quote_denom)
         .collect();
 
-    let coins_to_offer: Vec<Coin> = unlocked_coins
+    let swap_submsgs: Vec<SubMsg<TerraMsgWrapper>> = unlocked_coins
         .iter()
         .cloned()
         .filter(|coin| known_denoms.contains(&coin.denom))
-        .collect();
-
-    let swap_submsgs: Vec<SubMsg<TerraMsgWrapper>> = coins_to_offer
-        .into_iter()
         .map(|coin| {
             SubMsg::reply_on_success(
                 create_swap_msg(coin, String::from("uluna")),
@@ -300,12 +288,10 @@ pub fn queue_unbond(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
 
-    // Update the pending batch data
     let mut pending_batch = state.pending_batch.load(deps.storage)?;
     pending_batch.usteak_to_burn += usteak_to_burn;
     state.pending_batch.save(deps.storage, &pending_batch)?;
 
-    // Update the user's requested unbonding amount
     state.unbond_requests.update(
         deps.storage,
         (pending_batch.id.into(), &staker_addr),
@@ -320,7 +306,6 @@ pub fn queue_unbond(
         },
     )?;
 
-    // If the current batch's estimated unbonding start time is reached, then submit it for unbonding
     let mut msgs: Vec<CosmosMsg<TerraMsgWrapper>> = vec![];
     if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -344,7 +329,6 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
     let unbond_period = state.unbond_period.load(deps.storage)?;
     let pending_batch = state.pending_batch.load(deps.storage)?;
 
-    // The current batch can only be unbonded once the estimated unbonding time has been reached
     let current_time = env.block.time.seconds();
     if current_time < pending_batch.est_unbond_start_time {
         return Err(StdError::generic_err(
@@ -352,18 +336,12 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         ));
     }
 
-    // Query the delegations made by Steak Hub to validators, as well as the total supply of Steak
-    // token, which we will use to compute stuff
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    // Compute the amount of `uluna` to unbond
     let uluna_to_unbond = compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
-
-    // Compute the amount of `uluna` to undelegate from each validator
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
 
-    // Save the current pending batch to the previous batches map
     state.previous_batches.save(
         deps.storage,
         pending_batch.id.into(),
@@ -375,7 +353,6 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         },
     )?;
 
-    // Create the next pending batch
     let epoch_period = state.epoch_period.load(deps.storage)?;
     state.pending_batch.save(
         deps.storage,
@@ -411,10 +388,8 @@ pub fn withdraw_unbonded(
     let state = State::default();
     let current_time = env.block.time.seconds();
 
-    // Fetch the user's unclaimed unbonding requests
-    //
-    // NOTE: If the user has too many unclaimed requests, this may not fit in the WASM memory... But
-    // this practically is never going to happen in practice. Who would create hundreds of unbonding
+    // NOTE: If the user has too many unclaimed requests, this may not fit in the WASM memory...
+    // However, this is practically never going to happen. Who would create hundreds of unbonding
     // requests and never claim them?
     let requests = state
         .unbond_requests
@@ -428,11 +403,6 @@ pub fn withdraw_unbonded(
         })
         .collect::<StdResult<Vec<UnbondRequest>>>()?;
 
-    // Enumerate through the user's all unclaimed unbonding requests. For each request, check whether
-    // its batch has finished unbonding. It yes, increment the amount of uluna to refund the user,
-    // and remove this request from the active queue
-    //
-    // If a batch has been completely refunded (i.e. total shares = 0), remove it from storage
     let mut total_uluna_to_refund = Uint128::zero();
     for request in &requests {
         let mut batch = state.previous_batches.load(deps.storage, request.id.into())?;

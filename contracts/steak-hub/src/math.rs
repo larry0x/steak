@@ -42,40 +42,32 @@ pub(crate) fn compute_unbond_amount(
 /// Given the current delegations made to validators, and a specific amount of `uluna` to stake,
 /// compute the new delegations to make such that the delegated amount to each validator is as even
 /// as possible.
+///
+/// This function is based on Lido's implementation:
+/// https://github.com/lidofinance/lido-terra-contracts/blob/v1.0.2/contracts/lido_terra_validators_registry/src/common.rs#L19-L53
 pub(crate) fn compute_delegations(
     uluna_to_bond: Uint128,
     current_delegations: &[Delegation],
 ) -> Vec<Delegation> {
-    // The total amount of `uluna` currently staked to validators, and the number of validators
     let uluna_staked: u128 = current_delegations.iter().map(|d| d.amount.u128()).sum();
     let validator_count = current_delegations.len() as u128;
 
-    // The _target_ amount of `uluna` that each validator should receive
     let uluna_to_distribute = uluna_staked + uluna_to_bond.u128();
     let uluna_per_validator = uluna_to_distribute / validator_count;
     let remainder = uluna_to_distribute % validator_count;
 
-    // New delegations to make such that each validator's delegated amount is as close to the target
-    // amount as possible
     let mut new_delegations: Vec<Delegation> = vec![];
     let mut uluna_available = uluna_to_bond.u128();
     for (i, d) in current_delegations.iter().enumerate() {
-        // The target amount for this specific validator, with the remainder taken into account
         let remainder_for_validator: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
         let uluna_for_validator = uluna_per_validator + remainder_for_validator;
 
-        // If the validator's actual delegation amount is bigger than the target amount, we do not
-        // not delegate to it this time
-        //
-        // Otherwise, if the actual delegation amount is smaller than the target amount, we attempt
-        // to delegate the difference
         let mut uluna_to_delegate = if d.amount.u128() > uluna_for_validator {
             0
         } else {
             uluna_for_validator - d.amount.u128()
         };
 
-        // Also need to check if we have enough `uluna` available to bond
         uluna_to_delegate = std::cmp::min(uluna_to_delegate, uluna_available);
         uluna_available -= uluna_to_delegate;
 
@@ -91,40 +83,35 @@ pub(crate) fn compute_delegations(
     new_delegations
 }
 
+/// Given the current delegations made to validators, and a specific amount of `uluna` to unstake,
+/// compute the undelegations to make such that the delegated amount to each validator is as even
+/// as possible.
+///
+/// This function is based on Lido's implementation:
+/// https://github.com/lidofinance/lido-terra-contracts/blob/v1.0.2/contracts/lido_terra_validators_registry/src/common.rs#L55-102
 pub(crate) fn compute_undelegations(
     uluna_to_unbond: Uint128,
     current_delegations: &[Delegation],
 ) -> Vec<Undelegation> {
-    // The total amount of `uluna` currently staked to validators, and the number of validators
     let uluna_staked: u128 = current_delegations.iter().map(|d| d.amount.u128()).sum();
     let validator_count = current_delegations.len() as u128;
 
-    // The _target_ amount of `uluna` that each validator should receive
     let uluna_to_distribute = uluna_staked - uluna_to_unbond.u128();
     let uluna_per_validator = uluna_to_distribute / validator_count;
     let remainder = uluna_to_distribute % validator_count;
 
-    // New undelegations to make such that each validator's delegated amount is as close to the target
-    // amount as possible
     let mut new_undelegations: Vec<Undelegation> = vec![];
     let mut uluna_available = uluna_to_unbond.u128();
     for (i, d) in current_delegations.iter().enumerate() {
-        // The target amount for this specific validator, with the remainder taken into account
         let remainder_for_validator: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
         let uluna_for_validator = uluna_per_validator + remainder_for_validator;
 
-        // If the validator's actual delegation amount is smaller than the target amount, we do not
-        // not undelegate from it this time
-        //
-        // Otherwise, if the actual delegation amount is bigger than the target amount, we attempt
-        // to undelegate the difference
         let mut uluna_to_undelegate = if d.amount.u128() < uluna_for_validator {
             0
         } else {
             d.amount.u128() - uluna_for_validator
         };
 
-        // Also need to check if we have enough `uluna` available to unbond
         uluna_to_undelegate = std::cmp::min(uluna_to_undelegate, uluna_available);
         uluna_available -= uluna_to_undelegate;
 
@@ -138,13 +125,4 @@ pub(crate) fn compute_undelegations(
     }
 
     new_undelegations
-}
-
-//--------------------------------------------------------------------------------------------------
-// Tests
-//--------------------------------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    // WIP
 }

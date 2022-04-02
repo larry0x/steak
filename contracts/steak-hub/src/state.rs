@@ -20,8 +20,7 @@ pub(crate) struct State<'a> {
     pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
     pub previous_batches: Map<'a, U64Key, Batch>,
-    /// Shares in an unbonding batch, with the batch ID and the user address as composite key,
-    /// additionally indexed by the user address
+    /// Users' shares in unbonding batches
     pub unbond_requests: IndexedMap<'a, (U64Key, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
 }
 
@@ -49,7 +48,6 @@ impl Default for State<'static> {
 }
 
 pub(crate) struct UnbondRequestsIndexes<'a> {
-    // pk goes to second tuple element
     pub user: MultiIndex<'a, (String, Vec<u8>), UnbondRequest>,
 }
 
