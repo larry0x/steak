@@ -50,29 +50,6 @@ export async function createWallet(
 }
 
 /**
- * @notice Returns contract addresses of the selected network
- */
-export function getContractAddresses(network: string) {
-  if (network === "mainnet") {
-    return {
-      mars_token: "terra12hgwnpupflfpuual532wgrxu2gjp0tcagzgx4n",
-      mars_council: "terra1685de0sx5px80d47ec2xjln224phshysqxxeje",
-      mars_red_bank: "terra19dtgj9j5j7kyf3pmejqv8vzfpxtejaypgzkz5u",
-      astroport_mars_ust_pair: "terra19wauh79y42u5vt62c5adt2g5h4exgh26t3rpds",
-    };
-  } else if (network === "testnet") {
-    return {
-      mars_token: "terra1h9tmwpwll5zpx6dvu28t8mvjk9jctu9nftm5ru",
-      mars_council: "terra1jtdz9fhrrwd8yak6e3z7utmkypvx0qf0n393c6",
-      mars_red_bank: "terra1avkm5w0gzwm92h0dlxymsdhx4l2rm7k0lxnwq7",
-      astroport_mars_ust_pair: "terra144m28x7d3lzjzp423mdydll6cmfafg407ve3ev",
-    };
-  } else {
-    throw new Error(`invalid network: ${network}, must be mainnet|testnet`);
-  }
-}
-
-/**
  * @notice Pause script execution until user confirms
  */
 export async function waitForConfirm(msg: string) {
