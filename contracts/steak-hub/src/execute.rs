@@ -212,6 +212,9 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
         .add_attribute("action", "steakhub/swap"))
 }
 
+/// NOTE: When delegation Luna here, we don't need to use a `SubMsg` to handle the received coins,
+/// because we have already withdrawn all claimable staking rewards previously in the same atomic
+/// execution.
 pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
@@ -377,6 +380,11 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         },
     )?;
 
+    let undelegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_undelegations
+        .iter()
+        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .collect();
+
     let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Burn {
@@ -393,7 +401,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         .add_attribute("usteak_burned", pending_batch.usteak_to_burn);
 
     Ok(Response::new()
-        .add_messages(new_undelegations.iter().map(|d| d.to_cosmos_msg()))
+        .add_submessages(undelegate_submsgs)
         .add_message(burn_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/unbond"))
