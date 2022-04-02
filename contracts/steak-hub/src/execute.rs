@@ -120,16 +120,24 @@ pub fn bond(
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: user_addr.into(),
+            recipient: user_addr.to_string(),
             amount: usteak_to_mint,
         })?,
         funds: vec![],
     });
 
+    let event = Event::new("steakhub/bonded")
+        .add_attribute("time", env.block.time.seconds().to_string())
+        .add_attribute("height", env.block.height.to_string())
+        .add_attribute("user", user_addr)
+        .add_attribute("uluna_bonded", uluna_to_bond)
+        .add_attribute("usteak_minted", usteak_to_mint);
+
     Ok(Response::new()
         .add_submessages(delegate_submsgs)
         .add_message(mint_msg)
-        .add_attribute("action", "steak_hub/bond"))
+        .add_event(event)
+        .add_attribute("action", "steakhub/bond"))
 }
 
 pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
@@ -163,7 +171,7 @@ pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response
     Ok(Response::new()
         .add_submessages(delegate_submsgs)
         .add_messages(callback_msgs)
-        .add_attribute("action", "steak_hub/harvest"))
+        .add_attribute("action", "steakhub/harvest"))
 }
 
 pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
@@ -201,7 +209,7 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
 
     Ok(Response::new()
         .add_submessages(swap_submsgs)
-        .add_attribute("action", "steak_hub/swap"))
+        .add_attribute("action", "steakhub/swap"))
 }
 
 pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -221,15 +229,15 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     unlocked_coins.retain(|coin| coin.denom != "uluna");
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
 
-    let event = Event::new("harvest")
+    let event = Event::new("steakhub/harvested")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
-        .add_attribute("uluna_harvested", uluna_to_bond);
+        .add_attribute("uluna_bonded", uluna_to_bond);
 
     Ok(Response::new()
         .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
         .add_event(event)
-        .add_attribute("action", "steak_hub/reinvest"))
+        .add_attribute("action", "steakhub/reinvest"))
 }
 
 pub fn register_received_coins(
@@ -273,7 +281,7 @@ pub fn register_received_coins(
     })?;
 
     Ok(Response::new()
-        .add_attribute("action", "steak_hub/register_received_coins"))
+        .add_attribute("action", "steakhub/register_received_coins"))
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -315,11 +323,17 @@ pub fn queue_unbond(
         }));
     }
 
+    let event = Event::new("steakhub/unbond_queued")
+        .add_attribute("time", env.block.time.seconds().to_string())
+        .add_attribute("height", env.block.height.to_string())
+        .add_attribute("user", user_addr)
+        .add_attribute("id", pending_batch.id.to_string())
+        .add_attribute("usteak_to_burn", usteak_to_burn);
+
     Ok(Response::new()
         .add_messages(msgs)
-        .add_attribute("action", "steak_hub/queue_unbond")
-        .add_attribute("user", user_addr)
-        .add_attribute("usteak_to_burn", usteak_to_burn))
+        .add_event(event)
+        .add_attribute("action", "steakhub/queue_unbond"))
 }
 
 pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -371,13 +385,18 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         funds: vec![],
     });
 
+    let event = Event::new("steakhub/unbond_submitted")
+        .add_attribute("time", env.block.time.seconds().to_string())
+        .add_attribute("height", env.block.height.to_string())
+        .add_attribute("id", pending_batch.id.to_string())
+        .add_attribute("uluna_unbonded", uluna_to_unbond)
+        .add_attribute("usteak_burned", pending_batch.usteak_to_burn);
+
     Ok(Response::new()
         .add_messages(new_undelegations.iter().map(|d| d.to_cosmos_msg()))
         .add_message(burn_msg)
-        .add_attribute("action", "steak_hub/unbond")
-        .add_attribute("batch_id", pending_batch.id.to_string())
-        .add_attribute("usteak_burned", pending_batch.usteak_to_burn)
-        .add_attribute("uluna_unbonded", uluna_to_unbond))
+        .add_event(event)
+        .add_attribute("action", "steakhub/unbond"))
 }
 
 pub fn withdraw_unbonded(
@@ -404,10 +423,13 @@ pub fn withdraw_unbonded(
         .collect::<StdResult<Vec<UnbondRequest>>>()?;
 
     let mut total_uluna_to_refund = Uint128::zero();
+    let mut ids: Vec<String> = vec![];
     for request in &requests {
         let mut batch = state.previous_batches.load(deps.storage, request.id.into())?;
         if batch.est_unbond_end_time < current_time {
             let uluna_to_refund = batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
+
+            ids.push(request.id.to_string());
 
             total_uluna_to_refund += uluna_to_refund;
             batch.total_shares -= request.shares;
@@ -426,9 +448,15 @@ pub fn withdraw_unbonded(
         amount: vec![Coin::new(total_uluna_to_refund.u128(), "uluna")],
     });
 
+    let event = Event::new("steakhub/unbonded_withdrawn")
+        .add_attribute("time", env.block.time.seconds().to_string())
+        .add_attribute("height", env.block.height.to_string())
+        .add_attribute("user", user_addr)
+        .add_attribute("ids", ids.join(","))
+        .add_attribute("uluna_refunded", total_uluna_to_refund);
+
     Ok(Response::new()
         .add_message(refund_msg)
-        .add_attribute("action", "steak_hub/withdraw_unbonded")
-        .add_attribute("user", user_addr)
-        .add_attribute("uluna_refunded", total_uluna_to_refund))
+        .add_event(event)
+        .add_attribute("action", "steakhub/withdraw_unbonded"))
 }
