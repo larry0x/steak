@@ -524,6 +524,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "steak"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw20",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+]
+
+[[package]]
 name = "steak-hub"
 version = "0.1.0"
 dependencies = [
@@ -531,8 +542,7 @@ dependencies = [
  "cw-storage-plus",
  "cw20",
  "cw20-base",
- "schemars",
- "serde",
+ "steak",
  "terra-cosmwasm",
 ]
 

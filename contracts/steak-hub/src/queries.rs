@@ -1,11 +1,12 @@
 use cosmwasm_std::{Deps, Order, StdResult, Env, Uint128, Decimal};
 use cw_storage_plus::{Bound, U64Key};
 
-use crate::helpers::{query_cw20_total_supply, query_delegations};
-use crate::msg::{
+use steak::hub::{
     Batch, ConfigResponse, PendingBatch, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem, StateResponse,
 };
+
+use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::state::State;
 
 const MAX_LIMIT: u32 = 30;

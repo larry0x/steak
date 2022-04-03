@@ -1,6 +1,6 @@
-# Technical Overview
+# Steak Hub
 
-This projects consists of two contracts, [`steak-hub`](../contracts/steak-hub/) which manages bonding/unbonding of Luna and harvesting of staking rewards, as well as the Steak token, for which we use the generic `cw20-base` contract.
+Steak Hub contract manages the bonding/unbonding of Luna, minting/burning of Steak, and reinvestment of staking rewards.
 
 ## Exchange rate
 

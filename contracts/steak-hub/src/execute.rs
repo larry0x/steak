@@ -9,11 +9,12 @@ use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
 
+use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
+
 use crate::helpers::{query_cw20_total_supply, query_delegations};
 use crate::math::{
     compute_delegations, compute_mint_amount, compute_unbond_amount, compute_undelegations,
 };
-use crate::msg::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 use crate::state::State;
 use crate::types::Coins;
 

@@ -1,7 +1,7 @@
 use cosmwasm_std::{Addr, Coin};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex, U64Key};
 
-use crate::msg::{Batch, PendingBatch, UnbondRequest};
+use steak::hub::{Batch, PendingBatch, UnbondRequest};
 
 pub(crate) struct State<'a> {
     /// Address of the Steak token
