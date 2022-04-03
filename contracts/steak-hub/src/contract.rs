@@ -41,7 +41,7 @@ pub fn execute(
             parse_received_fund(&info.funds, "uluna")?,
         ),
         ExecuteMsg::WithdrawUnbonded {
-            receiver
+            receiver,
         } => execute::withdraw_unbonded(
             deps,
             env,
