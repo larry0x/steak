@@ -93,7 +93,7 @@ pub fn register_steak_token(
 pub fn bond(
     deps: DepsMut,
     env: Env,
-    user_addr: Addr,
+    receiver: Addr,
     uluna_to_bond: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
@@ -114,7 +114,7 @@ pub fn bond(
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: user_addr.to_string(),
+            recipient: receiver.to_string(),
             amount: usteak_to_mint,
         })?,
         funds: vec![],
@@ -123,7 +123,7 @@ pub fn bond(
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
-        .add_attribute("user", user_addr)
+        .add_attribute("receiver", receiver)
         .add_attribute("uluna_bonded", uluna_to_bond)
         .add_attribute("usteak_minted", usteak_to_mint);
 
@@ -280,7 +280,7 @@ pub fn register_received_coins(
 pub fn queue_unbond(
     deps: DepsMut,
     env: Env,
-    user_addr: Addr,
+    receiver: Addr,
     usteak_to_burn: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
@@ -291,11 +291,11 @@ pub fn queue_unbond(
 
     state.unbond_requests.update(
         deps.storage,
-        (pending_batch.id.into(), &user_addr),
+        (pending_batch.id.into(), &receiver),
         |x| -> StdResult<_> {
             let mut request = x.unwrap_or_else(|| UnbondRequest {
                 id: pending_batch.id,
-                user: user_addr.to_string(),
+                user: receiver.to_string(),
                 shares: Uint128::zero(),
             });
             request.shares += usteak_to_burn;
@@ -315,8 +315,8 @@ pub fn queue_unbond(
     let event = Event::new("steakhub/unbond_queued")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
-        .add_attribute("user", user_addr)
         .add_attribute("id", pending_batch.id.to_string())
+        .add_attribute("receiver", receiver)
         .add_attribute("usteak_to_burn", usteak_to_burn);
 
     Ok(Response::new()
@@ -396,7 +396,8 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
 pub fn withdraw_unbonded(
     deps: DepsMut,
     env: Env,
-    user_addr: Addr,
+    user: Addr,
+    receiver: Addr,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let current_time = env.block.time.seconds();
@@ -408,7 +409,7 @@ pub fn withdraw_unbonded(
         .unbond_requests
         .idx
         .user
-        .prefix(user_addr.to_string())
+        .prefix(user.to_string())
         .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
             let (_, v) = item?;
@@ -433,20 +434,21 @@ pub fn withdraw_unbonded(
                 state.previous_batches.remove(deps.storage, request.id.into());
             }
 
-            state.unbond_requests.remove(deps.storage, (request.id.into(), &user_addr))?;
+            state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
         }
     }
 
     let refund_msg = CosmosMsg::Bank(BankMsg::Send {
-        to_address: user_addr.clone().into(),
+        to_address: receiver.clone().into(),
         amount: vec![Coin::new(total_uluna_to_refund.u128(), "uluna")],
     });
 
     let event = Event::new("steakhub/unbonded_withdrawn")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
-        .add_attribute("user", user_addr)
         .add_attribute("ids", ids.join(","))
+        .add_attribute("user", user)
+        .add_attribute("receiver", receiver)
         .add_attribute("uluna_refunded", total_uluna_to_refund);
 
     Ok(Response::new()

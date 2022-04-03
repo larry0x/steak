@@ -29,17 +29,27 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> StdResult<Response<TerraMsgWrapper>> {
+    let api = deps.api;
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
-        ExecuteMsg::Bond {} => execute::bond(
+        ExecuteMsg::Bond {
+            receiver,
+        } => execute::bond(
             deps,
             env,
-            info.sender,
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
             parse_received_fund(&info.funds, "uluna")?,
+        ),
+        ExecuteMsg::WithdrawUnbonded {
+            receiver
+        } => execute::withdraw_unbonded(
+            deps,
+            env,
+            info.sender.clone(),
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
         ),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
-        ExecuteMsg::WithdrawUnbonded {} => execute::withdraw_unbonded(deps, env, info.sender),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
     }
 }
@@ -52,7 +62,9 @@ fn receive(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let api = deps.api;
     match from_binary(&cw20_msg.msg)? {
-        ReceiveMsg::QueueUnbond {} => {
+        ReceiveMsg::QueueUnbond {
+            receiver,
+        } => {
             let state = State::default();
 
             let steak_token = state.steak_token.load(deps.storage)?;
@@ -65,7 +77,7 @@ fn receive(
             execute::queue_unbond(
                 deps,
                 env,
-                api.addr_validate(&cw20_msg.sender)?,
+                api.addr_validate(&receiver.unwrap_or(cw20_msg.sender))?,
                 cw20_msg.amount
             )
         },

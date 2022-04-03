@@ -30,13 +30,17 @@ pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
-    Bond {},
+    Bond {
+        receiver: Option<String>,
+    },
+    /// Withdraw Luna that have finished unbonding in previous batches
+    WithdrawUnbonded {
+        receiver: Option<String>,
+    },
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
-    /// Withdraw Luna that have finished unbonding in previous batches
-    WithdrawUnbonded {},
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
 }
@@ -46,7 +50,9 @@ pub enum ExecuteMsg {
 pub enum ReceiveMsg {
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
     /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond {},
+    QueueUnbond {
+        receiver: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
