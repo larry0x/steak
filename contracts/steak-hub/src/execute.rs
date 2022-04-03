@@ -345,6 +345,15 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
     let uluna_to_unbond = compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
 
+    // NOTE: Regarding the `uluna_unclaimed` value
+    //
+    // If validators misbehave and get slashed during the unbonding period, the contract can receive
+    // LESS Luna than `uluna_to_unbond` when unbonding finishes!
+    //
+    // In this case, users who invokes `withdraw_unbonded` will have their txs failed as the contract
+    // does not have enough Luna balance.
+    //
+    // I don't have a solution for this... other than to manually fund contract with the slashed amount.
     state.previous_batches.save(
         deps.storage,
         pending_batch.id.into(),
