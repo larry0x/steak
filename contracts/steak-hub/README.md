@@ -2,7 +2,9 @@
 
 Steak Hub contract manages the bonding/unbonding of Luna, minting/burning of Steak, and reinvestment of staking rewards.
 
-## Exchange rate
+## Overview
+
+### Exchange rate
 
 Unlike [Lido's stETH](https://github.com/lidofinance/lido-dao/tree/master/contracts/0.4.24), the Steak token does not rebase; instead, the exchange rate between Luna and Steak increases (i.e. each Steak becomes worth more Luna) as staking rewards are harvested, and reduces if validators are slashed.
 
@@ -12,7 +14,7 @@ The exchange rate, as defined by the amount of `uluna` redeemable per `usteak`, 
 exchange_rate = total_uluna_staked / total_usteak_supply
 ```
 
-## Unlocked coins
+### Unlocked coins
 
 Unlocked coin refers to coins held by the Steak Hub contract (referred to as "the contract" hereafter) that can be reinvested. The contract tracks the amounts of unlocked coins using a `Vec<cosmwasm_std::Coin>` variable stored under the `unlocked_coins` key.
 
@@ -20,7 +22,7 @@ Each time the Hub contract delegates to or undelegates from a validator, the cla
 
 When harvesting, the contract needs to swap Terra stablecoins into Luna. the contract offers all unlocked coins that have exchange rates defined against Luna to be swapped, and deduct them from `unlocked_coins` accordingly. When handling the response, the contract parses the `swap` event and increments the unlocked Luna amount.
 
-## Unbonding
+### Unbonding
 
 Cosmos chains, by default, has a limit of 7 undelegations at a time per validator-delegator pair. In order to support unbonding requests from many users, the contract needs to bundle unbonding requests together and submit them in batches.
 
