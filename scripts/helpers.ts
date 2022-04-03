@@ -65,7 +65,7 @@ export async function waitForConfirm(msg: string) {
  */
 export async function sendTxWithConfirm(signer: Wallet, msgs: Msg[]) {
   const tx = await signer.createAndSignTx({ msgs, ...DEFAULT_GAS_SETTINGS });
-  // console.log("\n" + JSON.stringify(tx).replace(/\\/g, "") + "\n");
+  console.log("\n" + JSON.stringify(tx).replace(/\\/g, "") + "\n");
 
   await waitForConfirm("Confirm transaction before broadcasting");
 
