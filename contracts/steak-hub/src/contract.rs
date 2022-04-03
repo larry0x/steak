@@ -37,7 +37,7 @@ pub fn execute(
             info.sender,
             parse_received_fund(&info.funds, "uluna")?,
         ),
-        ExecuteMsg::Harvest {} => execute::harvest(deps, env, info.sender),
+        ExecuteMsg::Harvest {} => execute::harvest(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::WithdrawUnbonded {} => execute::withdraw_unbonded(deps, env, info.sender),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),

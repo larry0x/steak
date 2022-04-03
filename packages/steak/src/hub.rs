@@ -20,8 +20,6 @@ pub struct InstantiateMsg {
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds
     pub unbond_period: u64,
-    /// Accounts who can call the harvest function
-    pub workers: Vec<String>,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
 }
@@ -107,8 +105,6 @@ pub struct ConfigResponse {
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds
     pub unbond_period: u64,
-    /// Accounts who can call the harvest function
-    pub workers: Vec<String>,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
 }

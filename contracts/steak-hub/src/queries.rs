@@ -14,12 +14,10 @@ const DEFAULT_LIMIT: u32 = 10;
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
-    let worker_addrs = state.workers.load(deps.storage)?;
     Ok(ConfigResponse {
         steak_token: state.steak_token.load(deps.storage)?.into(),
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
-        workers: worker_addrs.iter().map(|addr| addr.to_string()).collect(),
         validators: state.validators.load(deps.storage)?,
     })
 }

@@ -25,15 +25,8 @@ use crate::types::Coins;
 pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Response> {
     let state = State::default();
 
-    let worker_addrs = msg
-        .workers
-        .iter()
-        .map(|s| deps.api.addr_validate(s))
-        .collect::<StdResult<Vec<Addr>>>()?;
-
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
-    state.workers.save(deps.storage, &worker_addrs)?;
     state.validators.save(deps.storage, &msg.validators)?;
     state.unlocked_coins.save(deps.storage, &vec![])?;
 
@@ -141,15 +134,7 @@ pub fn bond(
         .add_attribute("action", "steakhub/bond"))
 }
 
-pub fn harvest(deps: DepsMut, env: Env, worker_addr: Addr) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-
-    // Only whitelisted workers can harvest
-    let worker_addrs = state.workers.load(deps.storage)?;
-    if !worker_addrs.contains(&worker_addr) {
-        return Err(StdError::generic_err("sender is not a whitelisted worker"));
-    }
-
+pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let withdraw_submsgs: Vec<SubMsg<TerraMsgWrapper>> = deps
         .querier
         .query_all_delegations(&env.contract.address)?

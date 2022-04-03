@@ -10,8 +10,6 @@ pub(crate) struct State<'a> {
     pub epoch_period: Item<'a, u64>,
     /// The staking module's unbonding time, in seconds
     pub unbond_period: Item<'a, u64>,
-    /// Accounts who can call the harvest function
-    pub workers: Item<'a, Vec<Addr>>,
     /// Validators who will receive the delegations
     pub validators: Item<'a, Vec<String>>,
     /// Coins that can be reinvested
@@ -37,7 +35,6 @@ impl Default for State<'static> {
             steak_token: Item::new("steak_token"),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),
-            workers: Item::new("workers"),
             validators: Item::new("validators"),
             unlocked_coins: Item::new("unlocked_coins"),
             pending_batch: Item::new("pending_batch"),
