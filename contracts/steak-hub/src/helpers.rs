@@ -1,8 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{
-    Addr, QuerierWrapper, Reply, StdError, StdResult, SubMsgExecutionResponse, Uint128, Coin
-};
+use cosmwasm_std::{Addr, Coin, QuerierWrapper, StdError, StdResult, Uint128};
 use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
 use crate::types::Delegation;
@@ -89,9 +87,4 @@ pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint
     }
 
     Ok(fund.amount)
-}
-
-/// Unwrap a `Reply` object to extract the response
-pub(crate) fn unwrap_reply(reply: Reply) -> StdResult<SubMsgExecutionResponse> {
-    reply.result.into_result().map_err(StdError::generic_err)
 }
