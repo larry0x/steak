@@ -40,7 +40,7 @@ const argv = yargs(process.argv)
   const { txhash } = await sendTxWithConfirm(worker, [
     new MsgExecuteContract(worker.key.accAddress, config["steak_token"], {
       send: {
-        contract: argv["steak-hub"],
+        contract: argv["contract-address"],
         amount: argv["amount"],
         msg: encodeBase64({
           queue_unbond: {},
