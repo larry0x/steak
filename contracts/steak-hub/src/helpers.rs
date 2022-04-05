@@ -71,8 +71,10 @@ pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
 /// Find the amount of a denom sent along a message, assert it is non-zero, and no other denom were
 /// sent together
 pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint128> {
-    if funds.len() > 1 {
-        return Err(StdError::generic_err("more than one coins deposited"));
+    if funds.len() != 1 {
+        return Err(StdError::generic_err(
+            format!("must deposit exactly one coin; received {}", funds.len())
+        ));
     }
 
     let fund = &funds[0];
