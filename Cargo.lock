@@ -3,6 +3,21 @@
 version = 3
 
 [[package]]
+name = "astroport"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b56c6d8a5a14a5f569a3473a962ed1d12bfec2a19ef43584c86aae5667bdeaa8"
+dependencies = [
+ "cosmwasm-std",
+ "cw-storage-plus 0.8.1",
+ "cw20 0.8.1",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "uint",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -126,6 +141,17 @@ dependencies = [
 
 [[package]]
 name = "cw-storage-plus"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1e867b9972b83b32e00e878dfbff48299ba26618dabeb19b9c56fae176dc225"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "cw-storage-plus"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8e401ed71bd64abb9b91151a9ff4f7b34e81b2b3eceab23e3cb67fe47e39938"
@@ -133,6 +159,18 @@ dependencies = [
  "cosmwasm-std",
  "schemars",
  "serde",
+]
+
+[[package]]
+name = "cw0"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c497f885a40918a02df7d938c81809965fa05cfc21b3dc591e9950237b5de0a9"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -154,7 +192,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c6380164fb236412ff43c7ca075d95847c6fa8c51b2d3a513c23127a0f2a8f6"
 dependencies = [
  "cosmwasm-std",
- "cw-storage-plus",
+ "cw-storage-plus 0.9.1",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "cw20"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a11a2adbd52258f5b4ed5323f62bc6e559f2cefbe52ef0e58290016fde5bb083"
+dependencies = [
+ "cosmwasm-std",
+ "cw0 0.8.1",
  "schemars",
  "serde",
 ]
@@ -166,7 +216,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac49b013ca1e355fd988cc1926acc9a16d7fd45cfb595ee330455582a788b100"
 dependencies = [
  "cosmwasm-std",
- "cw0",
+ "cw0 0.9.1",
  "schemars",
  "serde",
 ]
@@ -178,10 +228,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b731a291b63cc26d484b159e8469f0965b0082a20e874616f869537b31d64bb"
 dependencies = [
  "cosmwasm-std",
- "cw-storage-plus",
- "cw0",
+ "cw-storage-plus 0.9.1",
+ "cw0 0.9.1",
  "cw2",
- "cw20",
+ "cw20 0.9.1",
  "schemars",
  "serde",
  "thiserror",
@@ -528,7 +578,7 @@ name = "steak"
 version = "0.1.0"
 dependencies = [
  "cosmwasm-std",
- "cw20",
+ "cw20 0.9.1",
  "schemars",
  "serde",
  "terra-cosmwasm",
@@ -539,11 +589,22 @@ name = "steak-hub"
 version = "0.1.0"
 dependencies = [
  "cosmwasm-std",
- "cw-storage-plus",
- "cw20",
+ "cw-storage-plus 0.9.1",
+ "cw20 0.9.1",
  "cw20-base",
  "steak",
  "terra-cosmwasm",
+]
+
+[[package]]
+name = "steak-zapper"
+version = "0.1.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-std",
+ "cw-storage-plus 0.9.1",
+ "cw20 0.9.1",
+ "steak",
 ]
 
 [[package]]
