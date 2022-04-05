@@ -20,7 +20,7 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     /// Acquire Steak token with a native coin
     Zap {
-        minimum_received: Option<Uint128>,
+        minimum_receive: Option<Uint128>,
     },
 }
 
@@ -29,7 +29,7 @@ pub enum ExecuteMsg {
 pub enum ReceiveMsg {
     /// Acquire Steak token with a CW20 token
     Zap {
-        minimum_received: Option<Uint128>,
+        minimum_receive: Option<Uint128>,
     },
 }
 

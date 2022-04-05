@@ -13,7 +13,7 @@ use astroport::router::SwapOperation;
 use steak::helpers::unwrap_reply;
 use steak::zapper::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
-use crate::helpers::{new_cw20, new_native_from_funds};
+use crate::helpers::{event_contains_attr, new_cw20, new_native_from_funds, stringify_asset};
 use crate::state::State;
 
 #[entry_point]
@@ -42,12 +42,12 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, info, cw20_msg),
         ExecuteMsg::Zap {
-            minimum_received,
+            minimum_receive,
         } => zap(
             deps,
             new_native_from_funds(&info.funds)?,
             info.sender,
-            minimum_received,
+            minimum_receive,
         ),
     }
 }
@@ -56,12 +56,12 @@ fn receive(deps: DepsMut, info: MessageInfo, cw20_msg: Cw20ReceiveMsg) -> StdRes
     let api = deps.api;
     match from_binary(&cw20_msg.msg)? {
         ReceiveMsg::Zap {
-            minimum_received,
+            minimum_receive,
         } => zap(
             deps,
             new_cw20(info.sender, cw20_msg.amount),
             api.addr_validate(&cw20_msg.sender)?,
-            minimum_received,
+            minimum_receive,
         ),
     }
 }
@@ -70,14 +70,14 @@ fn zap(
     deps: DepsMut,
     asset: Asset,
     receiver: Addr,
-    minimum_received: Option<Uint128>,
+    minimum_receive: Option<Uint128>,
 ) -> StdResult<Response> {
     let state = State::default();
     let steak_hub = state.steak_hub.load(deps.storage)?;
     let astro_router = state.astro_router.load(deps.storage)?;
 
     state.receiver.save(deps.storage, &receiver)?;
-    state.minimum_recieved.save(deps.storage, &minimum_received.unwrap_or_else(Uint128::zero))?;
+    state.minimum_recieved.save(deps.storage, &minimum_receive.unwrap_or_else(Uint128::zero))?;
 
     // If the asset is Luna, we skip the swap and jump to bonding directly; otherwise, we swap it
     // into Luna first on Astroport. We assume there is a direct pair consisting of the asset and Luna
@@ -102,7 +102,9 @@ fn zap(
                         contract_addr: astro_router.into(),
                         msg: to_binary(&astroport::router::ExecuteMsg::ExecuteSwapOperations {
                             operations: vec![SwapOperation::AstroSwap {
-                                offer_asset_info: asset.info.clone(),
+                                offer_asset_info: AssetInfo::NativeToken {
+                                    denom: denom.clone(),
+                                },
                                 ask_asset_info: AssetInfo::NativeToken {
                                     denom: "uluna".to_string(),
                                 },
@@ -126,7 +128,9 @@ fn zap(
                     amount: asset.amount,
                     msg: to_binary(&astroport::router::Cw20HookMsg::ExecuteSwapOperations {
                         operations: vec![SwapOperation::AstroSwap {
-                            offer_asset_info: asset.info,
+                            offer_asset_info: AssetInfo::Token {
+                                contract_addr: contract_addr.clone(),
+                            },
                             ask_asset_info: AssetInfo::NativeToken {
                                 denom: "uluna".to_string(),
                             },
@@ -143,7 +147,8 @@ fn zap(
 
     Ok(Response::new()
         .add_submessage(submsg)
-        .add_attribute("action", "steakzap/zap"))
+        .add_attribute("action", "steakzap/zap")
+        .add_attribute("asset", stringify_asset(&asset)))
 }
 
 #[entry_point]
@@ -155,12 +160,15 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> StdResult<Response> {
     }
 }
 
+/// NOTE: When parsing `return_amount`, technically we need to subtract tax amount to find the actual
+/// received amount, but in reality the tax rate for Luna has always been zero, so we simply assume
+/// this is the case.
 fn after_swap(deps: DepsMut, response: SubMsgExecutionResponse) -> StdResult<Response> {
     let event = response
         .events
         .iter()
-        .find(|event| event.ty == "from_contract")
-        .ok_or_else(|| StdError::generic_err("cannot find `from_contract` event"))?;
+        .find(|event| event_contains_attr(event, "action", "swap"))
+        .ok_or_else(|| StdError::generic_err("cannot find event containing `swap` action"))?;
 
     let return_amount_str = &event
         .attributes
@@ -169,8 +177,6 @@ fn after_swap(deps: DepsMut, response: SubMsgExecutionResponse) -> StdResult<Res
         .ok_or_else(|| StdError::generic_err("cannot find `return_amount` attribute"))?
         .value;
 
-    // NOTE: Technically we need to subtract tax amount to find the actual received amount, but in
-    // reality the tax rate for Luna has always been zero, so we simply assume this is the case.
     let return_amount = Uint128::from_str(return_amount_str)?;
 
     let state = State::default();
@@ -195,8 +201,8 @@ fn after_bond(deps: DepsMut, response: SubMsgExecutionResponse) -> StdResult<Res
     let event = response
         .events
         .iter()
-        .find(|event| event.ty == "steakhub/bonded")
-        .ok_or_else(|| StdError::generic_err("cannot find `steakhub/bonded` event"))?;
+        .find(|event| event.ty == "wasm-steakhub/bonded")
+        .ok_or_else(|| StdError::generic_err("cannot find `wasm-steakhub/bonded` event"))?;
 
     let receive_amount_str = &event
         .attributes
@@ -208,17 +214,21 @@ fn after_bond(deps: DepsMut, response: SubMsgExecutionResponse) -> StdResult<Res
     let receive_amount = Uint128::from_str(receive_amount_str)?;
 
     let state = State::default();
-    let minimum_received = state.minimum_recieved.load(deps.storage)?;
-    if receive_amount < minimum_received {
+
+    let minimum_receive = state.minimum_recieved.load(deps.storage)?;
+    if receive_amount < minimum_receive {
         return Err(StdError::generic_err(
-            format!("too little received; expecting at least {}, received {}", minimum_received, receive_amount)
+            format!("too little received; expecting at least {}, received {}", minimum_receive, receive_amount)
         ));
     }
 
     state.receiver.remove(deps.storage);
     state.minimum_recieved.remove(deps.storage);
 
-    Ok(Response::new().add_attribute("action", "steakhub/after_bond"))
+    Ok(Response::new()
+        .add_attribute("action", "steakzap/after_bond")
+        .add_attribute("received", receive_amount)
+        .add_attribute("minimum_receive", minimum_receive))
 }
 
 #[entry_point]
