@@ -141,7 +141,9 @@ fn zap(
         ),
     };
 
-    Ok(Response::new().add_submessage(submsg).add_attribute("action", "steakzap/zap"))
+    Ok(Response::new()
+        .add_submessage(submsg)
+        .add_attribute("action", "steakzap/zap"))
 }
 
 #[entry_point]
