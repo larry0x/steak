@@ -13,7 +13,7 @@ use astroport::router::SwapOperation;
 use steak::helpers::unwrap_reply;
 use steak::zapper::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
-use crate::helpers::{event_contains_attr, new_cw20, new_native_from_funds, stringify_asset};
+use crate::helpers::{event_contains_attr, new_cw20, new_native_from_funds};
 use crate::state::State;
 
 #[entry_point]
@@ -147,8 +147,7 @@ fn zap(
 
     Ok(Response::new()
         .add_submessage(submsg)
-        .add_attribute("action", "steakzap/zap")
-        .add_attribute("asset", stringify_asset(&asset)))
+        .add_attribute("action", "steakzap/zap"))
 }
 
 #[entry_point]

@@ -29,14 +29,3 @@ pub(crate) fn new_native_from_funds(funds: &[Coin]) -> StdResult<Asset> {
         amount: fund.amount,
     })
 }
-
-/// Create a string representation of an asset. Here we use the `cw_asset` format, which is more
-/// readable and easier to parse than the SDK format
-///
-/// More on `cw_asset`: https://github.com/mars-protocol/cw-asset
-pub(crate) fn stringify_asset(asset: &Asset) -> String {
-    match &asset.info {
-        AssetInfo::NativeToken { denom } => format!("native:{}:{}", denom, asset.amount),
-        AssetInfo::Token { contract_addr } => format!("cw20:{}:{}", contract_addr, asset.amount),
-    }
-}
