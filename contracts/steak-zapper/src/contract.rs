@@ -43,7 +43,12 @@ pub fn execute(
         ExecuteMsg::Receive(cw20_msg) => receive(deps, info, cw20_msg),
         ExecuteMsg::Zap {
             minimum_received,
-        } => zap(deps, new_native_from_funds(&info.funds)?, info.sender, minimum_received),
+        } => zap(
+            deps,
+            new_native_from_funds(&info.funds)?,
+            info.sender,
+            minimum_received,
+        ),
     }
 }
 
