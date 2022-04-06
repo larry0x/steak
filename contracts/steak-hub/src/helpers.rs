@@ -48,7 +48,7 @@ pub(crate) fn query_delegations(
 
 /// `cosmwasm_std::Coin` does not implement `FromStr`, so we have do it ourselves
 ///
-/// Parsing the string with regex doesn't work, because the resulting binary would be too big for 
+/// Parsing the string with regex doesn't work, because the resulting binary would be too big for
 /// including the `regex` library. Example:
 /// https://github.com/PFC-Validator/terra-rust/blob/v1.1.8/terra-rust-api/src/client/core_types.rs#L34-L55
 ///
@@ -89,4 +89,46 @@ pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint
     }
 
     Ok(fund.amount)
+}
+
+//--------------------------------------------------------------------------------------------------
+// Tests
+//--------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parsing_coin() {
+        let coin = parse_coin("12345uatom").unwrap();
+        assert_eq!(coin, Coin::new(12345, "uatom"));
+
+        let coin = parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B").unwrap();
+        assert_eq!(coin, Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"));
+
+        let err = parse_coin("69420").unwrap_err();
+        assert_eq!(err, StdError::generic_err("failed to parse coin: 69420"));
+
+        let err = parse_coin("ngmi").unwrap_err();
+        assert_eq!(err, StdError::generic_err("Parsing u128: cannot parse integer from empty string"));
+    }
+
+    #[test]
+    fn parsing_received_fund() {
+        let err = parse_received_fund(&[], "uluna").unwrap_err();
+        assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
+
+        let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna").unwrap_err();
+        assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 2"));
+
+        let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uluna").unwrap_err();
+        assert_eq!(err, StdError::generic_err("expected uluna deposit, received uatom"));
+
+        let err = parse_received_fund(&[Coin::new(0, "uluna")], "uluna").unwrap_err();
+        assert_eq!(err, StdError::generic_err("deposit amount must be non-zero"));
+
+        let amount = parse_received_fund(&[Coin::new(69420, "uluna")], "uluna").unwrap();
+        assert_eq!(amount, Uint128::new(69420));
+    }
 }

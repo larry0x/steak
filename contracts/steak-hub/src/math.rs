@@ -126,3 +126,129 @@ pub(crate) fn compute_undelegations(
 
     new_undelegations
 }
+
+//--------------------------------------------------------------------------------------------------
+// Tests
+//--------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn computing_delegations() {
+        // Scenario 1: The contract is freshly instantiated, and has not made any delegation yet
+        let current_delegations = vec![
+            Delegation::new("alice", 0u128),
+            Delegation::new("bob", 0u128),
+            Delegation::new("charlie", 0u128)
+        ];
+
+        // If the amount can be evenly distributed across validators...
+        let uluna_to_bond = Uint128::new(333);
+        let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
+        assert_eq!(
+            new_delegations,
+            vec![
+                Delegation::new("alice", 111u128),
+                Delegation::new("bob", 111u128),
+                Delegation::new("charlie", 111u128),
+            ],
+        );
+
+        // If the amount can NOT be evenly distributed across validators...
+        let uluna_to_bond = Uint128::new(334);
+        let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
+        assert_eq!(
+            new_delegations,
+            vec![
+                Delegation::new("alice", 112u128),
+                Delegation::new("bob", 111u128),
+                Delegation::new("charlie", 111u128),
+            ],
+        );
+
+        // Scenario 2: Validators already have uneven amounts of delegations
+        // We just use the result from the previous scenario (112/111/111)
+        let current_delegations = new_delegations;
+
+        // Target amount per validator = (334 + 124) / 3 = 152
+        // Remainer = 2
+        // Alice:   152 + 1 - 112 = 41
+        // Bob:     152 + 1 - 111 = 42
+        // Charlie: 152 + 0 - 111 = 41
+        let uluna_to_bond = Uint128::new(124);
+        let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
+        assert_eq!(
+            new_delegations,
+            vec![
+                Delegation::new("alice", 41u128),
+                Delegation::new("bob", 42u128),
+                Delegation::new("charlie", 41u128),
+            ],
+        );
+
+        // Scenario 3: A new validator was introduced
+        let current_delegations = vec![
+            Delegation::new("alice", 153u128),
+            Delegation::new("bob", 153u128),
+            Delegation::new("charlie", 152u128),
+            Delegation::new("dave", 0u128),
+        ];
+
+        // Bond a small amount, say 15 uluna
+        // Target: (153 + 153 + 152 + 0 + 15) / 4 = 118
+        // Remainder: 1
+        // Alice/Bob/Charlie get 0, Dave get all
+        let uluna_to_bond = Uint128::new(15);
+        let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
+        assert_eq!(
+            new_delegations,
+            vec![Delegation::new("dave", 15u128)],
+        );
+
+        // Bond a large amount, say 200 uluna
+        // Target: (153 + 153 + 152 + 0 + 200) / 4 = 164
+        // Remainder: 2
+        // Alice:   164 + 1 - 153 = 12
+        // Bob:     164 + 1 - 153 = 12
+        // Charlie: 164 + 0 - 152 = 12
+        // Dave:    164 + 0 - 0   = 164
+        let uluna_to_bond = Uint128::new(200);
+        let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
+        assert_eq!(
+            new_delegations,
+            vec![
+                Delegation::new("alice", 12u128),
+                Delegation::new("bob", 12u128),
+                Delegation::new("charlie", 12u128),
+                Delegation::new("dave", 164u128),
+            ],
+        );
+    }
+
+    #[test]
+    fn computing_undelegations() {
+        let current_delegations = vec![
+            Delegation::new("alice", 400u128),
+            Delegation::new("bob", 300u128),
+            Delegation::new("charlie", 200u128)
+        ];
+
+        // Target: (400 + 300 + 200 - 451) / 3 = 149
+        // Remainder: 2
+        // Alice:   400 - (149 + 1) = 250
+        // Bob:     300 - (149 + 1) = 150
+        // Charlie: 200 - (149 + 0) = 51
+        let uluna_to_unbond = Uint128::new(451);
+        let new_undelegations = compute_undelegations(uluna_to_unbond, &current_delegations);
+        assert_eq!(
+            new_undelegations,
+            vec![
+                Undelegation::new("alice", 250u128),
+                Undelegation::new("bob", 150u128),
+                Undelegation::new("charlie", 51u128),
+            ],
+        );
+    }
+}
