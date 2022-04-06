@@ -23,6 +23,9 @@ pub(crate) fn new_native_from_funds(funds: &[Coin]) -> StdResult<Asset> {
     }
 
     let fund = &funds[0];
+    if fund.amount.is_zero() {
+        return Err(StdError::generic_err("deposit amount must be non-zero"));
+    }
 
     Ok(Asset {
         info: AssetInfo::NativeToken { denom: fund.denom.clone() },
