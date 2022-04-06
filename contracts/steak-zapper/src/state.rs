@@ -11,7 +11,7 @@ pub(crate) struct State<'a> {
     /// User who will receive the minted Steak tokens
     pub receiver: Item<'a, Addr>,
     /// Minimum amount of Steak token to receive
-    pub minimum_recieved: Item<'a, Uint128>,
+    pub minimum_received: Item<'a, Uint128>,
 }
 
 impl Default for State<'static> {
@@ -21,7 +21,7 @@ impl Default for State<'static> {
             steak_token: Item::new("steak_token"),
             astro_router: Item::new("astroport_router"),
             receiver: Item::new("receiver"),
-            minimum_recieved: Item::new("minimum_received"),
+            minimum_received: Item::new("minimum_received"),
         }
     }
 }

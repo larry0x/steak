@@ -77,7 +77,7 @@ fn zap(
     let astro_router = state.astro_router.load(deps.storage)?;
 
     state.receiver.save(deps.storage, &receiver)?;
-    state.minimum_recieved.save(deps.storage, &minimum_receive.unwrap_or_else(Uint128::zero))?;
+    state.minimum_received.save(deps.storage, &minimum_receive.unwrap_or_else(Uint128::zero))?;
 
     // If the asset is Luna, we skip the swap and jump to bonding directly; otherwise, we swap it
     // into Luna first on Astroport. We assume there is a direct pair consisting of the asset and Luna
@@ -214,7 +214,7 @@ fn after_bond(deps: DepsMut, response: SubMsgExecutionResponse) -> StdResult<Res
 
     let state = State::default();
 
-    let minimum_receive = state.minimum_recieved.load(deps.storage)?;
+    let minimum_receive = state.minimum_received.load(deps.storage)?;
     if receive_amount < minimum_receive {
         return Err(StdError::generic_err(
             format!("too little received; expecting at least {}, received {}", minimum_receive, receive_amount)
@@ -222,7 +222,7 @@ fn after_bond(deps: DepsMut, response: SubMsgExecutionResponse) -> StdResult<Res
     }
 
     state.receiver.remove(deps.storage);
-    state.minimum_recieved.remove(deps.storage);
+    state.minimum_received.remove(deps.storage);
 
     Ok(Response::new()
         .add_attribute("action", "steakzap/after_bond")
