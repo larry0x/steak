@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["larry <gm@larry.engineer>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/stakehaus1/steak-contracts"
+repository = "https://github.com/st4k3h0us3/steak-contracts"
 
 [dependencies]
 cosmwasm-std = "0.16"
