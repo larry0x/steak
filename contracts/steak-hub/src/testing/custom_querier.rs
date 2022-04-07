@@ -1,27 +1,22 @@
 use std::collections::HashMap;
 
-use cosmwasm_std::testing::MockQuerier;
+use cosmwasm_std::testing::{StakingQuerier, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, from_slice, Addr, Querier, QuerierResult, QueryRequest, SystemError, Uint128,
-    WasmQuery,
+    from_binary, from_slice, Addr, Coin, FullDelegation, Querier, QuerierResult, QueryRequest,
+    SystemError, WasmQuery,
 };
 use cw20::Cw20QueryMsg;
 use terra_cosmwasm::TerraQueryWrapper;
 
+use crate::types::Delegation;
+
 use super::cw20_querier::Cw20Querier;
+use super::helpers::err_unsupported_query;
 
+#[derive(Default)]
 pub(super) struct CustomQuerier {
-    base: MockQuerier<TerraQueryWrapper>,
-    cw20_querier: Cw20Querier,
-}
-
-impl Default for CustomQuerier {
-    fn default() -> Self {
-        Self {
-            base: MockQuerier::new(&[]),
-            cw20_querier: Cw20Querier::default(),
-        }
-    }
+    pub cw20_querier: Cw20Querier,
+    pub staking_querier: StakingQuerier,
 }
 
 impl Querier for CustomQuerier {
@@ -41,26 +36,37 @@ impl Querier for CustomQuerier {
 }
 
 impl CustomQuerier {
+    #[allow(dead_code)]
     pub fn set_cw20_balance(&mut self, token: &str, user: &str, balance: u128) {
-        let token_addr = Addr::unchecked(token);
-        let user_addr = Addr::unchecked(user);
-        match self.cw20_querier.balances.get_mut(&token_addr) {
+        match self.cw20_querier.balances.get_mut(token) {
             Some(contract_balances) => {
-                contract_balances.insert(user_addr, Uint128::new(balance));
+                contract_balances.insert(user.to_string(), balance);
             },
             None => {
-                let mut contract_balances: HashMap<Addr, Uint128> = HashMap::default();
-                contract_balances.insert(user_addr, Uint128::new(balance));
-                self.cw20_querier.balances.insert(token_addr, contract_balances);
+                let mut contract_balances: HashMap<String, u128> = HashMap::default();
+                contract_balances.insert(user.to_string(), balance);
+                self.cw20_querier.balances.insert(token.to_string(), contract_balances);
             },
         };
     }
 
     pub fn set_cw20_total_supply(&mut self, token: &str, total_supply: u128) {
-        self.cw20_querier
-            .total_supplies
-            .entry(Addr::unchecked(token))
-            .or_insert(Uint128::new(total_supply));
+        self.cw20_querier.total_supplies.insert(token.to_string(), total_supply);
+    }
+
+    pub fn set_staking_delegations(&mut self, delegations: &[Delegation]) {
+        let fds: Vec<FullDelegation> = delegations
+            .iter()
+            .map(|d| FullDelegation {
+                delegator: Addr::unchecked(MOCK_CONTRACT_ADDR),
+                validator: d.validator.clone(),
+                amount: Coin::new(d.amount.u128(), "uluna"),
+                can_redelegate: Coin::new(0, "uluna"),
+                accumulated_rewards: vec![],
+            })
+            .collect();
+
+        self.staking_querier = StakingQuerier::new("uluna", &[], &fds);
     }
 
     pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
@@ -69,24 +75,23 @@ impl CustomQuerier {
                 contract_addr,
                 msg,
             }) => {
-                let contract_addr = Addr::unchecked(contract_addr);
-
                 if let Ok(query) = from_binary::<Cw20QueryMsg>(msg) {
                     return self.cw20_querier.handle_query(&contract_addr, query);
                 }
 
-                Err(SystemError::InvalidRequest {
-                    error: format!("[mock] unsupported wasm query: {:?}", msg),
-                    request: Default::default(),
-                })
-                .into()
+                err_unsupported_query(msg)
             },
 
-            QueryRequest::Custom(TerraQueryWrapper { route, query_data }) => {
+            QueryRequest::Custom(TerraQueryWrapper {
+                route,
+                query_data,
+            }) => {
                 panic!("[mock] custom query is unimplemented");
-            }
+            },
 
-            _ => self.base.handle_query(request),
+            QueryRequest::Staking(query) => self.staking_querier.query(query),
+
+            _ => err_unsupported_query(request),
         }
     }
 }

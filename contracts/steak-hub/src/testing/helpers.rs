@@ -1,5 +1,8 @@
-use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR, MockStorage, MockApi};
-use cosmwasm_std::{from_binary, Addr, BlockInfo, ContractInfo, Deps, Env, Timestamp, OwnedDeps};
+use cosmwasm_std::testing::{mock_env, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::{
+    from_binary, Addr, BlockInfo, ContractInfo, Deps, Env, OwnedDeps, QuerierResult, SystemError,
+    SystemResult, Timestamp,
+};
 use serde::de::DeserializeOwned;
 
 use steak::hub::QueryMsg;
@@ -7,6 +10,13 @@ use steak::hub::QueryMsg;
 use crate::contract::query;
 
 use super::custom_querier::CustomQuerier;
+
+pub(super) fn err_unsupported_query<T: std::fmt::Debug>(request: T) -> QuerierResult {
+    SystemResult::Err(SystemError::InvalidRequest {
+        error: format!("[mock] unsupported query: {:?}", request),
+        request: Default::default(),
+    })
+}
 
 pub(super) fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
     OwnedDeps {

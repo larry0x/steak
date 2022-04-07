@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use cosmwasm_std::testing::{mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, Event, OwnedDeps, Reply, StakingMsg, StdError,
-    SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, Coin, CosmosMsg, Decimal, Event, OwnedDeps, Reply, ReplyOn, StakingMsg,
+    StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
-use cw20::MinterResponse;
+use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
 use steak::hub::{
@@ -13,7 +13,7 @@ use steak::hub::{
     UnbondRequest, UnbondRequestsByBatchResponseItem, UnbondRequestsByUserResponseItem,
 };
 
-use crate::contract::{execute, instantiate, query, reply};
+use crate::contract::{execute, instantiate, reply};
 use crate::helpers::{parse_coin, parse_received_fund};
 use crate::math::{compute_delegations, compute_undelegations};
 use crate::state::State;
@@ -21,6 +21,10 @@ use crate::types::{Coins, Delegation, Undelegation};
 
 use super::custom_querier::CustomQuerier;
 use super::helpers::{mock_dependencies, mock_env_with_timestamp, query_helper};
+
+//--------------------------------------------------------------------------------------------------
+// Test setup
+//--------------------------------------------------------------------------------------------------
 
 fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
     let mut deps = mock_dependencies();
@@ -93,6 +97,10 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
     deps
 }
 
+//--------------------------------------------------------------------------------------------------
+// Execution
+//--------------------------------------------------------------------------------------------------
+
 #[test]
 fn proper_instantiation() {
     let deps = setup_test();
@@ -129,6 +137,152 @@ fn proper_instantiation() {
         }
     );
 }
+
+#[test]
+fn bonding() {
+    let mut deps = setup_test();
+
+    // Bond when no delegation has been made
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("user_1", &[Coin::new(1000000, "uluna")]),
+        ExecuteMsg::Bond {
+            receiver: None,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 4);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(Delegation::new("alice", 333334u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::reply_on_success(Delegation::new("bob", 333333u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[2],
+        SubMsg::reply_on_success(Delegation::new("charlie", 333333u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[3],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "steak_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: "user_1".to_string(),
+                    amount: Uint128::new(1000000)
+                })
+                .unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // Bond when there are existing delegations, and Luna:Steak exchange rate is >1
+    // Previously user 1 delegated 1000000 uluna. We assume we have accumulated 2.5% yield at 1025000 staked
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 341667u128),
+        Delegation::new("bob", 341667u128),
+        Delegation::new("charlie", 341666u128),
+    ]);
+    deps.querier.set_cw20_total_supply("steak_token", 1000000);
+
+    // Target = (1025000 + 12345) / 3 = 345781
+    // Remainder = 2
+    // Alice:   345781 + 1 - 341667 = 4115
+    // Bob:     345781 + 1 - 341667 = 4115
+    // Charlie: 345781 + 0 - 341666 = 4115
+    // Mint amount: 12345 * 1000000 / 1025000 = 12043
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("user_2", &[Coin::new(12345, "uluna")]),
+        ExecuteMsg::Bond {
+            receiver: Some("user_3".to_string()),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 4);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(Delegation::new("alice", 4115u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::reply_on_success(Delegation::new("bob", 4115u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[2],
+        SubMsg::reply_on_success(Delegation::new("charlie", 4115u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[3],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "steak_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: "user_3".to_string(),
+                    amount: Uint128::new(12043)
+                })
+                .unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // Check the state after bonding
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 345782u128),
+        Delegation::new("bob", 345782u128),
+        Delegation::new("charlie", 345781u128),
+    ]);
+    deps.querier.set_cw20_total_supply("steak_token", 1012043);
+
+    let res: StateResponse = query_helper(deps.as_ref(), QueryMsg::State {});
+    assert_eq!(
+        res,
+        StateResponse {
+            total_usteak: Uint128::new(1012043),
+            total_uluna: Uint128::new(1037345),
+            exchange_rate: Decimal::from_ratio(1037345u128, 1012043u128),
+            unlocked_coins: vec![],
+        }
+    );
+}
+
+// #[test]
+// fn harvesting() {
+//     let mut deps = setup_test();
+// }
+
+// #[test]
+// fn queuing_unbond() {
+//     let mut deps = setup_test();
+// }
+
+// #[test]
+// fn submitting_batch() {
+//     let mut deps = setup_test();
+// }
+
+// #[test]
+// fn withdrawing_unbonded() {
+//     let mut deps = setup_test();
+// }
+
+//--------------------------------------------------------------------------------------------------
+// Queries
+//--------------------------------------------------------------------------------------------------
 
 #[test]
 fn querying_previous_batches() {
@@ -259,17 +413,9 @@ fn querying_unbond_shares() {
     assert_eq!(res, vec![unbond_shares[0].clone().into(), unbond_shares[3].clone().into()]);
 }
 
-#[test]
-fn parsing_coins() {
-    let coins = Coins::from_str("").unwrap();
-    assert_eq!(coins.0, vec![]);
-
-    let coins = Coins::from_str("12345uatom").unwrap();
-    assert_eq!(coins.0, vec![Coin::new(12345, "uatom")]);
-
-    let coins = Coins::from_str("12345uatom,23456uluna").unwrap();
-    assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
-}
+//--------------------------------------------------------------------------------------------------
+// Delegations/undelegations
+//--------------------------------------------------------------------------------------------------
 
 #[test]
 fn computing_delegations() {
@@ -281,28 +427,22 @@ fn computing_delegations() {
     ];
 
     // If the amount can be evenly distributed across validators...
-    let uluna_to_bond = Uint128::new(333);
-    let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
-    assert_eq!(
-        new_delegations,
-        vec![
-            Delegation::new("alice", 111u128),
-            Delegation::new("bob", 111u128),
-            Delegation::new("charlie", 111u128),
-        ],
-    );
+    let new_delegations = compute_delegations(Uint128::new(333), &current_delegations);
+    let expected = vec![
+        Delegation::new("alice", 111u128),
+        Delegation::new("bob", 111u128),
+        Delegation::new("charlie", 111u128),
+    ];
+    assert_eq!(new_delegations, expected);
 
     // If the amount can NOT be evenly distributed across validators...
-    let uluna_to_bond = Uint128::new(334);
-    let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
-    assert_eq!(
-        new_delegations,
-        vec![
-            Delegation::new("alice", 112u128),
-            Delegation::new("bob", 111u128),
-            Delegation::new("charlie", 111u128),
-        ],
-    );
+    let new_delegations = compute_delegations(Uint128::new(334), &current_delegations);
+    let expected = vec![
+        Delegation::new("alice", 112u128),
+        Delegation::new("bob", 111u128),
+        Delegation::new("charlie", 111u128),
+    ];
+    assert_eq!(new_delegations, expected);
 
     // Scenario 2: Validators already have uneven amounts of delegations
     // We just use the result from the previous scenario (112/111/111)
@@ -313,16 +453,13 @@ fn computing_delegations() {
     // Alice:   152 + 1 - 112 = 41
     // Bob:     152 + 1 - 111 = 42
     // Charlie: 152 + 0 - 111 = 41
-    let uluna_to_bond = Uint128::new(124);
-    let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
-    assert_eq!(
-        new_delegations,
-        vec![
-            Delegation::new("alice", 41u128),
-            Delegation::new("bob", 42u128),
-            Delegation::new("charlie", 41u128),
-        ],
-    );
+    let new_delegations = compute_delegations(Uint128::new(124), &current_delegations);
+    let expected = vec![
+        Delegation::new("alice", 41u128),
+        Delegation::new("bob", 42u128),
+        Delegation::new("charlie", 41u128),
+    ];
+    assert_eq!(new_delegations, expected,);
 
     // Scenario 3: A new validator was introduced
     let current_delegations = vec![
@@ -336,8 +473,7 @@ fn computing_delegations() {
     // Target: (153 + 153 + 152 + 0 + 15) / 4 = 118
     // Remainder: 1
     // Alice/Bob/Charlie get 0, Dave get all
-    let uluna_to_bond = Uint128::new(15);
-    let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
+    let new_delegations = compute_delegations(Uint128::new(15), &current_delegations);
     assert_eq!(new_delegations, vec![Delegation::new("dave", 15u128)],);
 
     // Bond a large amount, say 200 uluna
@@ -347,17 +483,14 @@ fn computing_delegations() {
     // Bob:     164 + 1 - 153 = 12
     // Charlie: 164 + 0 - 152 = 12
     // Dave:    164 + 0 - 0   = 164
-    let uluna_to_bond = Uint128::new(200);
-    let new_delegations = compute_delegations(uluna_to_bond, &current_delegations);
-    assert_eq!(
-        new_delegations,
-        vec![
-            Delegation::new("alice", 12u128),
-            Delegation::new("bob", 12u128),
-            Delegation::new("charlie", 12u128),
-            Delegation::new("dave", 164u128),
-        ],
-    );
+    let new_delegations = compute_delegations(Uint128::new(200), &current_delegations);
+    let expected = vec![
+        Delegation::new("alice", 12u128),
+        Delegation::new("bob", 12u128),
+        Delegation::new("charlie", 12u128),
+        Delegation::new("dave", 164u128),
+    ];
+    assert_eq!(new_delegations, expected);
 }
 
 #[test]
@@ -373,37 +506,17 @@ fn computing_undelegations() {
     // Alice:   400 - (149 + 1) = 250
     // Bob:     300 - (149 + 1) = 150
     // Charlie: 200 - (149 + 0) = 51
-    let uluna_to_unbond = Uint128::new(451);
-    let new_undelegations = compute_undelegations(uluna_to_unbond, &current_delegations);
-    assert_eq!(
-        new_undelegations,
-        vec![
-            Undelegation::new("alice", 250u128),
-            Undelegation::new("bob", 150u128),
-            Undelegation::new("charlie", 51u128),
-        ],
-    );
+    let new_undelegations = compute_undelegations(Uint128::new(451), &current_delegations);
+    let expected = vec![
+        Undelegation::new("alice", 250u128),
+        Undelegation::new("bob", 150u128),
+        Undelegation::new("charlie", 51u128),
+    ];
+    assert_eq!(new_undelegations, expected);
 }
 
 #[test]
-fn adding_coins() {
-    let mut coins = Coins(vec![]);
-
-    coins = coins.add(&Coin::new(12345, "uatom")).unwrap();
-    assert_eq!(coins.0, vec![Coin::new(12345, "uatom")]);
-
-    coins = coins.add(&Coin::new(23456, "uluna")).unwrap();
-    assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
-
-    coins = coins.add_many(&Coins::from_str("76543uatom,69420uusd").unwrap()).unwrap();
-    assert_eq!(
-        coins.0,
-        vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]
-    );
-}
-
-#[test]
-fn casting_delegation_to_msg() {
+fn creating_delegation_msg() {
     let d = Delegation::new("alice", 12345u128);
     assert_eq!(
         d.to_cosmos_msg(),
@@ -415,7 +528,7 @@ fn casting_delegation_to_msg() {
 }
 
 #[test]
-fn casting_undelegation_to_msg() {
+fn creating_undelegation_msg() {
     let ud = Undelegation::new("bob", 23456u128);
     assert_eq!(
         ud.to_cosmos_msg(),
@@ -425,6 +538,10 @@ fn casting_undelegation_to_msg() {
         }),
     );
 }
+
+//--------------------------------------------------------------------------------------------------
+// Coins
+//--------------------------------------------------------------------------------------------------
 
 #[test]
 fn parsing_coin() {
@@ -447,7 +564,36 @@ fn parsing_coin() {
 }
 
 #[test]
-fn parsing_received_fund() {
+fn parsing_coins() {
+    let coins = Coins::from_str("").unwrap();
+    assert_eq!(coins.0, vec![]);
+
+    let coins = Coins::from_str("12345uatom").unwrap();
+    assert_eq!(coins.0, vec![Coin::new(12345, "uatom")]);
+
+    let coins = Coins::from_str("12345uatom,23456uluna").unwrap();
+    assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
+}
+
+#[test]
+fn adding_coins() {
+    let mut coins = Coins(vec![]);
+
+    coins = coins.add(&Coin::new(12345, "uatom")).unwrap();
+    assert_eq!(coins.0, vec![Coin::new(12345, "uatom")]);
+
+    coins = coins.add(&Coin::new(23456, "uluna")).unwrap();
+    assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
+
+    coins = coins.add_many(&Coins::from_str("76543uatom,69420uusd").unwrap()).unwrap();
+    assert_eq!(
+        coins.0,
+        vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]
+    );
+}
+
+#[test]
+fn receiving_funds() {
     let err = parse_received_fund(&[], "uluna").unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
 
