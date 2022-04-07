@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use cosmwasm_std::testing::{mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, Event, OwnedDeps, Reply, StakingMsg, SubMsg,
-    SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, Coin, CosmosMsg, Decimal, Event, OwnedDeps, Reply, StakingMsg, StdError,
+    SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::MinterResponse;
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
@@ -14,6 +14,7 @@ use steak::hub::{
 };
 
 use crate::contract::{execute, instantiate, query, reply};
+use crate::helpers::{parse_coin, parse_received_fund};
 use crate::math::{compute_delegations, compute_undelegations};
 use crate::state::State;
 use crate::types::{Coins, Delegation, Undelegation};
@@ -423,4 +424,43 @@ fn casting_undelegation_to_msg() {
             amount: Coin::new(23456, "uluna"),
         }),
     );
+}
+
+#[test]
+fn parsing_coin() {
+    let coin = parse_coin("12345uatom").unwrap();
+    assert_eq!(coin, Coin::new(12345, "uatom"));
+
+    let coin =
+        parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
+            .unwrap();
+    assert_eq!(
+        coin,
+        Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
+    );
+
+    let err = parse_coin("69420").unwrap_err();
+    assert_eq!(err, StdError::generic_err("failed to parse coin: 69420"));
+
+    let err = parse_coin("ngmi").unwrap_err();
+    assert_eq!(err, StdError::generic_err("Parsing u128: cannot parse integer from empty string"));
+}
+
+#[test]
+fn parsing_received_fund() {
+    let err = parse_received_fund(&[], "uluna").unwrap_err();
+    assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
+
+    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna")
+        .unwrap_err();
+    assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 2"));
+
+    let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uluna").unwrap_err();
+    assert_eq!(err, StdError::generic_err("expected uluna deposit, received uatom"));
+
+    let err = parse_received_fund(&[Coin::new(0, "uluna")], "uluna").unwrap_err();
+    assert_eq!(err, StdError::generic_err("deposit amount must be non-zero"));
+
+    let amount = parse_received_fund(&[Coin::new(69420, "uluna")], "uluna").unwrap();
+    assert_eq!(amount, Uint128::new(69420));
 }
