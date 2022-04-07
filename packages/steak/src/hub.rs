@@ -81,10 +81,10 @@ pub enum QueryMsg {
     Config {},
     /// The contract's current state. Response: `StateResponse`
     State {},
-    /// The current batch on unbonding requests pending submission. Response: `crate::state::PendingBatch`
+    /// The current batch on unbonding requests pending submission. Response: `PendingBatch`
     PendingBatch {},
     /// Enumerate previous batches that have previously been submitted for unbonding but have not yet
-    /// been fully withdrawn. Response: `Vec<crate::state::Batch>`
+    /// been fully withdrawn. Response: `Vec<Batch>`
     PreviousBatches {
         start_after: Option<u64>,
         limit: Option<u32>,

@@ -78,7 +78,7 @@ fn receive(
                 deps,
                 env,
                 api.addr_validate(&receiver.unwrap_or(cw20_msg.sender))?,
-                cw20_msg.amount
+                cw20_msg.amount,
             )
         },
     }

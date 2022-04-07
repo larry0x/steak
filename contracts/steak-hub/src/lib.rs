@@ -7,3 +7,6 @@ pub mod math;
 pub mod queries;
 pub mod state;
 pub mod types;
+
+#[cfg(test)]
+mod testing;
