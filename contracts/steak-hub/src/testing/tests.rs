@@ -2,15 +2,17 @@ use std::str::FromStr;
 
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, Event, OwnedDeps, Reply, ReplyOn, StakingMsg,
-    StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, Coin, CosmosMsg, Decimal, DistributionMsg, Event, OwnedDeps, Reply, ReplyOn,
+    StakingMsg, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
+use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
 
 use steak::hub::{
-    Batch, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg, StateResponse,
-    UnbondRequest, UnbondRequestsByBatchResponseItem, UnbondRequestsByUserResponseItem,
+    Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
+    StateResponse, UnbondRequest, UnbondRequestsByBatchResponseItem,
+    UnbondRequestsByUserResponseItem,
 };
 
 use crate::contract::{execute, instantiate, reply};
@@ -133,7 +135,7 @@ fn proper_instantiation() {
         PendingBatch {
             id: 1,
             usteak_to_burn: Uint128::zero(),
-            est_unbond_start_time: 269200, // 10000 + 259200
+            est_unbond_start_time: 269200, // 10,000 + 259,200
         }
     );
 }
@@ -185,7 +187,7 @@ fn bonding() {
     );
 
     // Bond when there are existing delegations, and Luna:Steak exchange rate is >1
-    // Previously user 1 delegated 1000000 uluna. We assume we have accumulated 2.5% yield at 1025000 staked
+    // Previously user 1 delegated 1,000,000 uluna. We assume we have accumulated 2.5% yield at 1025000 staked
     deps.querier.set_staking_delegations(&[
         Delegation::new("alice", 341667u128),
         Delegation::new("bob", 341667u128),
@@ -193,12 +195,12 @@ fn bonding() {
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
-    // Target = (1025000 + 12345) / 3 = 345781
+    // Target = (1,025,000 + 12,345) / 3 = 345781
     // Remainder = 2
-    // Alice:   345781 + 1 - 341667 = 4115
-    // Bob:     345781 + 1 - 341667 = 4115
-    // Charlie: 345781 + 0 - 341666 = 4115
-    // Mint amount: 12345 * 1000000 / 1025000 = 12043
+    // Alice:   345,781 + 1 - 341,667 = 4,115
+    // Bob:     345,781 + 1 - 341,667 = 4,115
+    // Charlie: 345,781 + 0 - 341,666 = 4,115
+    // Mint amount: 12,345 * 1,000,000 / 1,025,000 = 12043
     let res = execute(
         deps.as_mut(),
         mock_env(),
@@ -260,10 +262,288 @@ fn bonding() {
     );
 }
 
-// #[test]
-// fn harvesting() {
-//     let mut deps = setup_test();
-// }
+#[test]
+fn harvesting() {
+    let mut deps = setup_test();
+
+    // Assume users have bonded a total of 1,000,000 uluna and minted the same amount of usteak
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 341667u128),
+        Delegation::new("bob", 341667u128),
+        Delegation::new("charlie", 341666u128),
+    ]);
+    deps.querier.set_cw20_total_supply("steak_token", 1000000);
+
+    let res = execute(deps.as_mut(), mock_env(), mock_info("worker", &[]), ExecuteMsg::Harvest {})
+        .unwrap();
+
+    assert_eq!(res.messages.len(), 5);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(
+            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                validator: "alice".to_string(),
+            }),
+            2,
+        )
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::reply_on_success(
+            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                validator: "bob".to_string(),
+            }),
+            2,
+        )
+    );
+    assert_eq!(
+        res.messages[2],
+        SubMsg::reply_on_success(
+            CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                validator: "charlie".to_string(),
+            }),
+            2,
+        )
+    );
+    assert_eq!(
+        res.messages[3],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Swap {})).unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+    assert_eq!(
+        res.messages[4],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Reinvest {})).unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+}
+
+#[test]
+fn registering_unlocked_coins() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    // After withdrawing staking rewards, we parse the `coin_received` event to find the received amounts
+    let event = Event::new("coin_received")
+        .add_attribute("receiver", MOCK_CONTRACT_ADDR.to_string())
+        .add_attribute("amount", "123ukrw,234uluna,345uusd,69420ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B");
+
+    reply(
+        deps.as_mut(),
+        mock_env(),
+        Reply {
+            id: 2,
+            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+                events: vec![event],
+                data: None,
+            }),
+        },
+    )
+    .unwrap();
+
+    // Unlocked coins in contract state should have been updated
+    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
+    let expected = vec![
+        Coin::new(123, "ukrw"),
+        Coin::new(234, "uluna"),
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ];
+    assert_eq!(unlocked_coins, expected);
+
+    // After swapping, we parse the `swap` event to find the received amount
+    let event = Event::new("swap")
+        .add_attribute("offer", "25959uusd")
+        .add_attribute("trader", MOCK_CONTRACT_ADDR.to_string())
+        .add_attribute("recipient", MOCK_CONTRACT_ADDR.to_string())
+        .add_attribute("swap_coin", "243uluna")
+        .add_attribute("swap_fee", "1uluna");
+
+    reply(
+        deps.as_mut(),
+        mock_env(),
+        Reply {
+            id: 3,
+            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+                events: vec![event],
+                data: None,
+            }),
+        },
+    )
+    .unwrap();
+
+    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
+    let expected = vec![
+        Coin::new(123, "ukrw"),
+        Coin::new(477, "uluna"), // 234 (balance prior to swap) + 243 (swap proceedings)
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ];
+    assert_eq!(unlocked_coins, expected);
+}
+
+#[test]
+fn swapping() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    // Only denoms that has exchange rates defined in the oracle module can be swapped to Luna
+    deps.querier.set_native_exchange_rate(
+        "uluna",
+        "ukrw",
+        Decimal::from_str("129108.193653786399948012").unwrap(),
+    );
+    deps.querier.set_native_exchange_rate(
+        "uluna",
+        "usdr",
+        Decimal::from_str("77.056327779353129245").unwrap(),
+    );
+    deps.querier.set_native_exchange_rate(
+        "uluna",
+        "uusd",
+        Decimal::from_str("105.476484668836552061").unwrap(),
+    );
+
+    // After withdrawing staking rewards, we have some unlocked coins. Some can be swapped for Luna,
+    // some can't.
+    let unlocked_coins = vec![
+        Coin::new(123, "ukrw"),
+        Coin::new(234, "uluna"),
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ];
+    state.unlocked_coins.save(deps.as_mut().storage, &unlocked_coins).unwrap();
+
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info(MOCK_CONTRACT_ADDR, &[]),
+        ExecuteMsg::Callback(CallbackMsg::Swap {}),
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 2);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(
+            CosmosMsg::Custom(TerraMsgWrapper {
+                route: TerraRoute::Market,
+                msg_data: TerraMsg::Swap {
+                    offer_coin: Coin::new(123, "ukrw"),
+                    ask_denom: "uluna".to_string()
+                }
+            }),
+            3
+        )
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::reply_on_success(
+            CosmosMsg::Custom(TerraMsgWrapper {
+                route: TerraRoute::Market,
+                msg_data: TerraMsg::Swap {
+                    offer_coin: Coin::new(345, "uusd"),
+                    ask_denom: "uluna".to_string()
+                }
+            }),
+            3
+        )
+    );
+
+    // Storage should have been updated
+    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
+    let expected = vec![
+        Coin::new(234, "uluna"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ];
+    assert_eq!(unlocked_coins, expected);
+}
+
+#[test]
+fn reinvesting() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 333334u128),
+        Delegation::new("bob", 333333u128),
+        Delegation::new("charlie", 333333u128),
+    ]);
+
+    // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
+    let unlocked_coins = vec![
+        Coin::new(234, "uluna"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ];
+    state.unlocked_coins.save(deps.as_mut().storage, &unlocked_coins).unwrap();
+
+    // Target: (1,000,000 + 234) / 3 = 333,411
+    // Remainder: 1
+    // Alice:   333,411 + 1 - 333,334 = 78
+    // Bob:     333,411 + 0 - 333,333 = 78
+    // Charlie: 333,411 + 0 - 333,333 = 78
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info(MOCK_CONTRACT_ADDR, &[]),
+        ExecuteMsg::Callback(CallbackMsg::Reinvest {}),
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 3);
+    assert_eq!(
+        res.messages[0],
+        SubMsg {
+            id: 0,
+            msg: Delegation::new("alice", 78u128).to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg {
+            id: 0,
+            msg: Delegation::new("bob", 78u128).to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+    assert_eq!(
+        res.messages[2],
+        SubMsg {
+            id: 0,
+            msg: Delegation::new("charlie", 78u128).to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // Storage should have been updated
+    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
+    assert_eq!(
+        unlocked_coins,
+        vec![Coin::new(
+            69420,
+            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+        ),]
+    );
+}
 
 // #[test]
 // fn queuing_unbond() {
