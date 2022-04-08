@@ -1,0 +1,18 @@
+[package]
+name = "steak-token"
+version = "0.1.0"
+authors = ["larry <gm@larry.engineer>"]
+edition = "2018"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/st4k3h0us3/steak-contracts"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+backtraces = ["cosmwasm-std/backtraces"]
+
+[dependencies]
+cosmwasm-std = { version = "0.16", features = ["staking"] }
+cw20 = "0.9"
+cw20-base = { version = "0.9", features = ["library"] }

@@ -6,10 +6,31 @@ Steak is audited by [SCV Security](https://twitter.com/TerraSCV) ([link](https:/
 
 ## Contracts
 
-| Contract                                   | Description                                            |
-| ------------------------------------------ | ------------------------------------------------------ |
-| [`steak-hub`](./contracts/steak-hub)       | Manages minting/burning of Steak token and bonded Luna |
-| [`steak-zapper`](./contracts/steak-zapper) | Allows zapping into Steak from various assets          |
+| Contract                             | Description                                            |
+| ------------------------------------ | ------------------------------------------------------ |
+| [`steak-hub`](./contracts/hub)       | Manages minting/burning of Steak token and bonded Luna |
+| [`steak-token`](./contracts/token)   | Modified CW20 token contract                           |
+| [`steak-zapper`](./contracts/zapper) | Allows zapping into Steak from various assets          |
+
+## Deployment
+
+### Mainnet
+
+| Contract             | Address |
+| -------------------- | ------- |
+| Steak Hub            | TBD     |
+| Steak Token          | TBD     |
+| Steak Zapper         | TBD     |
+| Steak Admin Multisig | TBD     |
+
+### Testnet
+
+| Contract             | Address |
+| -------------------- | ------- |
+| Steak Hub            | TBD     |
+| Steak Token          | TBD     |
+| Steak Zapper         | TBD     |
+| Steak Admin Multisig | TBD     |
 
 ## License
 

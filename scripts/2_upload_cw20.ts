@@ -21,7 +21,7 @@ const argv = yargs(process.argv)
     binary: {
       type: "string",
       demandOption: false,
-      default: "../../cw-plus/artifacts/cw20_base.wasm",
+      default: "../artifacts/steak_token.wasm",
     },
   })
   .parseSync();

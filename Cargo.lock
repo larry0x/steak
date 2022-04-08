@@ -598,6 +598,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "steak-token"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw20 0.9.1",
+ "cw20-base",
+]
+
+[[package]]
 name = "steak-zapper"
 version = "0.1.0"
 dependencies = [
