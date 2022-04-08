@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, DistributionMsg, Event, OwnedDeps, Reply, ReplyOn,
-    StakingMsg, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, OwnedDeps, Reply,
+    ReplyOn, StakingMsg, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
@@ -673,7 +673,7 @@ fn submitting_batch() {
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1012043);
 
-    // We start from the unbonding created at the end of the previous test
+    // We continue from the contract state at the end of the last test
     let unbond_requests = vec![
         UnbondRequest {
             id: 1,
@@ -783,10 +783,231 @@ fn submitting_batch() {
     );
 }
 
-// #[test]
-// fn withdrawing_unbonded() {
-//     let mut deps = setup_test();
-// }
+#[test]
+fn withdrawing_unbonded() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    // We simulate a most general case:
+    // - batches 1 and 2 have finished unbonding
+    // - batch 3 have been submitted for unbonding but have not finished
+    // - batch 4 is still pending
+    let unbond_requests = vec![
+        UnbondRequest {
+            id: 1,
+            user: Addr::unchecked("user_1"),
+            shares: Uint128::new(23456),
+        },
+        UnbondRequest {
+            id: 1,
+            user: Addr::unchecked("user_3"),
+            shares: Uint128::new(69420),
+        },
+        UnbondRequest {
+            id: 2,
+            user: Addr::unchecked("user_1"),
+            shares: Uint128::new(34567),
+        },
+        UnbondRequest {
+            id: 3,
+            user: Addr::unchecked("user_1"),
+            shares: Uint128::new(45678),
+        },
+        UnbondRequest {
+            id: 4,
+            user: Addr::unchecked("user_1"),
+            shares: Uint128::new(56789),
+        },
+    ];
+
+    for unbond_request in &unbond_requests {
+        state
+            .unbond_requests
+            .save(
+                deps.as_mut().storage,
+                (unbond_request.id.into(), &Addr::unchecked(unbond_request.user.clone())),
+                unbond_request,
+            )
+            .unwrap();
+    }
+
+    let previous_batches = vec![
+        Batch {
+            id: 1,
+            total_shares: Uint128::new(92876),
+            uluna_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
+            est_unbond_end_time: 10000,
+        },
+        Batch {
+            id: 2,
+            total_shares: Uint128::new(34567),
+            uluna_unclaimed: Uint128::new(35604), // 1.030 Luna per Steak
+            est_unbond_end_time: 20000,
+        },
+        Batch {
+            id: 3,
+            total_shares: Uint128::new(45678),
+            uluna_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
+            est_unbond_end_time: 30000,
+        },
+    ];
+
+    for previous_batch in &previous_batches {
+        state
+            .previous_batches
+            .save(deps.as_mut().storage, previous_batch.id.into(), previous_batch)
+            .unwrap();
+    }
+
+    state
+        .pending_batch
+        .save(
+            deps.as_mut().storage,
+            &PendingBatch {
+                id: 4,
+                usteak_to_burn: Uint128::new(56789),
+                est_unbond_start_time: 100000,
+            },
+        )
+        .unwrap();
+
+    // Attempt to withdraw before any batch has completed unbonding. Should error
+    let err = execute(
+        deps.as_mut(),
+        mock_env_with_timestamp(5000),
+        mock_info("user_1", &[]),
+        ExecuteMsg::WithdrawUnbonded {
+            receiver: None,
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("withdrawable amount is zero"));
+
+    // Attempt to withdraw once batches 1 and 2 have finished unbonding, but 3 has not yet
+    //
+    // Withdrawable from batch 1: 95,197 * 23,456 / 92,876 = 24,042
+    // Withdrawable from batch 2: 35,604
+    // Total withdrawable: 24,042 + 35,604 = 59,646
+    //
+    // Batch 1 should be updated:
+    // Total shares: 92,876 - 23,456 = 69,420
+    // Unclaimed uluna: 95,197 - 24,042 = 71,155
+    //
+    // Batch 2 is completely withdrawn, should be purged from storage
+    let res = execute(
+        deps.as_mut(),
+        mock_env_with_timestamp(25000),
+        mock_info("user_1", &[]),
+        ExecuteMsg::WithdrawUnbonded {
+            receiver: None,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 1);
+    assert_eq!(
+        res.messages[0],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Bank(BankMsg::Send {
+                to_address: "user_1".to_string(),
+                amount: vec![Coin::new(59646, "uluna")]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // Pending batches should have been updated
+    let batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
+    assert_eq!(
+        batch,
+        Batch {
+            id: 1,
+            total_shares: Uint128::new(69420),
+            uluna_unclaimed: Uint128::new(71155),
+            est_unbond_end_time: 10000,
+        }
+    );
+
+    let err = state.previous_batches.load(deps.as_ref().storage, 2u64.into()).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::NotFound {
+            kind: "steak::hub::Batch".to_string()
+        }
+    );
+
+    // User 1's unbond requests in batches 1 and 2 should have been deleted
+    let err1 = state
+        .unbond_requests
+        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1")))
+        .unwrap_err();
+    let err2 = state
+        .unbond_requests
+        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1")))
+        .unwrap_err();
+
+    assert_eq!(
+        err1,
+        StdError::NotFound {
+            kind: "steak::hub::UnbondRequest".to_string()
+        }
+    );
+    assert_eq!(
+        err2,
+        StdError::NotFound {
+            kind: "steak::hub::UnbondRequest".to_string()
+        }
+    );
+
+    // User 3 attempt to withdraw; also specifying a receiver
+    let res = execute(
+        deps.as_mut(),
+        mock_env_with_timestamp(25000),
+        mock_info("user_3", &[]),
+        ExecuteMsg::WithdrawUnbonded {
+            receiver: Some("user_2".to_string()),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 1);
+    assert_eq!(
+        res.messages[0],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Bank(BankMsg::Send {
+                to_address: "user_2".to_string(),
+                amount: vec![Coin::new(71155, "uluna")]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // Batch 1 and user 2's unbonding request should have been purged from storage
+    let err = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::NotFound {
+            kind: "steak::hub::Batch".to_string()
+        }
+    );
+
+    let err = state
+        .unbond_requests
+        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_3")))
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        StdError::NotFound {
+            kind: "steak::hub::UnbondRequest".to_string()
+        }
+    );
+}
 
 //--------------------------------------------------------------------------------------------------
 // Queries
