@@ -11,7 +11,7 @@ use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
 
 use steak::hub::{
     Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
-    StateResponse, UnbondRequest, UnbondRequestsByBatchResponseItem,
+    ReceiveMsg, StateResponse, UnbondRequest, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem,
 };
 
@@ -545,15 +545,243 @@ fn reinvesting() {
     );
 }
 
-// #[test]
-// fn queuing_unbond() {
-//     let mut deps = setup_test();
-// }
+#[test]
+fn queuing_unbond() {
+    let mut deps = setup_test();
+    let state = State::default();
 
-// #[test]
-// fn submitting_batch() {
-//     let mut deps = setup_test();
-// }
+    // Only Steak token is accepted for unbonding requests
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("random_token", &[]),
+        ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
+            sender: "hacker".to_string(),
+            amount: Uint128::new(69420),
+            msg: to_binary(&ReceiveMsg::QueueUnbond {
+                receiver: None,
+            })
+            .unwrap(),
+        }),
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("expecting Steak token, received random_token"));
+
+    // User 1 creates an unbonding request before `est_unbond_start_time` is reached. The unbond
+    // request is saved, but not the pending batch is not submitted for unbonding
+    let res = execute(
+        deps.as_mut(),
+        mock_env_with_timestamp(12345), // est_unbond_start_time = 269200
+        mock_info("steak_token", &[]),
+        ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
+            sender: "user_1".to_string(),
+            amount: Uint128::new(23456),
+            msg: to_binary(&ReceiveMsg::QueueUnbond {
+                receiver: None,
+            })
+            .unwrap(),
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 0);
+
+    // User 2 creates an unbonding request after `est_unbond_start_time` is reached. The unbond
+    // request is saved, and the pending is automatically submitted for unbonding
+    let res = execute(
+        deps.as_mut(),
+        mock_env_with_timestamp(269201), // est_unbond_start_time = 269200
+        mock_info("steak_token", &[]),
+        ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
+            sender: "user_2".to_string(),
+            amount: Uint128::new(69420),
+            msg: to_binary(&ReceiveMsg::QueueUnbond {
+                receiver: Some("user_3".to_string()),
+            })
+            .unwrap(),
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 1);
+    assert_eq!(
+        res.messages[0],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                msg: to_binary(&ExecuteMsg::SubmitBatch {}).unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // The users' unbonding requests should have been saved
+    let ubr1 = state
+        .unbond_requests
+        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1")))
+        .unwrap();
+    let ubr2 = state
+        .unbond_requests
+        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_3")))
+        .unwrap();
+
+    assert_eq!(
+        ubr1,
+        UnbondRequest {
+            id: 1,
+            user: Addr::unchecked("user_1"),
+            shares: Uint128::new(23456)
+        }
+    );
+    assert_eq!(
+        ubr2,
+        UnbondRequest {
+            id: 1,
+            user: Addr::unchecked("user_3"),
+            shares: Uint128::new(69420)
+        }
+    );
+
+    // Pending batch should have been updated
+    let pending_batch = state.pending_batch.load(deps.as_ref().storage).unwrap();
+    assert_eq!(
+        pending_batch,
+        PendingBatch {
+            id: 1,
+            usteak_to_burn: Uint128::new(92876), // 23,456 + 69,420
+            est_unbond_start_time: 269200
+        }
+    );
+}
+
+#[test]
+fn submitting_batch() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    // uluna bonded: 1,037,345
+    // usteak supply: 1,012,043
+    // uluna per ustake: 1.025
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 345782u128),
+        Delegation::new("bob", 345782u128),
+        Delegation::new("charlie", 345781u128),
+    ]);
+    deps.querier.set_cw20_total_supply("steak_token", 1012043);
+
+    // We start from the unbonding created at the end of the previous test
+    let unbond_requests = vec![
+        UnbondRequest {
+            id: 1,
+            user: Addr::unchecked("user_1"),
+            shares: Uint128::new(23456),
+        },
+        UnbondRequest {
+            id: 1,
+            user: Addr::unchecked("user_3"),
+            shares: Uint128::new(69420),
+        },
+    ];
+
+    for unbond_request in &unbond_requests {
+        state
+            .unbond_requests
+            .save(
+                deps.as_mut().storage,
+                (unbond_request.id.into(), &Addr::unchecked(unbond_request.user.clone())),
+                unbond_request,
+            )
+            .unwrap();
+    }
+
+    state
+        .pending_batch
+        .save(
+            deps.as_mut().storage,
+            &PendingBatch {
+                id: 1,
+                usteak_to_burn: Uint128::new(92876), // 23,456 + 69,420
+                est_unbond_start_time: 269200,
+            },
+        )
+        .unwrap();
+
+    // Anyone can invoke `submit_batch`. Here we continue from the previous test and assume it is
+    // invoked automatically as user 2 submits the unbonding request
+    //
+    // usteak to burn: 23,456 + 69,420 = 92,876
+    // uluna to unbond: 1,037,345 * 92,876 / 1,012,043 = 95,197
+    //
+    // Target: (1,037,345 - 95,197) / 3 = 314,049
+    // Remainer: 1
+    // Alice:   345,782 - (314,049 + 1) = 31,732
+    // Bob:     345,782 - (314,049 + 0) = 31,733
+    // Charlie: 345,781 - (314,049 + 0) = 31,732
+    let res = execute(
+        deps.as_mut(),
+        mock_env_with_timestamp(269201),
+        mock_info(MOCK_CONTRACT_ADDR, &[]),
+        ExecuteMsg::SubmitBatch {},
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 4);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(Undelegation::new("alice", 31732u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::reply_on_success(Undelegation::new("bob", 31733u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[2],
+        SubMsg::reply_on_success(Undelegation::new("charlie", 31732u128).to_cosmos_msg(), 2)
+    );
+    assert_eq!(
+        res.messages[3],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "steak_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Burn {
+                    amount: Uint128::new(92876)
+                })
+                .unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // A new pending batch should have been created
+    let pending_batch = state.pending_batch.load(deps.as_ref().storage).unwrap();
+    assert_eq!(
+        pending_batch,
+        PendingBatch {
+            id: 2,
+            usteak_to_burn: Uint128::zero(),
+            est_unbond_start_time: 528401 // 269,201 + 259,200
+        }
+    );
+
+    // Previous batch should have been updated
+    let previous_batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
+    assert_eq!(
+        previous_batch,
+        Batch {
+            id: 1,
+            total_shares: Uint128::new(92876),
+            uluna_unclaimed: Uint128::new(95197),
+            est_unbond_end_time: 2083601 // 269,201 + 1,814,400
+        }
+    );
+}
 
 // #[test]
 // fn withdrawing_unbonded() {
@@ -619,31 +847,31 @@ fn querying_previous_batches() {
 #[test]
 fn querying_unbond_requests() {
     let mut deps = mock_dependencies();
+    let state = State::default();
 
     let unbond_requests = vec![
         UnbondRequest {
             id: 1,
-            user: String::from("alice"),
+            user: Addr::unchecked("alice"),
             shares: Uint128::new(123),
         },
         UnbondRequest {
             id: 1,
-            user: String::from("bob"),
+            user: Addr::unchecked("bob"),
             shares: Uint128::new(234),
         },
         UnbondRequest {
             id: 1,
-            user: String::from("charlie"),
+            user: Addr::unchecked("charlie"),
             shares: Uint128::new(345),
         },
         UnbondRequest {
             id: 2,
-            user: String::from("alice"),
+            user: Addr::unchecked("alice"),
             shares: Uint128::new(456),
         },
     ];
 
-    let state = State::default();
     for unbond_request in &unbond_requests {
         state
             .unbond_requests
