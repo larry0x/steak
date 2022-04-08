@@ -26,7 +26,7 @@ impl Default for State<'static> {
     fn default() -> Self {
         let indexes = UnbondRequestsIndexes {
             user: MultiIndex::new(
-                |d: &UnbondRequest, k: Vec<u8>| (d.user.clone(), k),
+                |d: &UnbondRequest, k: Vec<u8>| (d.user.clone().into(), k),
                 "unbond_requests",
                 "unbond_requests__user",
             ),

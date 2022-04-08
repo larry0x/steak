@@ -154,7 +154,7 @@ pub struct UnbondRequest {
     /// ID of the batch
     pub id: u64,
     /// The user's address
-    pub user: String,
+    pub user: Addr,
     /// The user's share in the batch
     pub shares: Uint128,
 }
@@ -170,7 +170,7 @@ pub struct UnbondRequestsByBatchResponseItem {
 impl From<UnbondRequest> for UnbondRequestsByBatchResponseItem {
     fn from(s: UnbondRequest) -> Self {
         Self {
-            user: s.user,
+            user: s.user.into(),
             shares: s.shares
         }
     }

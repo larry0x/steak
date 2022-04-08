@@ -295,7 +295,7 @@ pub fn queue_unbond(
         |x| -> StdResult<_> {
             let mut request = x.unwrap_or_else(|| UnbondRequest {
                 id: pending_batch.id,
-                user: receiver.to_string(),
+                user: receiver.clone(),
                 shares: Uint128::zero(),
             });
             request.shares += usteak_to_burn;
