@@ -27,7 +27,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     // For `burn`, we assert that the caller is the minter
-    // For `burn_from`, we disable it since there should never be a case where it is needed
+    // For `burn_from`, we simply disable it
     match msg {
         ExecuteMsg::Burn { .. } => assert_minter(deps.storage, &info.sender)?,
         ExecuteMsg::BurnFrom { .. } => return Err(StdError::generic_err("`burn_from` command is disabled").into()),
@@ -133,5 +133,22 @@ mod tests {
         // Total supply should have been reduced
         let token_info = TOKEN_INFO.load(deps.as_ref().storage).unwrap();
         assert_eq!(token_info.total_supply, Uint128::new(100));
+    }
+
+    #[test]
+    fn disabling_burn_from() {
+        let mut deps = setup_test();
+
+        // Not even Steak Hub can invoke `burn_from`
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("steak_hub", &[]),
+            ExecuteMsg::BurnFrom {
+                owner: "alice".to_string(),
+                amount: Uint128::new(100),
+            },
+        );
+        assert_eq!(res, Err(StdError::generic_err("`burn_from` command is disabled").into()));
     }
 }
