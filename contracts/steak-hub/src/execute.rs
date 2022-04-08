@@ -443,6 +443,8 @@ pub fn withdraw_unbonded(
 
                 if batch.total_shares.is_zero() {
                     state.previous_batches.remove(deps.storage, request.id.into());
+                } else {
+                    state.previous_batches.save(deps.storage, batch.id.into(), &batch)?;
                 }
 
                 state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
