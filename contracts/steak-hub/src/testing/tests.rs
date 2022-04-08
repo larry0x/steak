@@ -617,10 +617,10 @@ fn querying_previous_batches() {
 }
 
 #[test]
-fn querying_unbond_shares() {
+fn querying_unbond_requests() {
     let mut deps = mock_dependencies();
 
-    let unbond_shares = vec![
+    let unbond_requests = vec![
         UnbondRequest {
             id: 1,
             user: String::from("alice"),
@@ -644,13 +644,13 @@ fn querying_unbond_shares() {
     ];
 
     let state = State::default();
-    for unbond_share in &unbond_shares {
+    for unbond_request in &unbond_requests {
         state
             .unbond_requests
             .save(
                 deps.as_mut().storage,
-                (unbond_share.id.into(), &Addr::unchecked(unbond_share.user.clone())),
-                unbond_share,
+                (unbond_request.id.into(), &Addr::unchecked(unbond_request.user.clone())),
+                unbond_request,
             )
             .unwrap();
     }
@@ -666,9 +666,9 @@ fn querying_unbond_shares() {
     assert_eq!(
         res,
         vec![
-            unbond_shares[0].clone().into(),
-            unbond_shares[1].clone().into(),
-            unbond_shares[2].clone().into()
+            unbond_requests[0].clone().into(),
+            unbond_requests[1].clone().into(),
+            unbond_requests[2].clone().into()
         ]
     );
 
@@ -680,7 +680,7 @@ fn querying_unbond_shares() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![unbond_shares[3].clone().into()]);
+    assert_eq!(res, vec![unbond_requests[3].clone().into()]);
 
     let res: Vec<UnbondRequestsByUserResponseItem> = query_helper(
         deps.as_ref(),
@@ -690,7 +690,7 @@ fn querying_unbond_shares() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![unbond_shares[0].clone().into(), unbond_shares[3].clone().into()]);
+    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into()]);
 }
 
 //--------------------------------------------------------------------------------------------------
