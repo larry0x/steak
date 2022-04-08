@@ -429,22 +429,29 @@ pub fn withdraw_unbonded(
     let mut total_uluna_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
     for request in &requests {
-        let mut batch = state.previous_batches.load(deps.storage, request.id.into())?;
-        if batch.est_unbond_end_time < current_time {
-            let uluna_to_refund = batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
+        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id.into()) {
+            if batch.est_unbond_end_time < current_time {
+                let uluna_to_refund = batch
+                    .uluna_unclaimed
+                    .multiply_ratio(request.shares, batch.total_shares);
 
-            ids.push(request.id.to_string());
+                ids.push(request.id.to_string());
 
-            total_uluna_to_refund += uluna_to_refund;
-            batch.total_shares -= request.shares;
-            batch.uluna_unclaimed -= uluna_to_refund;
+                total_uluna_to_refund += uluna_to_refund;
+                batch.total_shares -= request.shares;
+                batch.uluna_unclaimed -= uluna_to_refund;
 
-            if batch.total_shares.is_zero() {
-                state.previous_batches.remove(deps.storage, request.id.into());
+                if batch.total_shares.is_zero() {
+                    state.previous_batches.remove(deps.storage, request.id.into());
+                }
+
+                state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
             }
-
-            state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
         }
+    }
+
+    if total_uluna_to_refund.is_zero() {
+        return Err(StdError::generic_err("withdrawable amount is zero"));
     }
 
     let refund_msg = CosmosMsg::Bank(BankMsg::Send {
