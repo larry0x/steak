@@ -274,8 +274,13 @@ fn harvesting() {
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
-    let res = execute(deps.as_mut(), mock_env(), mock_info("worker", &[]), ExecuteMsg::Harvest {})
-        .unwrap();
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("worker", &[]),
+        ExecuteMsg::Harvest {}
+    )
+    .unwrap();
 
     assert_eq!(res.messages.len(), 5);
     assert_eq!(
@@ -358,13 +363,15 @@ fn registering_unlocked_coins() {
 
     // Unlocked coins in contract state should have been updated
     let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    let expected = vec![
-        Coin::new(123, "ukrw"),
-        Coin::new(234, "uluna"),
-        Coin::new(345, "uusd"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ];
-    assert_eq!(unlocked_coins, expected);
+    assert_eq!(
+        unlocked_coins,
+        vec![
+            Coin::new(123, "ukrw"),
+            Coin::new(234, "uluna"),
+            Coin::new(345, "uusd"),
+            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+        ]
+    );
 
     // After swapping, we parse the `swap` event to find the received amount
     let event = Event::new("swap")
@@ -388,13 +395,15 @@ fn registering_unlocked_coins() {
     .unwrap();
 
     let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    let expected = vec![
-        Coin::new(123, "ukrw"),
-        Coin::new(477, "uluna"), // 234 (balance prior to swap) + 243 (swap proceedings)
-        Coin::new(345, "uusd"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ];
-    assert_eq!(unlocked_coins, expected);
+    assert_eq!(
+        unlocked_coins,
+        vec![
+            Coin::new(123, "ukrw"),
+            Coin::new(477, "uluna"), // 234 (balance prior to swap) + 243 (swap proceedings)
+            Coin::new(345, "uusd"),
+            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+        ]
+    );
 }
 
 #[test]
@@ -421,13 +430,15 @@ fn swapping() {
 
     // After withdrawing staking rewards, we have some unlocked coins. Some can be swapped for Luna,
     // some can't.
-    let unlocked_coins = vec![
-        Coin::new(123, "ukrw"),
-        Coin::new(234, "uluna"),
-        Coin::new(345, "uusd"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ];
-    state.unlocked_coins.save(deps.as_mut().storage, &unlocked_coins).unwrap();
+    state.unlocked_coins.save(
+        deps.as_mut().storage,
+        &vec![
+            Coin::new(123, "ukrw"),
+            Coin::new(234, "uluna"),
+            Coin::new(345, "uusd"),
+            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+        ]
+    ).unwrap();
 
     let res = execute(
         deps.as_mut(),
@@ -467,11 +478,13 @@ fn swapping() {
 
     // Storage should have been updated
     let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    let expected = vec![
-        Coin::new(234, "uluna"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ];
-    assert_eq!(unlocked_coins, expected);
+    assert_eq!(
+        unlocked_coins,
+        vec![
+            Coin::new(234, "uluna"),
+            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+        ]
+    );
 }
 
 #[test]
@@ -486,11 +499,13 @@ fn reinvesting() {
     ]);
 
     // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
-    let unlocked_coins = vec![
-        Coin::new(234, "uluna"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ];
-    state.unlocked_coins.save(deps.as_mut().storage, &unlocked_coins).unwrap();
+    state.unlocked_coins.save(
+        deps.as_mut().storage,
+        &vec![
+            Coin::new(234, "uluna"),
+            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+        ]
+    ).unwrap();
 
     // Target: (1,000,000 + 234) / 3 = 333,411
     // Remainder: 1
@@ -1117,7 +1132,7 @@ fn querying_unbond_requests() {
         vec![
             unbond_requests[0].clone().into(),
             unbond_requests[1].clone().into(),
-            unbond_requests[2].clone().into()
+            unbond_requests[2].clone().into(),
         ]
     );
 
@@ -1139,7 +1154,13 @@ fn querying_unbond_requests() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into()]);
+    assert_eq!(
+        res,
+        vec![
+            unbond_requests[0].clone().into(),
+            unbond_requests[3].clone().into(),
+        ]
+    );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1277,13 +1298,8 @@ fn parsing_coin() {
     let coin = parse_coin("12345uatom").unwrap();
     assert_eq!(coin, Coin::new(12345, "uatom"));
 
-    let coin =
-        parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
-            .unwrap();
-    assert_eq!(
-        coin,
-        Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
-    );
+    let coin = parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B").unwrap();
+    assert_eq!(coin, Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"));
 
     let err = parse_coin("69420").unwrap_err();
     assert_eq!(err, StdError::generic_err("failed to parse coin: 69420"));
@@ -1315,10 +1331,7 @@ fn adding_coins() {
     assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
 
     coins = coins.add_many(&Coins::from_str("76543uatom,69420uusd").unwrap()).unwrap();
-    assert_eq!(
-        coins.0,
-        vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]
-    );
+    assert_eq!(coins.0, vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]);
 }
 
 #[test]
@@ -1326,8 +1339,7 @@ fn receiving_funds() {
     let err = parse_received_fund(&[], "uluna").unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
 
-    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna")
-        .unwrap_err();
+    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna").unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 2"));
 
     let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uluna").unwrap_err();
