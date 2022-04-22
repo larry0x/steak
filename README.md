@@ -6,35 +6,30 @@ Steak is audited by [SCV Security](https://twitter.com/TerraSCV) ([link](https:/
 
 ## Contracts
 
-| Contract                             | Description                                            |
-| ------------------------------------ | ------------------------------------------------------ |
-| [`steak-hub`](./contracts/hub)       | Manages minting/burning of Steak token and bonded Luna |
-| [`steak-token`](./contracts/token)   | Modified CW20 token contract                           |
-| [`steak-zapper`](./contracts/zapper) | Allows zapping into Steak from various assets          |
+| Contract                           | Description                                            |
+| ---------------------------------- | ------------------------------------------------------ |
+| [`steak-hub`](./contracts/hub)     | Manages minting/burning of Steak token and bonded Luna |
+| [`steak-token`](./contracts/token) | Modified CW20 token contract                           |
 
 ## Deployment
 
 ### Mainnet
 
-| Contract                      | Address                                        |
-| ----------------------------- | ---------------------------------------------- |
-| Steak Hub                     | `terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg` |
-| Steak Token                   | `terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv` |
-| Steak Zapper                  | TBD                                            |
-| Steak Admin Multisig          | TBD                                            |
-| Astroport STEAK-LUNA Pair     | `terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e` |
-| Astroport STEAK-LUNA LP Token | `terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62` |
+| Contract            | Address                                        |
+| ------------------- | ---------------------------------------------- |
+| Steak Hub           | `terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg` |
+| Steak Token         | `terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv` |
+| STEAK-LUNA Pair     | `terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e` |
+| STEAK-LUNA LP Token | `terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62` |
 
 ### Testnet
 
-| Contract                      | Address                                        |
-| ----------------------------- | ---------------------------------------------- |
-| Steak Hub                     | `terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy` |
-| Steak Token                   | `terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w` |
-| Steak Zapper                  | TBD                                            |
-| Steak Admin Multisig          | TBD                                            |
-| Astroport STEAK-LUNA Pair     | `terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz` |
-| Astroport STEAK-LUNA LP Token | `terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje` |
+| Contract            | Address                                        |
+| ------------------- | ---------------------------------------------- |
+| Steak Hub           | `terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy` |
+| Steak Token         | `terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w` |
+| STEAK-LUNA Pair     | `terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz` |
+| STEAK-LUNA LP Token | `terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje` |
 
 ## License
 

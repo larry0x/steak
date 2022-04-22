@@ -1,13 +1,16 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, Coin, QuerierWrapper, StdError, StdResult, Uint128};
+use cosmwasm_std::{
+    Addr, Coin, QuerierWrapper, Reply, StdError, StdResult, SubMsgExecutionResponse, Uint128,
+};
 use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
 use crate::types::Delegation;
 
-//--------------------------------------------------------------------------------------------------
-// Queriers
-//--------------------------------------------------------------------------------------------------
+/// Unwrap a `Reply` object to extract the response
+pub(crate) fn unwrap_reply(reply: Reply) -> StdResult<SubMsgExecutionResponse> {
+    reply.result.into_result().map_err(StdError::generic_err)
+}
 
 /// Query the total supply of a CW20 token
 pub(crate) fn query_cw20_total_supply(
@@ -41,10 +44,6 @@ pub(crate) fn query_delegations(
         .map(|validator| query_delegation(querier, validator, delegator_addr))
         .collect()
 }
-
-//--------------------------------------------------------------------------------------------------
-// Utilities
-//--------------------------------------------------------------------------------------------------
 
 /// `cosmwasm_std::Coin` does not implement `FromStr`, so we have do it ourselves
 ///
