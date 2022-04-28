@@ -17,19 +17,19 @@ Steak is audited by [SCV Security](https://twitter.com/TerraSCV) ([link](https:/
 
 | Contract            | Address                                        |
 | ------------------- | ---------------------------------------------- |
-| Steak Hub           | `terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg` |
-| Steak Token         | `terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv` |
-| STEAK-LUNA Pair     | `terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e` |
-| STEAK-LUNA LP Token | `terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62` |
+| Steak Hub           | [`terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg`](https://terrasco.pe/mainnet/address/terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg) |
+| Steak Token         | [`terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv`](https://terrasco.pe/mainnet/address/terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv) |
+| STEAK-LUNA Pair     | [`terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e`](https://terrasco.pe/mainnet/address/terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e) |
+| STEAK-LUNA LP Token | [`terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62`](https://terrasco.pe/mainnet/address/terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62) |
 
 ### Testnet
 
 | Contract            | Address                                        |
 | ------------------- | ---------------------------------------------- |
-| Steak Hub           | `terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy` |
-| Steak Token         | `terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w` |
-| STEAK-LUNA Pair     | `terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz` |
-| STEAK-LUNA LP Token | `terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje` |
+| Steak Hub           | [`terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy`](https://terrasco.pe/testnet/address/terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy) |
+| Steak Token         | [`terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w`](https://terrasco.pe/testnet/address/terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w) |
+| STEAK-LUNA Pair     | [`terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz`](https://terrasco.pe/testnet/address/terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz) |
+| STEAK-LUNA LP Token | [`terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje`](https://terrasco.pe/testnet/address/terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje) |
 
 ## License
 
