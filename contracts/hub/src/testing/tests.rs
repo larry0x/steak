@@ -1052,6 +1052,12 @@ fn querying_previous_batches() {
         state.previous_batches.save(deps.as_mut().storage, batch.id.into(), batch).unwrap();
     }
 
+    let res: Batch = query_helper(deps.as_ref(), QueryMsg::PreviousBatch(1));
+    assert_eq!(res, batches[0].clone());
+
+    let res: Batch = query_helper(deps.as_ref(), QueryMsg::PreviousBatch(2));
+    assert_eq!(res, batches[1].clone());
+
     let res: Vec<Batch> = query_helper(
         deps.as_ref(),
         QueryMsg::PreviousBatches {

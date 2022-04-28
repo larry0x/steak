@@ -129,6 +129,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&queries::query_config(deps)?),
         QueryMsg::State {} => to_binary(&queries::query_state(deps, env)?),
         QueryMsg::PendingBatch {} => to_binary(&queries::query_pending_batch(deps)?),
+        QueryMsg::PreviousBatch(id) => to_binary(&queries::query_previous_batch(deps, id)?),
         QueryMsg::PreviousBatches {
             start_after,
             limit,

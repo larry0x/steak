@@ -51,6 +51,11 @@ pub fn query_pending_batch(deps: Deps) -> StdResult<PendingBatch> {
     state.pending_batch.load(deps.storage)
 }
 
+pub fn query_previous_batch(deps: Deps, id: u64) -> StdResult<Batch> {
+    let state = State::default();
+    state.previous_batches.load(deps.storage, id.into())
+}
+
 pub fn query_previous_batches(
     deps: Deps,
     start_after: Option<u64>,
