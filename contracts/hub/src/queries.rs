@@ -12,7 +12,7 @@ use crate::state::State;
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 
-pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
+pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
     Ok(ConfigResponse {
         steak_token: state.steak_token.load(deps.storage)?.into(),
@@ -22,7 +22,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-pub fn query_state(deps: Deps, env: Env) -> StdResult<StateResponse> {
+pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
 
     let steak_token = state.steak_token.load(deps.storage)?;
@@ -46,17 +46,17 @@ pub fn query_state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     })
 }
 
-pub fn query_pending_batch(deps: Deps) -> StdResult<PendingBatch> {
+pub fn pending_batch(deps: Deps) -> StdResult<PendingBatch> {
     let state = State::default();
     state.pending_batch.load(deps.storage)
 }
 
-pub fn query_previous_batch(deps: Deps, id: u64) -> StdResult<Batch> {
+pub fn previous_batch(deps: Deps, id: u64) -> StdResult<Batch> {
     let state = State::default();
     state.previous_batches.load(deps.storage, id.into())
 }
 
-pub fn query_previous_batches(
+pub fn previous_batches(
     deps: Deps,
     start_after: Option<u64>,
     limit: Option<u32>,
@@ -77,7 +77,7 @@ pub fn query_previous_batches(
         .collect()
 }
 
-pub fn query_unbond_requests_by_batch(
+pub fn unbond_requests_by_batch(
     deps: Deps,
     id: u64,
     start_after: Option<String>,
@@ -100,7 +100,7 @@ pub fn query_unbond_requests_by_batch(
         .collect()
 }
 
-pub fn query_unbond_requests_by_user(
+pub fn unbond_requests_by_user(
     deps: Deps,
     user: String,
     start_after: Option<u64>,

@@ -126,24 +126,24 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
 #[entry_point]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&queries::query_config(deps)?),
-        QueryMsg::State {} => to_binary(&queries::query_state(deps, env)?),
-        QueryMsg::PendingBatch {} => to_binary(&queries::query_pending_batch(deps)?),
-        QueryMsg::PreviousBatch(id) => to_binary(&queries::query_previous_batch(deps, id)?),
+        QueryMsg::Config {} => to_binary(&queries::config(deps)?),
+        QueryMsg::State {} => to_binary(&queries::state(deps, env)?),
+        QueryMsg::PendingBatch {} => to_binary(&queries::pending_batch(deps)?),
+        QueryMsg::PreviousBatch(id) => to_binary(&queries::previous_batch(deps, id)?),
         QueryMsg::PreviousBatches {
             start_after,
             limit,
-        } => to_binary(&queries::query_previous_batches(deps, start_after, limit)?),
+        } => to_binary(&queries::previous_batches(deps, start_after, limit)?),
         QueryMsg::UnbondRequestsByBatch {
             id,
             start_after,
             limit,
-        } => to_binary(&queries::query_unbond_requests_by_batch(deps, id, start_after, limit)?),
+        } => to_binary(&queries::unbond_requests_by_batch(deps, id, start_after, limit)?),
         QueryMsg::UnbondRequestsByUser {
             user,
             start_after,
             limit,
-        } => to_binary(&queries::query_unbond_requests_by_user(deps, user, start_after, limit)?),
+        } => to_binary(&queries::unbond_requests_by_user(deps, user, start_after, limit)?),
     }
 }
 
