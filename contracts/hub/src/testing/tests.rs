@@ -19,7 +19,7 @@ use crate::contract::{execute, instantiate, reply};
 use crate::helpers::{parse_coin, parse_received_fund};
 use crate::math::{compute_delegations, compute_undelegations};
 use crate::state::State;
-use crate::types::{Coins, Delegation, Undelegation};
+use crate::types::{Coins, Delegation};
 
 use super::custom_querier::CustomQuerier;
 use super::helpers::{mock_dependencies, mock_env_with_timestamp, query_helper};
@@ -37,7 +37,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         mock_info("deployer", &[]),
         InstantiateMsg {
             cw20_code_id: 69420,
-            admin: "admin".to_string(),
+            owner: "larry".to_string(),
             name: "Steak Token".to_string(),
             symbol: "STEAK".to_string(),
             decimals: 6,
@@ -53,7 +53,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         res.messages[0],
         SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Instantiate {
-                admin: Some("admin".to_string()),
+                admin: Some("larry".to_string()),
                 code_id: 69420,
                 msg: to_binary(&Cw20InstantiateMsg {
                     name: "Steak Token".to_string(),
@@ -111,6 +111,8 @@ fn proper_instantiation() {
     assert_eq!(
         res,
         ConfigResponse {
+            owner: "larry".to_string(),
+            new_owner: None,
             steak_token: "steak_token".to_string(),
             epoch_period: 259200,
             unbond_period: 1814400,
@@ -158,15 +160,15 @@ fn bonding() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 333334u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 333334u128).to_delegate_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Delegation::new("bob", 333333u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("bob", 333333u128).to_delegate_msg(), 2)
     );
     assert_eq!(
         res.messages[2],
-        SubMsg::reply_on_success(Delegation::new("charlie", 333333u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 333333u128).to_delegate_msg(), 2)
     );
     assert_eq!(
         res.messages[3],
@@ -214,15 +216,15 @@ fn bonding() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 4115u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 4115u128).to_delegate_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Delegation::new("bob", 4115u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("bob", 4115u128).to_delegate_msg(), 2)
     );
     assert_eq!(
         res.messages[2],
-        SubMsg::reply_on_success(Delegation::new("charlie", 4115u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 4115u128).to_delegate_msg(), 2)
     );
     assert_eq!(
         res.messages[3],
@@ -525,7 +527,7 @@ fn reinvesting() {
         res.messages[0],
         SubMsg {
             id: 0,
-            msg: Delegation::new("alice", 78u128).to_cosmos_msg(),
+            msg: Delegation::new("alice", 78u128).to_delegate_msg(),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
@@ -534,7 +536,7 @@ fn reinvesting() {
         res.messages[1],
         SubMsg {
             id: 0,
-            msg: Delegation::new("bob", 78u128).to_cosmos_msg(),
+            msg: Delegation::new("bob", 78u128).to_delegate_msg(),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
@@ -543,7 +545,7 @@ fn reinvesting() {
         res.messages[2],
         SubMsg {
             id: 0,
-            msg: Delegation::new("charlie", 78u128).to_cosmos_msg(),
+            msg: Delegation::new("charlie", 78u128).to_delegate_msg(),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
@@ -747,15 +749,15 @@ fn submitting_batch() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Undelegation::new("alice", 31732u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 31732u128).to_undelegate_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Undelegation::new("bob", 31733u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("bob", 31733u128).to_undelegate_msg(), 2)
     );
     assert_eq!(
         res.messages[2],
-        SubMsg::reply_on_success(Undelegation::new("charlie", 31732u128).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 31732u128).to_undelegate_msg(), 2)
     );
     assert_eq!(
         res.messages[3],
@@ -1024,6 +1026,166 @@ fn withdrawing_unbonded() {
     );
 }
 
+#[test]
+fn adding_validator() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::AddValidator { validator: "dave".to_string() },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::AddValidator { validator: "alice".to_string() },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("validator is already whitelisted"));
+
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::AddValidator { validator: "dave".to_string() },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 0);
+
+    let validators = state.validators.load(deps.as_ref().storage).unwrap();
+    assert_eq!(
+        validators,
+        vec![String::from("alice"), String::from("bob"), String::from("charlie"), String::from("dave")],
+    );
+}
+
+#[test]
+fn removing_validator() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 341667u128),
+        Delegation::new("bob", 341667u128),
+        Delegation::new("charlie", 341666u128),
+    ]);
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::RemoveValidator { validator: "charlie".to_string() },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::RemoveValidator { validator: "dave".to_string() },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("validator is not already whitelisted"));
+
+    // Target: (341667 + 341667 + 341666) / 2 = 512500
+    // Remainder: 0
+    // Alice:   512500 + 0 - 341667 = 170833
+    // Bob:     512500 + 0 - 341667 = 170833
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::RemoveValidator { validator: "charlie".to_string() },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 2);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(
+            Delegation::new("alice", 170833u128).to_redelegate_msg("charlie"),
+            2,
+        ),
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::reply_on_success(
+            Delegation::new("bob", 170833u128).to_redelegate_msg("charlie"),
+            2,
+        ),
+    );
+
+    let validators = state.validators.load(deps.as_ref().storage).unwrap();
+    assert_eq!(
+        validators,
+        vec![String::from("alice"), String::from("bob")],
+    );
+}
+
+#[test]
+fn transferring_ownership() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::TransferOwnership { new_owner: "jake".to_string() },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::TransferOwnership { new_owner: "jake".to_string() },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 0);
+
+    let owner = state.owner.load(deps.as_ref().storage).unwrap();
+    assert_eq!(owner, Addr::unchecked("larry"));
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("pumpkin", &[]),
+        ExecuteMsg::AcceptOwnership {},
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StdError::generic_err("unauthorized: sender is not new owner"));
+
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::AcceptOwnership {},
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 0);
+
+    let owner = state.owner.load(deps.as_ref().storage).unwrap();
+    assert_eq!(owner, Addr::unchecked("jake"));
+}
+
 //--------------------------------------------------------------------------------------------------
 // Queries
 //--------------------------------------------------------------------------------------------------
@@ -1264,36 +1426,41 @@ fn computing_undelegations() {
     // Charlie: 200 - (149 + 0) = 51
     let new_undelegations = compute_undelegations(Uint128::new(451), &current_delegations);
     let expected = vec![
-        Undelegation::new("alice", 250u128),
-        Undelegation::new("bob", 150u128),
-        Undelegation::new("charlie", 51u128),
+        Delegation::new("alice", 250u128),
+        Delegation::new("bob", 150u128),
+        Delegation::new("charlie", 51u128),
     ];
     assert_eq!(new_undelegations, expected);
 }
 
 #[test]
-fn creating_delegation_msg() {
+fn creating_staking_msgs() {
     let d = Delegation::new("alice", 12345u128);
+
     assert_eq!(
-        d.to_cosmos_msg(),
+        d.to_delegate_msg(),
         CosmosMsg::Staking(StakingMsg::Delegate {
             validator: String::from("alice"),
             amount: Coin::new(12345, "uluna"),
         }),
     );
-}
-
-#[test]
-fn creating_undelegation_msg() {
-    let ud = Undelegation::new("bob", 23456u128);
     assert_eq!(
-        ud.to_cosmos_msg(),
+        d.to_undelegate_msg(),
         CosmosMsg::Staking(StakingMsg::Undelegate {
-            validator: String::from("bob"),
-            amount: Coin::new(23456, "uluna"),
+            validator: String::from("alice"),
+            amount: Coin::new(12345, "uluna"),
         }),
     );
+    assert_eq!(
+        d.to_redelegate_msg("bob"),
+        CosmosMsg::Staking(StakingMsg::Redelegate {
+            src_validator: String::from("bob"),
+            dst_validator: String::from("alice"),
+            amount: Coin::new(12345, "uluna"),
+        })
+    );
 }
+
 
 //--------------------------------------------------------------------------------------------------
 // Coins

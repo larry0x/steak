@@ -11,7 +11,7 @@ use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
 
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 
-use crate::helpers::{query_cw20_total_supply, query_delegations};
+use crate::helpers::{query_cw20_total_supply, query_delegations, query_delegation};
 use crate::math::{
     compute_delegations, compute_mint_amount, compute_unbond_amount, compute_undelegations,
 };
@@ -25,6 +25,7 @@ use crate::types::Coins;
 pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Response> {
     let state = State::default();
 
+    state.owner.save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
     state.validators.save(deps.storage, &msg.validators)?;
@@ -41,7 +42,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
 
     Ok(Response::new().add_submessage(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Instantiate {
-            admin: Some(msg.admin),
+            admin: Some(msg.owner), // use the owner as admin for now; can be changed later by a `MsgUpdateAdmin`
             code_id: msg.cw20_code_id,
             msg: to_binary(&Cw20InstantiateMsg {
                 name: msg.name,
@@ -108,7 +109,7 @@ pub fn bond(
 
     let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_delegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .map(|d| SubMsg::reply_on_success(d.to_delegate_msg(), 2))
         .collect();
 
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -224,7 +225,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
         .add_attribute("uluna_bonded", uluna_to_bond);
 
     Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.to_cosmos_msg()))
+        .add_messages(new_delegations.iter().map(|d| d.to_delegate_msg()))
         .add_event(event)
         .add_attribute("action", "steakhub/reinvest"))
 }
@@ -237,11 +238,14 @@ pub fn register_received_coins(
     receiver_key: &str,
     received_coins_key: &str
 ) -> StdResult<Response> {
-    let event = response
+    let event = match response
         .events
         .iter()
         .find(|event| event.ty == event_type)
-        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` event", event_type)))?;
+    {
+        Some(event) => event,
+        None => return Ok(Response::new()), // do nothing if no coin-receiving event is found
+    };
 
     let receiver = &event
         .attributes
@@ -377,7 +381,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
 
     let undelegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_undelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .map(|d| SubMsg::reply_on_success(d.to_undelegate_msg(), 2))
         .collect();
 
     let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
@@ -473,4 +477,106 @@ pub fn withdraw_unbonded(
         .add_message(refund_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/withdraw_unbonded"))
+}
+
+//--------------------------------------------------------------------------------------------------
+// Ownership and whitelisting logics
+//--------------------------------------------------------------------------------------------------
+
+pub fn add_validator(
+    deps: DepsMut,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    state.validators.update(deps.storage, |mut validators| {
+        if validators.contains(&validator) {
+            return Err(StdError::generic_err("validator is already whitelisted"));
+        }
+        validators.push(validator.clone());
+        Ok(validators)
+    })?;
+
+    let event = Event::new("steakhub/validator_added")
+        .add_attribute("validator", validator);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/add_validator"))
+}
+
+pub fn remove_validator(
+    deps: DepsMut,
+    env: Env,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    let validators = state.validators.update(deps.storage, |mut validators| {
+        if !validators.contains(&validator) {
+            return Err(StdError::generic_err("validator is not already whitelisted"));
+        }
+        validators.retain(|v| *v != validator);
+        Ok(validators)
+    })?;
+
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let uluna_to_redelegate = query_delegation(&deps.querier, &validator, &env.contract.address)?.amount;
+
+    let new_redelegations = compute_delegations(uluna_to_redelegate, &delegations);
+
+    let redelegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_redelegations
+        .iter()
+        .map(|d| SubMsg::reply_on_success(d.to_redelegate_msg(&validator), 2))
+        .collect();
+
+    let event = Event::new("steak/validator_removed")
+        .add_attribute("validator", validator);
+
+    Ok(Response::new()
+        .add_submessages(redelegate_submsgs)
+        .add_event(event)
+        .add_attribute("action", "steakhub/remove_validator"))
+}
+
+pub fn transfer_ownership(
+    deps: DepsMut,
+    sender: Addr,
+    new_owner: String,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+    state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "steakhub/transfer_ownership"))
+}
+
+pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    let previous_owner = state.owner.load(deps.storage)?;
+    let new_owner = state.new_owner.load(deps.storage)?;
+
+    if sender != new_owner {
+        return Err(StdError::generic_err("unauthorized: sender is not new owner"));
+    }
+
+    state.owner.save(deps.storage, &sender)?;
+    state.new_owner.remove(deps.storage);
+
+    let event = Event::new("steakhub/ownership_transferred")
+        .add_attribute("new_owner", new_owner)
+        .add_attribute("previous_owner", previous_owner);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/transfer_ownership"))
 }

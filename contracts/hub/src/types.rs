@@ -69,35 +69,24 @@ impl Delegation {
         }
     }
 
-    pub fn to_cosmos_msg(&self) -> CosmosMsg<TerraMsgWrapper> {
+    pub fn to_delegate_msg(&self) -> CosmosMsg<TerraMsgWrapper> {
         CosmosMsg::Staking(StakingMsg::Delegate {
             validator: self.validator.clone(),
             amount: Coin::new(self.amount.u128(), "uluna"),
         })
     }
-}
 
-//--------------------------------------------------------------------------------------------------
-// Undelegation
-//--------------------------------------------------------------------------------------------------
-
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub(crate) struct Undelegation {
-    pub validator: String,
-    pub amount: Uint128,
-}
-
-impl Undelegation {
-    pub fn new<T: Into<Uint128>>(validator: &str, amount: T) -> Self {
-        Self {
-            validator: validator.to_string(),
-            amount: amount.into(),
-        }
-    }
-
-    pub fn to_cosmos_msg(&self) -> CosmosMsg<TerraMsgWrapper> {
+    pub fn to_undelegate_msg(&self) -> CosmosMsg<TerraMsgWrapper> {
         CosmosMsg::Staking(StakingMsg::Undelegate {
             validator: self.validator.clone(),
+            amount: Coin::new(self.amount.u128(), "uluna"),
+        })
+    }
+
+    pub fn to_redelegate_msg(&self, src_validator: &str) -> CosmosMsg<TerraMsgWrapper> {
+        CosmosMsg::Staking(StakingMsg::Redelegate {
+            src_validator: src_validator.to_string(),
+            dst_validator: self.validator.clone(),
             amount: Coin::new(self.amount.u128(), "uluna"),
         })
     }

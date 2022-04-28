@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, Empty, StdResult, Uint128, WasmMsg, Decimal, Coin};
+use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -8,8 +8,8 @@ use terra_cosmwasm::TerraMsgWrapper;
 pub struct InstantiateMsg {
     /// Code ID of the CW20 token contract
     pub cw20_code_id: u64,
-    /// Account to be used as admin for the Steak token contract
-    pub admin: String,
+    /// Account who can call certain privileged functions
+    pub owner: String,
     /// Name of the liquid staking token
     pub name: String,
     /// Symbol of the liquid staking token
@@ -37,6 +37,20 @@ pub enum ExecuteMsg {
     WithdrawUnbonded {
         receiver: Option<String>,
     },
+    /// Add a validator to the whitelist; callable by the owner
+    AddValidator {
+        validator: String,
+    },
+    /// Remove a validator from the whitelist; callable by the owner
+    RemoveValidator{
+        validator: String,
+    },
+    /// Transfer ownership to another account; will not take effect unless the new owner accepts
+    TransferOwnership {
+        new_owner: String,
+    },
+    /// Accept an ownership transfer
+    AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
     /// Submit the current pending batch of unbonding requests to be unbonded
@@ -108,6 +122,10 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
+    /// Account who can call certain privileged functions
+    pub owner: String,
+    /// Pending ownership transfer, awaiting acceptance by the new owner
+    pub new_owner: Option<String>,
     /// Address of the Steak token
     pub steak_token: String,
     /// How often the unbonding queue is to be executed, in seconds
@@ -174,7 +192,7 @@ impl From<UnbondRequest> for UnbondRequestsByBatchResponseItem {
     fn from(s: UnbondRequest) -> Self {
         Self {
             user: s.user.into(),
-            shares: s.shares
+            shares: s.shares,
         }
     }
 }
@@ -191,10 +209,13 @@ impl From<UnbondRequest> for UnbondRequestsByUserResponseItem {
     fn from(s: UnbondRequest) -> Self {
         Self {
             id: s.id,
-            shares: s.shares
+            shares: s.shares,
         }
     }
 }
 
-/// We currently don't take any input parameter for migration
-pub type MigrateMsg = Empty;
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MigrateMsg {
+    /// Account who can call certain privileged functions
+    pub owner: String,
+}

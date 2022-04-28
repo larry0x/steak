@@ -1,6 +1,6 @@
 use cosmwasm_std::Uint128;
 
-use crate::types::{Delegation, Undelegation};
+use crate::types::Delegation;
 
 //--------------------------------------------------------------------------------------------------
 // Minting/burning logics
@@ -92,7 +92,7 @@ pub(crate) fn compute_delegations(
 pub(crate) fn compute_undelegations(
     uluna_to_unbond: Uint128,
     current_delegations: &[Delegation],
-) -> Vec<Undelegation> {
+) -> Vec<Delegation> {
     let uluna_staked: u128 = current_delegations.iter().map(|d| d.amount.u128()).sum();
     let validator_count = current_delegations.len() as u128;
 
@@ -100,7 +100,7 @@ pub(crate) fn compute_undelegations(
     let uluna_per_validator = uluna_to_distribute / validator_count;
     let remainder = uluna_to_distribute % validator_count;
 
-    let mut new_undelegations: Vec<Undelegation> = vec![];
+    let mut new_undelegations: Vec<Delegation> = vec![];
     let mut uluna_available = uluna_to_unbond.u128();
     for (i, d) in current_delegations.iter().enumerate() {
         let remainder_for_validator: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
@@ -116,7 +116,7 @@ pub(crate) fn compute_undelegations(
         uluna_available -= uluna_to_undelegate;
 
         if uluna_to_undelegate > 0 {
-            new_undelegations.push(Undelegation::new(&d.validator, uluna_to_undelegate));
+            new_undelegations.push(Delegation::new(&d.validator, uluna_to_undelegate));
         }
 
         if uluna_available == 0 {

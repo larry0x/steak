@@ -15,6 +15,8 @@ const DEFAULT_LIMIT: u32 = 10;
 pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
     Ok(ConfigResponse {
+        owner: state.owner.load(deps.storage)?.into(),
+        new_owner: state.new_owner.may_load(deps.storage)?.map(|addr| addr.into()),
         steak_token: state.steak_token.load(deps.storage)?.into(),
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
