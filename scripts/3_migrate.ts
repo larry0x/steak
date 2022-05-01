@@ -1,13 +1,13 @@
-import * as fs from "fs";
 import * as path from "path";
 import yargs from "yargs/yargs";
+import { MsgMigrateContract } from "@terra-money/terra.js";
 import * as keystore from "./keystore";
 import {
   createLCDClient,
   createWallet,
   waitForConfirm,
+  sendTxWithConfirm,
   storeCodeWithConfirm,
-  instantiateWithConfirm,
 } from "./helpers";
 
 const argv = yargs(process.argv)
@@ -25,13 +25,14 @@ const argv = yargs(process.argv)
       demandOption: false,
       default: keystore.DEFAULT_KEY_DIR,
     },
-    admin: {
+    "contract-address": {
       type: "string",
-      demandOption: false,
+      demandOption: true,
     },
     msg: {
       type: "string",
       demandOption: false,
+      default: "{}",
     },
     "code-id": {
       type: "number",
@@ -47,22 +48,22 @@ const argv = yargs(process.argv)
 
 (async function () {
   const terra = createLCDClient(argv["network"]);
-  const deployer = await createWallet(terra, argv["key"], argv["key-dir"]);
-  const msg = argv["msg"] ? JSON.parse(fs.readFileSync(path.resolve(argv["msg"]), "utf8")) : {};
+  const admin = await createWallet(terra, argv["key"], argv["key-dir"]);
 
   let codeId = argv["code-id"];
   if (!codeId) {
-    codeId = await storeCodeWithConfirm(deployer, path.resolve(argv["binary"]));
-    console.log(`Code uploaded! Code ID: ${codeId}`);
-    await waitForConfirm("Proceed to deploy contract?");
+    codeId = await storeCodeWithConfirm(admin, path.resolve(argv["binary"]));
+    console.log(`Code uploaded! codeId: ${codeId}`);
+    await waitForConfirm("Proceed to migrate contract?");
   }
 
-  const result = await instantiateWithConfirm(
-    deployer,
-    argv["admin"] ? argv["admin"] : deployer.key.accAddress,
-    codeId,
-    msg
-  );
-  const address = result.logs[0].eventsByType.instantiate_contract.contract_address[0];
-  console.log(`Contract instantiated! Address: ${address}`);
+  const { txhash } = await sendTxWithConfirm(admin, [
+    new MsgMigrateContract(
+      admin.key.accAddress,
+      argv["contract-address"],
+      codeId,
+      JSON.parse(argv["msg"])
+    ),
+  ]);
+  console.log(`Contract migrated! Txhash: ${txhash}`);
 })();

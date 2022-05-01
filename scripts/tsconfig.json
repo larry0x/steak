@@ -2,10 +2,23 @@
   "compilerOptions": {
     "target": "es6",
     "module": "commonjs",
+    "allowJs": false,
     "strict": true,
+    "strictNullChecks": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "exactOptionalPropertyTypes": true,
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    // "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "outDir": "dist",
     "resolveJsonModule": true
   },
-  "include": ["**/*.test.ts", "**/*.spec.ts", "**/*.ts"]
+  "include": ["**/*.ts"]
 }

@@ -1,7 +1,7 @@
-import * as path from "path";
 import yargs from "yargs/yargs";
+import { MsgExecuteContract } from "@terra-money/terra.js";
 import * as keystore from "./keystore";
-import { createLCDClient, createWallet, storeCodeWithConfirm } from "./helpers";
+import { createLCDClient, createWallet, sendTxWithConfirm } from "./helpers";
 
 const argv = yargs(process.argv)
   .options({
@@ -18,18 +18,21 @@ const argv = yargs(process.argv)
       demandOption: false,
       default: keystore.DEFAULT_KEY_DIR,
     },
-    binary: {
+    "hub-address": {
       type: "string",
-      demandOption: false,
-      default: "../artifacts/steak_token.wasm",
+      demandOption: true,
     },
   })
   .parseSync();
 
 (async function () {
   const terra = createLCDClient(argv["network"]);
-  const deployer = await createWallet(terra, argv["key"], argv["key-dir"]);
+  const worker = await createWallet(terra, argv["key"], argv["key-dir"]);
 
-  const codeId = await storeCodeWithConfirm(deployer, path.resolve(argv["binary"]));
-  console.log(`Success! Code ID: ${codeId}`);
+  const { txhash } = await sendTxWithConfirm(worker, [
+    new MsgExecuteContract(worker.key.accAddress, argv["hub-address"], {
+      harvest: {},
+    }),
+  ]);
+  console.log(`Success! Txhash: ${txhash}`);
 })();

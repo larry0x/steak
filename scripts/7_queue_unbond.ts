@@ -18,7 +18,7 @@ const argv = yargs(process.argv)
       demandOption: false,
       default: keystore.DEFAULT_KEY_DIR,
     },
-    "contract-address": {
+    "hub-address": {
       type: "string",
       demandOption: true,
     },
@@ -33,14 +33,14 @@ const argv = yargs(process.argv)
   const terra = createLCDClient(argv["network"]);
   const worker = await createWallet(terra, argv["key"], argv["key-dir"]);
 
-  const config: { steak_token: string } = await terra.wasm.contractQuery(argv["contract-address"], {
+  const config: { steak_token: string } = await terra.wasm.contractQuery(argv["hub-address"], {
     config: {},
   });
 
   const { txhash } = await sendTxWithConfirm(worker, [
     new MsgExecuteContract(worker.key.accAddress, config["steak_token"], {
       send: {
-        contract: argv["contract-address"],
+        contract: argv["hub-address"],
         amount: argv["amount"],
         msg: encodeBase64({
           queue_unbond: {},
