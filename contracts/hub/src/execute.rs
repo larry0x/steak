@@ -13,10 +13,11 @@ use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, U
 
 use crate::helpers::{query_cw20_total_supply, query_delegations, query_delegation};
 use crate::math::{
-    compute_delegations, compute_mint_amount, compute_unbond_amount, compute_undelegations,
+    compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
+    compute_unbond_amount, compute_undelegations,
 };
 use crate::state::State;
-use crate::types::Coins;
+use crate::types::{Coins, Delegation};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -91,6 +92,14 @@ pub fn register_steak_token(
 // Bonding and harvesting logics
 //--------------------------------------------------------------------------------------------------
 
+/// NOTE: In a previous implementation, we split up the deposited Luna over all validators, so that
+/// they all have the same amount of delegation. This is however quite gas-expensive: $1.5 cost in
+/// the case of 15 validators.
+///
+/// To save gas for users, now we simply delegate all deposited Luna to the validator with the
+/// smallest amount of delegation. If delegations become severely unbalance as a result of this
+/// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
+/// to balance the delegations.
 pub fn bond(
     deps: DepsMut,
     env: Env,
@@ -101,16 +110,31 @@ pub fn bond(
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
 
+    // Query the current delegations made to validators, and find the validator with the smallest
+    // delegated amount through a linear search
+    // The code for linear search is a bit uglier than using `sort_by` but cheaper: O(n) vs O(n * log(n))
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let mut validator = &delegations[0].validator;
+    let mut amount = delegations[0].amount;
+    for d in &delegations[1..] {
+        if d.amount < amount {
+            validator = &d.validator;
+            amount = d.amount;
+        }
+    }
+    let new_delegation = Delegation {
+        validator: validator.clone(),
+        amount: uluna_to_bond.u128(),
+    };
+
+    // Query the current supply of Steak and compute the amount to mint
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
-
     let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
-    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
 
-    let delegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_delegations
-        .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_delegate_msg(), 2))
-        .collect();
+    let delegate_submsg = SubMsg::reply_on_success(
+        new_delegation.to_cosmos_msg(),
+        2,
+    );
 
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
@@ -129,14 +153,14 @@ pub fn bond(
         .add_attribute("usteak_minted", usteak_to_mint);
 
     Ok(Response::new()
-        .add_submessages(delegate_submsgs)
+        .add_submessage(delegate_submsg)
         .add_message(mint_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))
 }
 
 pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
-    let withdraw_submsgs: Vec<SubMsg<TerraMsgWrapper>> = deps
+    let withdraw_submsgs = deps
         .querier
         .query_all_delegations(&env.contract.address)?
         .into_iter()
@@ -148,12 +172,12 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> 
                 2,
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
         .iter()
         .map(|callback| callback.into_cosmos_msg(&env.contract.address))
-        .collect::<StdResult<Vec<CosmosMsg<TerraMsgWrapper>>>>()?;
+        .collect::<StdResult<Vec<_>>>()?;
 
     Ok(Response::new()
         .add_submessages(withdraw_submsgs)
@@ -165,21 +189,21 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
-    let all_denoms: Vec<String> = unlocked_coins
+    let all_denoms = unlocked_coins
         .iter()
         .cloned()
         .map(|coin| coin.denom)
         .filter(|denom| denom != "uluna")
-        .collect();
+        .collect::<Vec<_>>();
 
-    let known_denoms: HashSet<String> = TerraQuerier::new(&deps.querier)
+    let known_denoms = TerraQuerier::new(&deps.querier)
         .query_exchange_rates("uluna".to_string(), all_denoms)?
         .exchange_rates
         .into_iter()
         .map(|item| item.quote_denom)
-        .collect();
+        .collect::<HashSet<_>>();
 
-    let swap_submsgs: Vec<SubMsg<TerraMsgWrapper>> = unlocked_coins
+    let swap_submsgs = unlocked_coins
         .iter()
         .cloned()
         .filter(|coin| known_denoms.contains(&coin.denom))
@@ -189,7 +213,7 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
                 3,
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     unlocked_coins.retain(|coin| !known_denoms.contains(&coin.denom));
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
@@ -199,9 +223,12 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
         .add_attribute("action", "steakhub/swap"))
 }
 
-/// NOTE: When delegation Luna here, we don't need to use a `SubMsg` to handle the received coins,
+/// NOTE:
+/// 1. When delegation Luna here, we don't need to use a `SubMsg` to handle the received coins,
 /// because we have already withdrawn all claimable staking rewards previously in the same atomic
 /// execution.
+/// 2. Same as with `bond`, in the latest implementation we only delegate staking rewards with the
+/// validator that has the smallest delegation amount.
 pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
@@ -214,7 +241,15 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
         .amount;
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let new_delegations = compute_delegations(uluna_to_bond, &delegations);
+    let mut validator = &delegations[0].validator;
+    let mut amount = delegations[0].amount;
+    for d in &delegations[1..] {
+        if d.amount < amount {
+            validator = &d.validator;
+            amount = d.amount;
+        }
+    }
+    let new_delegation = Delegation::new(validator, uluna_to_bond.u128());
 
     unlocked_coins.retain(|coin| coin.denom != "uluna");
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
@@ -225,28 +260,47 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
         .add_attribute("uluna_bonded", uluna_to_bond);
 
     Ok(Response::new()
-        .add_messages(new_delegations.iter().map(|d| d.to_delegate_msg()))
+        .add_message(new_delegation.to_cosmos_msg())
         .add_event(event)
         .add_attribute("action", "steakhub/reinvest"))
 }
 
+/// NOTE: a `SubMsgExecutionResponse` may contain multiple coin-receiving events, must handle them indivitually
 pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
-    response: SubMsgExecutionResponse,
+    mut events: Vec<Event>,
     event_type: &str,
     receiver_key: &str,
     received_coins_key: &str
 ) -> StdResult<Response> {
-    let event = match response
-        .events
-        .iter()
-        .find(|event| event.ty == event_type)
-    {
-        Some(event) => event,
-        None => return Ok(Response::new()), // do nothing if no coin-receiving event is found
-    };
+    events.retain(|event| event.ty == event_type);
+    if events.is_empty() {
+        return Ok(Response::new());
+    }
 
+    let mut received_coins = Coins(vec![]);
+    for event in &events {
+        received_coins.add_many(&parse_coin_receiving_event(&env, event, receiver_key, received_coins_key)?)?;
+    }
+
+    let state = State::default();
+    state.unlocked_coins.update(deps.storage, |coins| -> StdResult<_> {
+        let mut coins = Coins(coins);
+        coins.add_many(&received_coins)?;
+        Ok(coins.0)
+    })?;
+
+    Ok(Response::new()
+        .add_attribute("action", "steakhub/register_received_coins"))
+}
+
+fn parse_coin_receiving_event(
+    env: &Env,
+    event: &Event,
+    receiver_key: &str,
+    received_coins_key: &str
+) -> StdResult<Coins> {
     let receiver = &event
         .attributes
         .iter()
@@ -267,14 +321,7 @@ pub fn register_received_coins(
         Coins(vec![])
     };
 
-    let state = State::default();
-    state.unlocked_coins.update(deps.storage, |coins| -> StdResult<_> {
-        let coins = Coins(coins).add_many(&received_coins)?;
-        Ok(coins.0)
-    })?;
-
-    Ok(Response::new()
-        .add_attribute("action", "steakhub/register_received_coins"))
+    Ok(received_coins)
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -379,10 +426,10 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         },
     )?;
 
-    let undelegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_undelegations
+    let undelegate_submsgs = new_undelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_undelegate_msg(), 2))
-        .collect();
+        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .collect::<Vec<_>>();
 
     let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
@@ -428,7 +475,7 @@ pub fn withdraw_unbonded(
             let (_, v) = item?;
             Ok(v)
         })
-        .collect::<StdResult<Vec<UnbondRequest>>>()?;
+        .collect::<StdResult<Vec<_>>>()?;
 
     let mut total_uluna_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
@@ -480,8 +527,26 @@ pub fn withdraw_unbonded(
 }
 
 //--------------------------------------------------------------------------------------------------
-// Ownership and whitelisting logics
+// Ownership and management logics
 //--------------------------------------------------------------------------------------------------
+
+pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+    let validators = state.validators.load(deps.storage)?;
+
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+
+    let new_redelegations = compute_redelegations_for_rebalancing(&delegations);
+
+    let redelegate_submsgs = new_redelegations
+        .iter()
+        .map(|rd| SubMsg::reply_on_success(rd.to_cosmos_msg(), 2))
+        .collect::<Vec<_>>();
+
+    Ok(Response::new()
+        .add_submessages(redelegate_submsgs)
+        .add_attribute("action", "steakhub/rebalance"))
+}
 
 pub fn add_validator(
     deps: DepsMut,
@@ -527,14 +592,13 @@ pub fn remove_validator(
     })?;
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let uluna_to_redelegate = query_delegation(&deps.querier, &validator, &env.contract.address)?.amount;
+    let delegation_to_remove = query_delegation(&deps.querier, &validator, &env.contract.address)?;
+    let new_redelegations = compute_redelegations_for_removal(&delegation_to_remove, &delegations);
 
-    let new_redelegations = compute_delegations(uluna_to_redelegate, &delegations);
-
-    let redelegate_submsgs: Vec<SubMsg<TerraMsgWrapper>> = new_redelegations
+    let redelegate_submsgs = new_redelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_redelegate_msg(&validator), 2))
-        .collect();
+        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .collect::<Vec<_>>();
 
     let event = Event::new("steak/validator_removed")
         .add_attribute("validator", validator);

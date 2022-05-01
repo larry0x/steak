@@ -29,7 +29,7 @@ pub(crate) fn query_delegation(
 ) -> StdResult<Delegation> {
     Ok(Delegation {
         validator: validator.to_string(),
-        amount: querier.query_delegation(delegator_addr, validator)?.map(|fd| fd.amount.amount).unwrap_or_else(Uint128::zero),
+        amount: querier.query_delegation(delegator_addr, validator)?.map(|fd| fd.amount.amount.u128()).unwrap_or(0),
     })
 }
 

@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,8 @@ pub enum ExecuteMsg {
     AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
+    /// Use redelegations to balance the amounts of Luna delegated to validators
+    Rebalance {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
     /// Callbacks; can only be invoked by the contract itself
@@ -214,8 +216,4 @@ impl From<UnbondRequest> for UnbondRequestsByUserResponseItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {
-    /// Account who can call certain privileged functions
-    pub owner: String,
-}
+pub type MigrateMsg = Empty;

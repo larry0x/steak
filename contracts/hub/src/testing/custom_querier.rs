@@ -75,7 +75,7 @@ impl CustomQuerier {
             .map(|d| FullDelegation {
                 delegator: Addr::unchecked(MOCK_CONTRACT_ADDR),
                 validator: d.validator.clone(),
-                amount: Coin::new(d.amount.u128(), "uluna"),
+                amount: Coin::new(d.amount, "uluna"),
                 can_redelegate: Coin::new(0, "uluna"),
                 accumulated_rewards: vec![],
             })

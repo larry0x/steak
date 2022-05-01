@@ -58,6 +58,7 @@ pub fn execute(
         } => execute::transfer_ownership(deps, info.sender, new_owner),
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
+        ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
     }
@@ -116,7 +117,7 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
         2 => execute::register_received_coins(
             deps,
             env,
-            unwrap_reply(reply)?,
+            unwrap_reply(reply)?.events,
             "coin_received",
             "receiver",
             "amount",
@@ -124,7 +125,7 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
         3 => execute::register_received_coins(
             deps,
             env,
-            unwrap_reply(reply)?,
+            unwrap_reply(reply)?.events,
             "swap",
             "recipient",
             "swap_coin",
@@ -158,10 +159,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[entry_point]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
-    let state = State::default();
-
-    state.owner.save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
-
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::new())
 }
