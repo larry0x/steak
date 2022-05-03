@@ -55,6 +55,8 @@ pub enum ExecuteMsg {
     Harvest {},
     /// Use redelegations to balance the amounts of Luna delegated to validators
     Rebalance {},
+    /// Update Luna amounts in unbonding batches to reflect any slashing or rounding errors
+    Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
     /// Callbacks; can only be invoked by the contract itself
@@ -164,6 +166,8 @@ pub struct PendingBatch {
 pub struct Batch {
     /// ID of this batch
     pub id: u64,
+    /// Whether this batch has already been reconciled
+    pub reconciled: bool,
     /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
     pub total_shares: Uint128,
     /// Amount of `uluna` in this batch that have not been claimed

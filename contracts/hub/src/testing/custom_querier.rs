@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cosmwasm_std::testing::{StakingQuerier, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{MOCK_CONTRACT_ADDR, BankQuerier, StakingQuerier};
 use cosmwasm_std::{
     from_binary, from_slice, Addr, Coin, Decimal, FullDelegation, Querier, QuerierResult,
     QueryRequest, SystemError, WasmQuery,
@@ -12,12 +12,13 @@ use crate::types::Delegation;
 
 use super::cw20_querier::Cw20Querier;
 use super::helpers::err_unsupported_query;
-use super::native_querier::NativeQuerier;
+use super::terra_querier::TerraQuerier;
 
 #[derive(Default)]
 pub(super) struct CustomQuerier {
     pub cw20_querier: Cw20Querier,
-    pub native_querier: NativeQuerier,
+    pub terra_querier: TerraQuerier,
+    pub bank_querier: BankQuerier,
     pub staking_querier: StakingQuerier,
 }
 
@@ -58,19 +59,23 @@ impl CustomQuerier {
             .insert(token.to_string(), total_supply);
     }
 
-    pub fn set_native_exchange_rate(
+    pub fn set_terra_exchange_rate(
         &mut self,
         base_denom: &str,
         quote_denom: &str,
         exchange_rate: Decimal,
     ) {
-        self.native_querier
+        self.terra_querier
             .exchange_rates
             .insert((base_denom.to_string(), quote_denom.to_string()), exchange_rate);
     }
 
+    pub fn set_bank_balances(&mut self, balances: &[Coin]) {
+        self.bank_querier = BankQuerier::new(&[(MOCK_CONTRACT_ADDR, balances)])
+    }
+
     pub fn set_staking_delegations(&mut self, delegations: &[Delegation]) {
-        let fds: Vec<FullDelegation> = delegations
+        let fds = delegations
             .iter()
             .map(|d| FullDelegation {
                 delegator: Addr::unchecked(MOCK_CONTRACT_ADDR),
@@ -79,7 +84,7 @@ impl CustomQuerier {
                 can_redelegate: Coin::new(0, "uluna"),
                 accumulated_rewards: vec![],
             })
-            .collect();
+            .collect::<Vec<_>>();
 
         self.staking_querier = StakingQuerier::new("uluna", &[], &fds);
     }
@@ -100,7 +105,9 @@ impl CustomQuerier {
             QueryRequest::Custom(TerraQueryWrapper {
                 route: _,
                 query_data,
-            }) => self.native_querier.handle_query(query_data),
+            }) => self.terra_querier.handle_query(query_data),
+
+            QueryRequest::Bank(query) => self.bank_querier.query(query),
 
             QueryRequest::Staking(query) => self.staking_querier.query(query),
 

@@ -10,3 +10,6 @@ pub mod types;
 
 #[cfg(test)]
 mod testing;
+
+// Legacy code; only used in migrations
+mod legacy;

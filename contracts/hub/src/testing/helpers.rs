@@ -26,7 +26,7 @@ pub(super) fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, CustomQueri
     }
 }
 
-pub(super) fn mock_env_with_timestamp(timestamp: u64) -> Env {
+pub(super) fn mock_env_at_timestamp(timestamp: u64) -> Env {
     Env {
         block: BlockInfo {
             height: 12_345,

@@ -6,12 +6,12 @@ use terra_cosmwasm::{ExchangeRateItem, ExchangeRatesResponse, TerraQuery};
 use super::helpers::err_unsupported_query;
 
 #[derive(Default)]
-pub struct NativeQuerier {
+pub struct TerraQuerier {
     /// Maps (base_denom, quote_denom) pair to exchange rate
     pub exchange_rates: HashMap<(String, String), Decimal>,
 }
 
-impl NativeQuerier {
+impl TerraQuerier {
     /// We only implement the `exchange_rates` query as that is the only one we need in the unit tests
     ///
     /// NOTE: When querying exchange rates, Terra's oracle module behaves in the following way:

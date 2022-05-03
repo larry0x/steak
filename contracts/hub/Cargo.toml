@@ -20,5 +20,9 @@ cw-storage-plus = "0.9"
 steak = { path = "../../packages/steak" }
 terra-cosmwasm = "2.2"
 
+# These two are only used in legacy code; to be removed later
+schemars = "0.8.1"
+serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+
 [dev-dependencies]
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }

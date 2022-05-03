@@ -2,6 +2,8 @@ use std::{cmp, cmp::Ordering};
 
 use cosmwasm_std::Uint128;
 
+use steak::hub::Batch;
+
 use crate::types::{Delegation, Redelegation, Undelegation};
 
 //--------------------------------------------------------------------------------------------------
@@ -191,4 +193,28 @@ pub(crate) fn compute_redelegations_for_rebalancing(
     }
 
     new_redelegations
+}
+
+//--------------------------------------------------------------------------------------------------
+// Batch logics
+//--------------------------------------------------------------------------------------------------
+
+/// If the received uluna amount after the unbonding period is less than expected, e.g. due to rounding
+/// error or the validator(s) being slashed, then deduct the difference in amount evenly from each
+/// unreconciled batch.
+///
+/// The idea of "reconciling" is based on Stader's implementation:
+/// https://github.com/stader-labs/stader-liquid-token/blob/v0.2.1/contracts/staking/src/contract.rs#L968-L1048
+pub(crate) fn reconcile_batches(batches: &mut [Batch], uluna_to_deduct: Uint128) {
+    let batch_count = batches.len() as u128;
+    let uluna_per_batch = uluna_to_deduct.u128() / batch_count;
+    let remainder = uluna_to_deduct.u128() % batch_count;
+
+    for (i, batch) in batches.iter_mut().enumerate() {
+        let remainder_for_batch: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
+        let uluna_for_batch = uluna_per_batch + remainder_for_batch;
+
+        batch.uluna_unclaimed -= Uint128::new(uluna_for_batch);
+        batch.reconciled = true;
+    }
 }

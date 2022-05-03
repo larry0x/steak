@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, OwnedDeps, Reply,
-    ReplyOn, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order, OwnedDeps,
+    Reply, ReplyOn, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
@@ -22,7 +22,7 @@ use crate::state::State;
 use crate::types::{Coins, Delegation, Redelegation, Undelegation};
 
 use super::custom_querier::CustomQuerier;
-use super::helpers::{mock_dependencies, mock_env_with_timestamp, query_helper};
+use super::helpers::{mock_dependencies, mock_env_at_timestamp, query_helper};
 
 //--------------------------------------------------------------------------------------------------
 // Test setup
@@ -33,7 +33,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
 
     let res = instantiate(
         deps.as_mut(),
-        mock_env_with_timestamp(10000),
+        mock_env_at_timestamp(10000),
         mock_info("deployer", &[]),
         InstantiateMsg {
             cw20_code_id: 69420,
@@ -82,7 +82,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
 
     let res = reply(
         deps.as_mut(),
-        mock_env_with_timestamp(10000),
+        mock_env_at_timestamp(10000),
         Reply {
             id: 1,
             result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
@@ -394,17 +394,17 @@ fn swapping() {
     let state = State::default();
 
     // Only denoms that has exchange rates defined in the oracle module can be swapped to Luna
-    deps.querier.set_native_exchange_rate(
+    deps.querier.set_terra_exchange_rate(
         "uluna",
         "ukrw",
         Decimal::from_str("129108.193653786399948012").unwrap(),
     );
-    deps.querier.set_native_exchange_rate(
+    deps.querier.set_terra_exchange_rate(
         "uluna",
         "usdr",
         Decimal::from_str("77.056327779353129245").unwrap(),
     );
-    deps.querier.set_native_exchange_rate(
+    deps.querier.set_terra_exchange_rate(
         "uluna",
         "uusd",
         Decimal::from_str("105.476484668836552061").unwrap(),
@@ -544,7 +544,7 @@ fn queuing_unbond() {
     // request is saved, but not the pending batch is not submitted for unbonding
     let res = execute(
         deps.as_mut(),
-        mock_env_with_timestamp(12345), // est_unbond_start_time = 269200
+        mock_env_at_timestamp(12345), // est_unbond_start_time = 269200
         mock_info("steak_token", &[]),
         ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
             sender: "user_1".to_string(),
@@ -563,7 +563,7 @@ fn queuing_unbond() {
     // request is saved, and the pending is automatically submitted for unbonding
     let res = execute(
         deps.as_mut(),
-        mock_env_with_timestamp(269201), // est_unbond_start_time = 269200
+        mock_env_at_timestamp(269201), // est_unbond_start_time = 269200
         mock_info("steak_token", &[]),
         ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
             sender: "user_2".to_string(),
@@ -695,7 +695,7 @@ fn submitting_batch() {
     // Charlie: 345,781 - (314,049 + 0) = 31,732
     let res = execute(
         deps.as_mut(),
-        mock_env_with_timestamp(269201),
+        mock_env_at_timestamp(269201),
         mock_info(MOCK_CONTRACT_ADDR, &[]),
         ExecuteMsg::SubmitBatch {},
     )
@@ -748,11 +748,119 @@ fn submitting_batch() {
         previous_batch,
         Batch {
             id: 1,
+            reconciled: false,
             total_shares: Uint128::new(92876),
             uluna_unclaimed: Uint128::new(95197),
             est_unbond_end_time: 2083601 // 269,201 + 1,814,400
         }
     );
+}
+
+#[test]
+fn reconciling() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    let previous_batches = vec![
+        Batch {
+            id: 1,
+            reconciled: true,
+            total_shares: Uint128::new(92876),
+            uluna_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
+            est_unbond_end_time: 10000,
+        },
+        Batch {
+            id: 2,
+            reconciled: false,
+            total_shares: Uint128::new(1345),
+            uluna_unclaimed: Uint128::new(1385), // 1.030 Luna per Steak
+            est_unbond_end_time: 20000,
+        },
+        Batch {
+            id: 3,
+            reconciled: false,
+            total_shares: Uint128::new(1456),
+            uluna_unclaimed: Uint128::new(1506), // 1.035 Luna per Steak
+            est_unbond_end_time: 30000,
+        },
+        Batch {
+            id: 4,
+            reconciled: false,
+            total_shares: Uint128::new(1567),
+            uluna_unclaimed: Uint128::new(1629), // 1.040 Luna per Steak
+            est_unbond_end_time: 40000,          // not yet finished unbonding, ignored
+        }
+    ];
+
+    for previous_batch in &previous_batches {
+        state
+            .previous_batches
+            .save(deps.as_mut().storage, previous_batch.id.into(), previous_batch)
+            .unwrap();
+    }
+
+    state.unlocked_coins.save(deps.as_mut().storage, &vec![
+        Coin::new(10000, "uluna"),
+        Coin::new(234, "ukrw"),
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ])
+    .unwrap();
+
+    deps.querier.set_bank_balances(&[
+        Coin::new(12345, "uluna"),
+        Coin::new(234, "ukrw"),
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ]);
+
+    execute(
+        deps.as_mut(),
+        mock_env_at_timestamp(35000),
+        mock_info("worker", &[]),
+        ExecuteMsg::Reconcile {}
+    ).unwrap();
+
+    // Expected received: batch 2 + batch 3 = 1385 + 1506 = 2891
+    // Expected unlocked: 10000
+    // Expected: 12891
+    // Actual: 12345
+    // Shortfall: 12891 - 12345 = 456
+    //
+    // uluna per batch: 546 / 2 = 273
+    // remainder: 0
+    // batch 2: 1385 - 273 = 1112
+    // batch 3: 1506 - 273 = 1233
+    let batch = state.previous_batches.load(deps.as_ref().storage, 2u64.into()).unwrap();
+    assert_eq!(
+        batch,
+        Batch {
+            id: 2,
+            reconciled: true,
+            total_shares: Uint128::new(1345),
+            uluna_unclaimed: Uint128::new(1112), // 1385 - 273
+            est_unbond_end_time: 20000,
+        }
+    );
+
+    let batch = state.previous_batches.load(deps.as_ref().storage, 3u64.into()).unwrap();
+    assert_eq!(
+        batch,
+        Batch {
+            id: 3,
+            reconciled: true,
+            total_shares: Uint128::new(1456),
+            uluna_unclaimed: Uint128::new(1233), // 1506 - 273
+            est_unbond_end_time: 30000,
+        }
+    );
+
+    // Batches 1 and 4 should not have changed
+    let batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
+    assert_eq!(batch, previous_batches[0]);
+
+    let batch = state.previous_batches.load(deps.as_ref().storage, 4u64.into()).unwrap();
+    assert_eq!(batch, previous_batches[3]);
 }
 
 #[test]
@@ -806,22 +914,32 @@ fn withdrawing_unbonded() {
     let previous_batches = vec![
         Batch {
             id: 1,
+            reconciled: true,
             total_shares: Uint128::new(92876),
             uluna_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
+            reconciled: true,
             total_shares: Uint128::new(34567),
             uluna_unclaimed: Uint128::new(35604), // 1.030 Luna per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 3,
+            reconciled: false,                    // finished unbonding, but not reconciled; ignored
             total_shares: Uint128::new(45678),
             uluna_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
-            est_unbond_end_time: 30000,
+            est_unbond_end_time: 20000,
         },
+        Batch {
+            id: 4,
+            reconciled: true,
+            total_shares: Uint128::new(56789),
+            uluna_unclaimed: Uint128::new(59060), // 1.040 Luna per Steak
+            est_unbond_end_time: 30000,           // reconciled, but not yet finished unbonding; ignored
+        }
     ];
 
     for previous_batch in &previous_batches {
@@ -846,7 +964,7 @@ fn withdrawing_unbonded() {
     // Attempt to withdraw before any batch has completed unbonding. Should error
     let err = execute(
         deps.as_mut(),
-        mock_env_with_timestamp(5000),
+        mock_env_at_timestamp(5000),
         mock_info("user_1", &[]),
         ExecuteMsg::WithdrawUnbonded {
             receiver: None,
@@ -869,7 +987,7 @@ fn withdrawing_unbonded() {
     // Batch 2 is completely withdrawn, should be purged from storage
     let res = execute(
         deps.as_mut(),
-        mock_env_with_timestamp(25000),
+        mock_env_at_timestamp(25000),
         mock_info("user_1", &[]),
         ExecuteMsg::WithdrawUnbonded {
             receiver: None,
@@ -891,12 +1009,13 @@ fn withdrawing_unbonded() {
         }
     );
 
-    // Pending batches should have been updated
+    // Previous batches should have been updated
     let batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
     assert_eq!(
         batch,
         Batch {
             id: 1,
+            reconciled: true,
             total_shares: Uint128::new(69420),
             uluna_unclaimed: Uint128::new(71155),
             est_unbond_end_time: 10000,
@@ -937,7 +1056,7 @@ fn withdrawing_unbonded() {
     // User 3 attempt to withdraw; also specifying a receiver
     let res = execute(
         deps.as_mut(),
-        mock_env_with_timestamp(25000),
+        mock_env_at_timestamp(25000),
         mock_info("user_3", &[]),
         ExecuteMsg::WithdrawUnbonded {
             receiver: Some("user_2".to_string()),
@@ -1152,15 +1271,31 @@ fn querying_previous_batches() {
     let batches = vec![
         Batch {
             id: 1,
+            reconciled: false,
             total_shares: Uint128::new(123),
-            uluna_unclaimed: Uint128::new(456),
+            uluna_unclaimed: Uint128::new(678),
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
-            total_shares: Uint128::new(345),
-            uluna_unclaimed: Uint128::new(456),
+            reconciled: true,
+            total_shares: Uint128::new(234),
+            uluna_unclaimed: Uint128::new(789),
             est_unbond_end_time: 15000,
+        },
+        Batch {
+            id: 3,
+            reconciled: false,
+            total_shares: Uint128::new(345),
+            uluna_unclaimed: Uint128::new(890),
+            est_unbond_end_time: 20000,
+        },
+        Batch {
+            id: 4,
+            reconciled: true,
+            total_shares: Uint128::new(456),
+            uluna_unclaimed: Uint128::new(999),
+            est_unbond_end_time: 25000,
         },
     ];
 
@@ -1169,12 +1304,14 @@ fn querying_previous_batches() {
         state.previous_batches.save(deps.as_mut().storage, batch.id.into(), batch).unwrap();
     }
 
+    // Querying a single batch
     let res: Batch = query_helper(deps.as_ref(), QueryMsg::PreviousBatch(1));
     assert_eq!(res, batches[0].clone());
 
     let res: Batch = query_helper(deps.as_ref(), QueryMsg::PreviousBatch(2));
     assert_eq!(res, batches[1].clone());
 
+    // Query multiple batches
     let res: Vec<Batch> = query_helper(
         deps.as_ref(),
         QueryMsg::PreviousBatches {
@@ -1191,16 +1328,45 @@ fn querying_previous_batches() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![batches[1].clone()]);
+    assert_eq!(res, vec![batches[1].clone(), batches[2].clone(), batches[3].clone()]);
 
     let res: Vec<Batch> = query_helper(
         deps.as_ref(),
         QueryMsg::PreviousBatches {
-            start_after: Some(2),
+            start_after: Some(4),
             limit: None,
         },
     );
     assert_eq!(res, vec![]);
+
+    // Query multiple batches, indexed by whether it has been reconciled
+    let res = state
+        .previous_batches
+        .idx
+        .reconciled
+        .prefix(true.into())
+        .range(deps.as_ref().storage, None, None, Order::Ascending)
+        .map(|item| {
+            let (_, v) = item.unwrap();
+            v
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(res, vec![batches[1].clone(), batches[3].clone()]);
+
+    let res = state
+        .previous_batches
+        .idx
+        .reconciled
+        .prefix(false.into())
+        .range(deps.as_ref().storage, None, None, Order::Ascending)
+        .map(|item| {
+            let (_, v) = item.unwrap();
+            v
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(res, vec![batches[0].clone(), batches[2].clone()]);
 }
 
 #[test]

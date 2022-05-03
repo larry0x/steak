@@ -14,7 +14,7 @@ use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, U
 use crate::helpers::{query_cw20_total_supply, query_delegations, query_delegation};
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
-    compute_unbond_amount, compute_undelegations,
+    compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
 use crate::state::State;
 use crate::types::{Coins, Delegation};
@@ -410,6 +410,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         pending_batch.id.into(),
         &Batch {
             id: pending_batch.id,
+            reconciled: false,
             total_shares: pending_batch.usteak_to_burn,
             uluna_unclaimed: uluna_to_unbond,
             est_unbond_end_time: current_time + unbond_period,
@@ -453,6 +454,70 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         .add_attribute("action", "steakhub/unbond"))
 }
 
+pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+    let current_time = env.block.time.seconds();
+
+    // Load batches that have not been reconciled
+    let all_batches = state
+        .previous_batches
+        .idx
+        .reconciled
+        .prefix(false.into())
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|item| {
+            let (_, v) = item?;
+            Ok(v)
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    let mut batches = all_batches
+        .into_iter()
+        .filter(|b| current_time > b.est_unbond_end_time)
+        .collect::<Vec<_>>();
+
+    let uluna_expected_received: Uint128 = batches
+        .iter()
+        .map(|b| b.uluna_unclaimed)
+        .sum();
+
+    if uluna_expected_received.is_zero() {
+        return Ok(Response::new());
+    }
+
+    let unlocked_coins = state.unlocked_coins.load(deps.storage)?;
+    let uluna_expected_unlocked = Coins(unlocked_coins).find("uluna").amount;
+
+    let uluna_expected = uluna_expected_received + uluna_expected_unlocked;
+    let uluna_actual = deps.querier.query_balance(&env.contract.address, "uluna")?.amount;
+
+    if uluna_actual >= uluna_expected {
+        return Ok(Response::new());
+    }
+
+    let uluna_to_deduct = uluna_expected - uluna_actual;
+
+    reconcile_batches(&mut batches, uluna_to_deduct);
+
+    for batch in &batches {
+        state.previous_batches.save(deps.storage, batch.id.into(), batch)?;
+    }
+
+    let ids = batches
+        .iter()
+        .map(|b| b.id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let event = Event::new("steakhub/reconciled")
+        .add_attribute("ids", ids)
+        .add_attribute("uluna_deducted", uluna_to_deduct.to_string());
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/reconcile"))
+}
+
 pub fn withdraw_unbonded(
     deps: DepsMut,
     env: Env,
@@ -477,11 +542,17 @@ pub fn withdraw_unbonded(
         })
         .collect::<StdResult<Vec<_>>>()?;
 
+    // NOTE: Luna in the following batches are withdrawn it the batch:
+    // - is a _previous_ batch, not a _pending_ batch
+    // - is reconciled
+    // - has finished unbonding
+    // If not sure whether the batches have been reconciled, the user should first invoke `ExecuteMsg::Reconcile`
+    // before withdrawing.
     let mut total_uluna_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
     for request in &requests {
         if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id.into()) {
-            if batch.est_unbond_end_time < current_time {
+            if batch.reconciled && batch.est_unbond_end_time < current_time {
                 let uluna_to_refund = batch
                     .uluna_unclaimed
                     .multiply_ratio(request.shares, batch.total_shares);
@@ -493,7 +564,7 @@ pub fn withdraw_unbonded(
                 batch.uluna_unclaimed -= uluna_to_refund;
 
                 if batch.total_shares.is_zero() {
-                    state.previous_batches.remove(deps.storage, request.id.into());
+                    state.previous_batches.remove(deps.storage, request.id.into())?;
                 } else {
                     state.previous_batches.save(deps.storage, batch.id.into(), &batch)?;
                 }
@@ -543,8 +614,14 @@ pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
         .map(|rd| SubMsg::reply_on_success(rd.to_cosmos_msg(), 2))
         .collect::<Vec<_>>();
 
+    let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
+
+    let event = Event::new("steakhub/rebalanced")
+        .add_attribute("uluna_moved", amount.to_string());
+
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
+        .add_event(event)
         .add_attribute("action", "steakhub/rebalance"))
 }
 

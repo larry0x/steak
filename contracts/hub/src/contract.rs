@@ -8,6 +8,7 @@ use terra_cosmwasm::TerraMsgWrapper;
 use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
 use crate::helpers::{parse_received_fund, unwrap_reply};
+use crate::legacy::migrate_batches;
 use crate::state::State;
 use crate::{execute, queries};
 
@@ -59,6 +60,7 @@ pub fn execute(
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
         ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
+        ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
     }
@@ -159,6 +161,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[entry_point]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
-    Ok(Response::new())
+pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response<TerraMsgWrapper>> {
+    let event = migrate_batches(deps.storage)?;
+
+    let res = execute::reconcile(deps, env)?;
+
+    Ok(res.add_event(event))
 }

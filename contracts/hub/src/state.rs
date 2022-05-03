@@ -1,7 +1,9 @@
 use cosmwasm_std::{Addr, Coin, Storage, StdError, StdResult};
-use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex, U64Key};
+use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex, U64Key};
 
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
+
+use crate::types::BooleanKey;
 
 pub(crate) struct State<'a> {
     /// Account who can call certain privileged functions
@@ -21,14 +23,21 @@ pub(crate) struct State<'a> {
     /// The current batch of unbonding requests queded to be executed
     pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
-    pub previous_batches: Map<'a, U64Key, Batch>,
+    pub previous_batches: IndexedMap<'a, U64Key, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in unbonding batches
     pub unbond_requests: IndexedMap<'a, (U64Key, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
 }
 
 impl Default for State<'static> {
     fn default() -> Self {
-        let indexes = UnbondRequestsIndexes {
+        let pb_indexes = PreviousBatchesIndexes {
+            reconciled: MultiIndex::new(
+                |d: &Batch, k: Vec<u8>| (d.reconciled.into(), k),
+                "previous_batches",
+                "previous_batches__reconciled",
+            ),
+        };
+        let ubr_indexes = UnbondRequestsIndexes {
             user: MultiIndex::new(
                 |d: &UnbondRequest, k: Vec<u8>| (d.user.clone().into(), k),
                 "unbond_requests",
@@ -44,8 +53,8 @@ impl Default for State<'static> {
             validators: Item::new("validators"),
             unlocked_coins: Item::new("unlocked_coins"),
             pending_batch: Item::new("pending_batch"),
-            previous_batches: Map::new("previous_batches"),
-            unbond_requests: IndexedMap::new("unbond_requests", indexes),
+            previous_batches: IndexedMap::new("previous_batches", pb_indexes),
+            unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
         }
     }
 }
@@ -61,7 +70,20 @@ impl<'a> State<'a> {
     }
 }
 
+pub(crate) struct PreviousBatchesIndexes<'a> {
+    // pk goes to second tuple element
+    pub reconciled: MultiIndex<'a, (BooleanKey, Vec<u8>), Batch>,
+}
+
+impl<'a> IndexList<Batch> for PreviousBatchesIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<Batch>> + '_> {
+        let v: Vec<&dyn Index<Batch>> = vec![&self.reconciled];
+        Box::new(v.into_iter())
+    }
+}
+
 pub(crate) struct UnbondRequestsIndexes<'a> {
+    // pk goes to second tuple element
     pub user: MultiIndex<'a, (String, Vec<u8>), UnbondRequest>,
 }
 
