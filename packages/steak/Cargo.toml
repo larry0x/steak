@@ -1,9 +1,11 @@
 [package]
 name = "steak"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["larry <gm@larry.engineer>"]
 edition = "2018"
+description = "Liquid staking protocol for the cosmos"
 license = "GPL-3.0-or-later"
+homepage = "https://steak.club"
 repository = "https://github.com/st4k3h0us3/steak-contracts"
 
 [dependencies]
