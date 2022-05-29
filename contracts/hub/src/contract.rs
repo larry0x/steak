@@ -62,6 +62,7 @@ pub fn execute(
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
+        ExecuteMsg::UpdateConfig { protocol_fee_contract, protocol_reward_fee } => execute::update_config(deps, info.sender, protocol_fee_contract, protocol_reward_fee)
     }
 }
 
@@ -106,7 +107,6 @@ fn callback(
     }
 
     match callback_msg {
-        CallbackMsg::Swap {} => execute::swap(deps),
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cosmwasm_std::testing::{MOCK_CONTRACT_ADDR, BankQuerier, StakingQuerier};
 use cosmwasm_std::{
-    from_binary, from_slice, Addr, Coin, Decimal, FullDelegation, Querier, QuerierResult,
+    from_binary, from_slice, Addr, Coin,  FullDelegation, Querier, QuerierResult,
     QueryRequest, SystemError, WasmQuery,
 };
 use cw20::Cw20QueryMsg;
@@ -12,12 +12,10 @@ use crate::types::Delegation;
 
 use super::cw20_querier::Cw20Querier;
 use super::helpers::err_unsupported_query;
-use super::terra_querier::TerraQuerier;
 
 #[derive(Default)]
 pub(super) struct CustomQuerier {
     pub cw20_querier: Cw20Querier,
-    pub terra_querier: TerraQuerier,
     pub bank_querier: BankQuerier,
     pub staking_querier: StakingQuerier,
 }
@@ -59,17 +57,6 @@ impl CustomQuerier {
             .insert(token.to_string(), total_supply);
     }
 
-    pub fn set_terra_exchange_rate(
-        &mut self,
-        base_denom: &str,
-        quote_denom: &str,
-        exchange_rate: Decimal,
-    ) {
-        self.terra_querier
-            .exchange_rates
-            .insert((base_denom.to_string(), quote_denom.to_string()), exchange_rate);
-    }
-
     pub fn set_bank_balances(&mut self, balances: &[Coin]) {
         self.bank_querier = BankQuerier::new(&[(MOCK_CONTRACT_ADDR, balances)])
     }
@@ -101,11 +88,6 @@ impl CustomQuerier {
 
                 err_unsupported_query(msg)
             },
-
-            QueryRequest::Custom(TerraQueryWrapper {
-                route: _,
-                query_data,
-            }) => self.terra_querier.handle_query(query_data),
 
             QueryRequest::Bank(query) => self.bank_querier.query(query),
 

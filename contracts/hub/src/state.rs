@@ -1,7 +1,7 @@
 use cosmwasm_std::{Addr, Coin, Storage, StdError, StdResult};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex, U64Key};
 
-use steak::hub::{Batch, PendingBatch, UnbondRequest};
+use steak::hub::{Batch, PendingBatch, UnbondRequest, FeeConfig};
 
 use crate::types::BooleanKey;
 
@@ -26,6 +26,8 @@ pub(crate) struct State<'a> {
     pub previous_batches: IndexedMap<'a, U64Key, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in unbonding batches
     pub unbond_requests: IndexedMap<'a, (U64Key, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
+    /// Fee Config
+    pub fee_config: Item<'a, FeeConfig>
 }
 
 impl Default for State<'static> {
@@ -55,6 +57,7 @@ impl Default for State<'static> {
             pending_batch: Item::new("pending_batch"),
             previous_batches: IndexedMap::new("previous_batches", pb_indexes),
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
+            fee_config: Item::new("fee_config")
         }
     }
 }

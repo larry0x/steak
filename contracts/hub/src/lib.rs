@@ -10,3 +10,4 @@ pub mod types;
 
 #[cfg(test)]
 mod testing;
+mod constants;

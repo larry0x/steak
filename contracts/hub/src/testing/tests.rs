@@ -7,19 +7,19 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
+use steak::DecimalCheckedOps;
 
 use steak::hub::{
     Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
     ReceiveMsg, StateResponse, UnbondRequest, UnbondRequestsByBatchResponseItem,
-    UnbondRequestsByUserResponseItem,
+    UnbondRequestsByUserResponseItem, FeeConfig,
 };
 
 use crate::contract::{execute, instantiate, reply};
 use crate::helpers::{parse_coin, parse_received_fund};
 use crate::math::{compute_undelegations, compute_redelegations_for_removal, compute_redelegations_for_rebalancing};
 use crate::state::State;
-use crate::types::{Coins, Delegation, Redelegation, Undelegation};
+use crate::types::{Coins, Delegation, Redelegation, Undelegation, SendFee};
 
 use super::custom_querier::CustomQuerier;
 use super::helpers::{mock_dependencies, mock_env_at_timestamp, query_helper};
@@ -44,6 +44,8 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
             epoch_period: 259200,   // 3 * 24 * 60 * 60 = 3 days
             unbond_period: 1814400, // 21 * 24 * 60 * 60 = 21 days
             validators: vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()],
+            protocol_fee_contract: "fee".to_string(),
+            protocol_reward_fee: Decimal::from_ratio(1u128, 100u128)
         },
     )
     .unwrap();
@@ -116,7 +118,8 @@ fn proper_instantiation() {
             steak_token: "steak_token".to_string(),
             epoch_period: 259200,
             unbond_period: 1814400,
-            validators: vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()]
+            validators: vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()],
+            fee_config: FeeConfig { protocol_fee_contract: Addr::unchecked("fee"), protocol_reward_fee: Decimal::from_ratio(1u128,100u128) }
         }
     );
 
@@ -264,7 +267,7 @@ fn harvesting() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 5);
+    assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(
@@ -294,19 +297,6 @@ fn harvesting() {
     );
     assert_eq!(
         res.messages[3],
-        SubMsg {
-            id: 0,
-            msg: CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Swap {})).unwrap(),
-                funds: vec![]
-            }),
-            gas_limit: None,
-            reply_on: ReplyOn::Never
-        }
-    );
-    assert_eq!(
-        res.messages[4],
         SubMsg {
             id: 0,
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
@@ -389,87 +379,6 @@ fn registering_unlocked_coins() {
 }
 
 #[test]
-fn swapping() {
-    let mut deps = setup_test();
-    let state = State::default();
-
-    // Only denoms that has exchange rates defined in the oracle module can be swapped to Luna
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "ukrw",
-        Decimal::from_str("129108.193653786399948012").unwrap(),
-    );
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "usdr",
-        Decimal::from_str("77.056327779353129245").unwrap(),
-    );
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "uusd",
-        Decimal::from_str("105.476484668836552061").unwrap(),
-    );
-
-    // After withdrawing staking rewards, we have some unlocked coins. Some can be swapped for Luna,
-    // some can't.
-    state.unlocked_coins.save(
-        deps.as_mut().storage,
-        &vec![
-            Coin::new(123, "ukrw"),
-            Coin::new(234, "uluna"),
-            Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    ).unwrap();
-
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info(MOCK_CONTRACT_ADDR, &[]),
-        ExecuteMsg::Callback(CallbackMsg::Swap {}),
-    )
-    .unwrap();
-
-    assert_eq!(res.messages.len(), 2);
-    assert_eq!(
-        res.messages[0],
-        SubMsg::reply_on_success(
-            CosmosMsg::Custom(TerraMsgWrapper {
-                route: TerraRoute::Market,
-                msg_data: TerraMsg::Swap {
-                    offer_coin: Coin::new(123, "ukrw"),
-                    ask_denom: "uluna".to_string()
-                }
-            }),
-            3
-        )
-    );
-    assert_eq!(
-        res.messages[1],
-        SubMsg::reply_on_success(
-            CosmosMsg::Custom(TerraMsgWrapper {
-                route: TerraRoute::Market,
-                msg_data: TerraMsg::Swap {
-                    offer_coin: Coin::new(345, "uusd"),
-                    ask_denom: "uluna".to_string()
-                }
-            }),
-            3
-        )
-    );
-
-    // Storage should have been updated
-    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        unlocked_coins,
-        vec![
-            Coin::new(234, "uluna"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    );
-}
-
-#[test]
 fn reinvesting() {
     let mut deps = setup_test();
     let state = State::default();
@@ -498,12 +407,27 @@ fn reinvesting() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 1);
+    assert_eq!(res.messages.len(), 2);
+
+    let total = Uint128::from(234u128);
+    let fee = Decimal::from_ratio(1u128, 100u128).checked_mul(total).expect("expects fee result");
+    let delegated = total.saturating_sub(fee);
+
     assert_eq!(
         res.messages[0],
         SubMsg {
             id: 0,
-            msg: Delegation::new("bob", 234).to_cosmos_msg(),
+            msg: Delegation::new("bob", delegated.u128()).to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    assert_eq!(
+        res.messages[1],
+        SubMsg {
+            id: 0,
+            msg: SendFee::new(Addr::unchecked("fee"), fee.u128()).to_cosmos_msg(),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
@@ -1260,6 +1184,52 @@ fn transferring_ownership() {
     assert_eq!(owner, Addr::unchecked("jake"));
 }
 
+
+//--------------------------------------------------------------------------------------------------
+// Fee Config
+//--------------------------------------------------------------------------------------------------
+
+#[test]
+fn update_fee() {
+    let mut deps = setup_test();
+    let state = State::default();
+
+    let config = state.fee_config.load(deps.as_ref().storage).unwrap();
+    assert_eq!(config, FeeConfig { protocol_fee_contract: Addr::unchecked("fee"), protocol_reward_fee: Decimal::from_ratio(1u128, 100u128) });
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::UpdateConfig { protocol_fee_contract: None, protocol_reward_fee: Some(Decimal::from_ratio(11u128, 100u128))  },
+    )
+    .unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+    
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::UpdateConfig { protocol_fee_contract: None, protocol_reward_fee: Some(Decimal::from_ratio(11u128, 100u128))  },
+    )
+    .unwrap_err();
+    assert_eq!(err, StdError::generic_err("'protocol_reward_fee' greater than max"));
+
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::UpdateConfig { protocol_fee_contract: Some("fee-new".to_string()), protocol_reward_fee: Some(Decimal::from_ratio(10u128, 100u128))  },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 0);
+
+    let config = state.fee_config.load(deps.as_ref().storage).unwrap();
+    assert_eq!(config, FeeConfig { protocol_fee_contract: Addr::unchecked("fee-new"), protocol_reward_fee: Decimal::from_ratio(10u128, 100u128) });
+    
+}
+
 //--------------------------------------------------------------------------------------------------
 // Queries
 //--------------------------------------------------------------------------------------------------
@@ -1613,3 +1583,5 @@ fn receiving_funds() {
     let amount = parse_received_fund(&[Coin::new(69420, "uluna")], "uluna").unwrap();
     assert_eq!(amount, Uint128::new(69420));
 }
+
+

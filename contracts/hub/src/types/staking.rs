@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, CosmosMsg, StakingMsg};
+use cosmwasm_std::{Coin, CosmosMsg, StakingMsg, BankMsg, Addr};
 use terra_cosmwasm::TerraMsgWrapper;
 
 #[derive(Clone)]
@@ -20,6 +20,30 @@ impl Delegation {
         CosmosMsg::Staking(StakingMsg::Delegate {
             validator: self.validator.clone(),
             amount: Coin::new(self.amount, "uluna"),
+        })
+    }
+}
+
+
+#[derive(Clone)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
+pub struct SendFee {
+    pub to_address: String,
+    pub amount: u128,
+}
+
+impl SendFee {
+    pub fn new(to_address: Addr, amount: u128) -> Self {
+        Self {
+            to_address: to_address.to_string(),
+            amount,
+        }
+    }
+
+    pub fn to_cosmos_msg(&self) -> CosmosMsg<TerraMsgWrapper> {
+        CosmosMsg::Bank(BankMsg::Send {
+            to_address: self.to_address.clone(),
+            amount: vec![Coin::new(self.amount, "uluna")],
         })
     }
 }

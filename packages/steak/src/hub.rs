@@ -22,6 +22,11 @@ pub struct InstantiateMsg {
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+
+    /// Contract address where fees are sent
+    pub protocol_fee_contract: String,
+    /// Fees that are being applied during reinvest of staking rewards
+    pub protocol_reward_fee: Decimal, // "1 is 100%, 0.05 is 5%"
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -61,6 +66,14 @@ pub enum ExecuteMsg {
     SubmitBatch {},
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
+
+    /// Updates the fee config,
+    UpdateConfig {
+        /// Contract address where fees are sent
+        protocol_fee_contract: Option<String>,
+        /// Fees that are being applied during reinvest of staking rewards
+        protocol_reward_fee: Option<Decimal>, // "1 is 100%, 0.05 is 5%"
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -77,7 +90,7 @@ pub enum ReceiveMsg {
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
     /// Swap Terra stablecoins held by the contract to Luna
-    Swap {},
+    // Swap {},
     /// Following the swaps, stake the Luna acquired to the whitelisted validators
     Reinvest {},
 }
@@ -138,6 +151,9 @@ pub struct ConfigResponse {
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+
+    /// Information about applied fees
+    pub fee_config: FeeConfig
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -161,6 +177,15 @@ pub struct PendingBatch {
     /// Estimated time when this batch will be submitted for unbonding
     pub est_unbond_start_time: u64,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct FeeConfig {    
+    /// Contract address where fees are sent
+    pub protocol_fee_contract: Addr,
+    /// Fees that are being applied during reinvest of staking rewards
+    pub protocol_reward_fee: Decimal, // "1 is 100%, 0.05 is 5%"
+}
+
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Batch {

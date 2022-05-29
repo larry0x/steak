@@ -1,23 +1,26 @@
-use std::collections::HashSet;
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Event, Order,
-    Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event,
+    Order, Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
+use steak::DecimalCheckedOps;
+use terra_cosmwasm::{TerraMsgWrapper};
 
-use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
+use steak::hub::{
+    Batch, CallbackMsg, ExecuteMsg, FeeConfig, InstantiateMsg, PendingBatch, UnbondRequest,
+};
 
-use crate::helpers::{query_cw20_total_supply, query_delegations, query_delegation};
+use crate::constants::get_reward_fee_cap;
+use crate::helpers::{query_cw20_total_supply, query_delegation, query_delegations};
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
 use crate::state::State;
-use crate::types::{Coins, Delegation};
+use crate::types::{Coins, Delegation, SendFee};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -26,11 +29,22 @@ use crate::types::{Coins, Delegation};
 pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Response> {
     let state = State::default();
 
+    if msg.protocol_reward_fee.gt(&get_reward_fee_cap()) {
+        return Err(StdError::generic_err("'protocol_reward_fee' greater than max"));
+    }
+
     state.owner.save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
     state.validators.save(deps.storage, &msg.validators)?;
     state.unlocked_coins.save(deps.storage, &vec![])?;
+    state.fee_config.save(
+        deps.storage,
+        &FeeConfig {
+            protocol_fee_contract: deps.api.addr_validate(&msg.protocol_fee_contract)?,
+            protocol_reward_fee: msg.protocol_reward_fee,
+        },
+    )?;
 
     state.pending_batch.save(
         deps.storage,
@@ -131,10 +145,7 @@ pub fn bond(
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
     let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
 
-    let delegate_submsg = SubMsg::reply_on_success(
-        new_delegation.to_cosmos_msg(),
-        2,
-    );
+    let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 2);
 
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
@@ -174,53 +185,17 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> 
         })
         .collect::<Vec<_>>();
 
-    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
-        .iter()
-        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
-        .collect::<StdResult<Vec<_>>>()?;
+    let callback_msgs = vec![
+        CallbackMsg::Reinvest {},
+    ]
+    .iter()
+    .map(|callback| callback.into_cosmos_msg(&env.contract.address))
+    .collect::<StdResult<Vec<_>>>()?;
 
     Ok(Response::new()
         .add_submessages(withdraw_submsgs)
         .add_messages(callback_msgs)
         .add_attribute("action", "steakhub/harvest"))
-}
-
-pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-    let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
-
-    let all_denoms = unlocked_coins
-        .iter()
-        .cloned()
-        .map(|coin| coin.denom)
-        .filter(|denom| denom != "uluna")
-        .collect::<Vec<_>>();
-
-    let known_denoms = TerraQuerier::new(&deps.querier)
-        .query_exchange_rates("uluna".to_string(), all_denoms)?
-        .exchange_rates
-        .into_iter()
-        .map(|item| item.quote_denom)
-        .collect::<HashSet<_>>();
-
-    let swap_submsgs = unlocked_coins
-        .iter()
-        .cloned()
-        .filter(|coin| known_denoms.contains(&coin.denom))
-        .map(|coin| {
-            SubMsg::reply_on_success(
-                create_swap_msg(coin, "uluna".to_string()),
-                3,
-            )
-        })
-        .collect::<Vec<_>>();
-
-    unlocked_coins.retain(|coin| !known_denoms.contains(&coin.denom));
-    state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
-
-    Ok(Response::new()
-        .add_submessages(swap_submsgs)
-        .add_attribute("action", "steakhub/swap"))
 }
 
 /// NOTE:
@@ -233,8 +208,9 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
+    let fee_config = state.fee_config.load(deps.storage)?;
 
-    let uluna_to_bond = unlocked_coins
+    let uluna_available = unlocked_coins
         .iter()
         .find(|coin| coin.denom == "uluna")
         .ok_or_else(|| StdError::generic_err("no uluna available to be bonded"))?
@@ -249,6 +225,10 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
             amount = d.amount;
         }
     }
+
+    let protocol_fee_amount = fee_config.protocol_reward_fee.checked_mul(uluna_available)?;
+    let uluna_to_bond = uluna_available.saturating_sub(protocol_fee_amount);
+
     let new_delegation = Delegation::new(validator, uluna_to_bond.u128());
 
     unlocked_coins.retain(|coin| coin.denom != "uluna");
@@ -257,10 +237,18 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     let event = Event::new("steakhub/harvested")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
-        .add_attribute("uluna_bonded", uluna_to_bond);
+        .add_attribute("uluna_bonded", uluna_to_bond)
+        .add_attribute("uluna_protocol_fee", protocol_fee_amount);
+
+    let mut msgs = vec![new_delegation.to_cosmos_msg()];
+
+    if !protocol_fee_amount.is_zero() {
+        let send_fee = SendFee::new(fee_config.protocol_fee_contract, protocol_fee_amount.u128());
+        msgs.push(send_fee.to_cosmos_msg());
+    }
 
     Ok(Response::new()
-        .add_message(new_delegation.to_cosmos_msg())
+        .add_messages(msgs)
         .add_event(event)
         .add_attribute("action", "steakhub/reinvest"))
 }
@@ -272,7 +260,7 @@ pub fn register_received_coins(
     mut events: Vec<Event>,
     event_type: &str,
     receiver_key: &str,
-    received_coins_key: &str
+    received_coins_key: &str,
 ) -> StdResult<Response> {
     events.retain(|event| event.ty == event_type);
     if events.is_empty() {
@@ -281,7 +269,12 @@ pub fn register_received_coins(
 
     let mut received_coins = Coins(vec![]);
     for event in &events {
-        received_coins.add_many(&parse_coin_receiving_event(&env, event, receiver_key, received_coins_key)?)?;
+        received_coins.add_many(&parse_coin_receiving_event(
+            &env,
+            event,
+            receiver_key,
+            received_coins_key,
+        )?)?;
     }
 
     let state = State::default();
@@ -291,15 +284,14 @@ pub fn register_received_coins(
         Ok(coins.0)
     })?;
 
-    Ok(Response::new()
-        .add_attribute("action", "steakhub/register_received_coins"))
+    Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
 }
 
 fn parse_coin_receiving_event(
     env: &Env,
     event: &Event,
     receiver_key: &str,
-    received_coins_key: &str
+    received_coins_key: &str,
 ) -> StdResult<Coins> {
     let receiver = &event
         .attributes
@@ -312,7 +304,9 @@ fn parse_coin_receiving_event(
         .attributes
         .iter()
         .find(|attr| attr.key == received_coins_key)
-        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", received_coins_key)))?
+        .ok_or_else(|| {
+            StdError::generic_err(format!("cannot find `{}` attribute", received_coins_key))
+        })?
         .value;
 
     let received_coins = if *receiver == env.contract.address {
@@ -385,15 +379,17 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
 
     let current_time = env.block.time.seconds();
     if current_time < pending_batch.est_unbond_start_time {
-        return Err(StdError::generic_err(
-            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time)
-        ));
+        return Err(StdError::generic_err(format!(
+            "batch can only be submitted for unbonding after {}",
+            pending_batch.est_unbond_start_time
+        )));
     }
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    let uluna_to_unbond = compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
+    let uluna_to_unbond =
+        compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
 
     // NOTE: Regarding the `uluna_unclaimed` value
@@ -476,10 +472,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
         .filter(|b| current_time > b.est_unbond_end_time)
         .collect::<Vec<_>>();
 
-    let uluna_expected_received: Uint128 = batches
-        .iter()
-        .map(|b| b.uluna_unclaimed)
-        .sum();
+    let uluna_expected_received: Uint128 = batches.iter().map(|b| b.uluna_unclaimed).sum();
 
     if uluna_expected_received.is_zero() {
         return Ok(Response::new());
@@ -503,19 +496,13 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
         state.previous_batches.save(deps.storage, batch.id.into(), batch)?;
     }
 
-    let ids = batches
-        .iter()
-        .map(|b| b.id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    let ids = batches.iter().map(|b| b.id.to_string()).collect::<Vec<_>>().join(",");
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
         .add_attribute("uluna_deducted", uluna_to_deduct.to_string());
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/reconcile"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/reconcile"))
 }
 
 pub fn withdraw_unbonded(
@@ -553,9 +540,8 @@ pub fn withdraw_unbonded(
     for request in &requests {
         if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id.into()) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
-                let uluna_to_refund = batch
-                    .uluna_unclaimed
-                    .multiply_ratio(request.shares, batch.total_shares);
+                let uluna_to_refund =
+                    batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
 
                 ids.push(request.id.to_string());
 
@@ -616,8 +602,7 @@ pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
 
     let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
 
-    let event = Event::new("steakhub/rebalanced")
-        .add_attribute("uluna_moved", amount.to_string());
+    let event = Event::new("steakhub/rebalanced").add_attribute("uluna_moved", amount.to_string());
 
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
@@ -642,12 +627,9 @@ pub fn add_validator(
         Ok(validators)
     })?;
 
-    let event = Event::new("steakhub/validator_added")
-        .add_attribute("validator", validator);
+    let event = Event::new("steakhub/validator_added").add_attribute("validator", validator);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/add_validator"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/add_validator"))
 }
 
 pub fn remove_validator(
@@ -677,8 +659,7 @@ pub fn remove_validator(
         .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
         .collect::<Vec<_>>();
 
-    let event = Event::new("steak/validator_removed")
-        .add_attribute("validator", validator);
+    let event = Event::new("steak/validator_removed").add_attribute("validator", validator);
 
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
@@ -696,8 +677,7 @@ pub fn transfer_ownership(
     state.assert_owner(deps.storage, &sender)?;
     state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
 
-    Ok(Response::new()
-        .add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
 }
 
 pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<TerraMsgWrapper>> {
@@ -717,7 +697,33 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<Terra
         .add_attribute("new_owner", new_owner)
         .add_attribute("previous_owner", previous_owner);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/transfer_ownership"))
+}
+
+pub fn update_config(
+    deps: DepsMut,
+    sender: Addr,
+    protocol_fee_contract: Option<String>,
+    protocol_reward_fee: Option<Decimal>,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    let mut fee_config = state.fee_config.load(deps.storage)?;
+
+    if let Some(protocol_fee_contract) = protocol_fee_contract {
+        fee_config.protocol_fee_contract = deps.api.addr_validate(&protocol_fee_contract)?;
+    }
+
+    if let Some(protocol_reward_fee) = protocol_reward_fee {
+        if protocol_reward_fee.gt(&get_reward_fee_cap()) {
+            return Err(StdError::generic_err("'protocol_reward_fee' greater than max"));
+        }
+        fee_config.protocol_reward_fee = protocol_reward_fee;
+    }
+
+    state.fee_config.save(deps.storage, &fee_config)?;
+
+    Ok(Response::new().add_attribute("action", "steakhub/update_config"))
 }
