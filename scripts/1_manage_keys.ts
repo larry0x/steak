@@ -61,7 +61,7 @@ yargs(hideBin(process.argv))
           type: "number",
           describe: "SLIP-0044 coin type for use in derivation of the private key",
           demandOption: false,
-          default: 118, // Terra = 330, Cosmos = 118
+          default: 330, // Terra = 330, Cosmos = 118
         });
     },
     (argv) => addKey(argv["key"], argv["key-dir"], argv["coin-type"]).catch(console.log)

@@ -33,12 +33,12 @@ const argv = yargs(process.argv)
   const terra = createLCDClient(argv["network"]);
   const worker = await createWallet(terra, argv["key"], argv["key-dir"]);
 
-  const config: { steak_token: string } = await terra.wasm.contractQuery(argv["hub-address"], {
+  const config: { stake_token: string } = await terra.wasm.contractQuery(argv["hub-address"], {
     config: {},
   });
 
   const { txhash } = await sendTxWithConfirm(worker, [
-    new MsgExecuteContract(worker.key.accAddress, config["steak_token"], {
+    new MsgExecuteContract(worker.key.accAddress, config["stake_token"], {
       send: {
         contract: argv["hub-address"],
         amount: argv["amount"],

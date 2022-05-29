@@ -1,4 +1,11 @@
 {
+  "scripts": {
+    "release": "bash build_release.sh",
+    "coverage": "bash build_coverage.sh",
+    "schema": "yarn schema:create && yarn schema:ts",
+    "schema:create": "bash build_schema.sh",
+    "schema:ts": "cd .. && json2ts -i contracts/hub/**/*.json -o scripts/types/hub && json2ts -i contracts/token/**/*.json -o scripts/types/token"
+  },
   "dependencies": {
     "@terra-money/terra.js": "^3.0.8",
     "promptly": "^3.2.0",
@@ -13,7 +20,8 @@
     "eslint": "^8.11.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.0.0",
-    "typescript": "^4.6.3"
+    "typescript": "^4.6.3",
+    "json-schema-to-typescript": "^10.1.5"
   },
   "engines": {
     "node": ">=16"

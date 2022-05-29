@@ -123,7 +123,7 @@ pub enum QueryMsg {
         start_after: Option<u64>,
         limit: Option<u32>,
     },
-    /// Enumerate all outstanding unbonding requests in a given batch. Response: `Vec<UnbondRequestsResponseByBatchItem>`
+    /// Enumerate all outstanding unbonding requests in a given batch. Response: `Vec<UnbondRequestsByBatchResponseItem>`
     UnbondRequestsByBatch {
         id: u64,
         start_after: Option<String>,
@@ -143,8 +143,8 @@ pub struct ConfigResponse {
     pub owner: String,
     /// Pending ownership transfer, awaiting acceptance by the new owner
     pub new_owner: Option<String>,
-    /// Address of the Steak token
-    pub steak_token: String,
+    /// Address of the Stake token
+    pub stake_token: String,
     /// How often the unbonding queue is to be executed, in seconds
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds
@@ -158,11 +158,11 @@ pub struct ConfigResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StateResponse {
-    /// Total supply to the Steak token
-    pub total_usteak: Uint128,
+    /// Total supply to the Stake token
+    pub total_ustake: Uint128,
     /// Total amount of uluna staked
     pub total_uluna: Uint128,
-    /// The exchange rate between usteak and uluna, in terms of uluna per usteak
+    /// The exchange rate between ustake and uluna, in terms of uluna per ustake
     pub exchange_rate: Decimal,
     /// Staking rewards currently held by the contract that are ready to be reinvested
     pub unlocked_coins: Vec<Coin>,
@@ -172,8 +172,8 @@ pub struct StateResponse {
 pub struct PendingBatch {
     /// ID of this batch
     pub id: u64,
-    /// Total amount of `usteak` to be burned in this batch
-    pub usteak_to_burn: Uint128,
+    /// Total amount of `ustake` to be burned in this batch
+    pub ustake_to_burn: Uint128,
     /// Estimated time when this batch will be submitted for unbonding
     pub est_unbond_start_time: u64,
 }
@@ -193,7 +193,7 @@ pub struct Batch {
     pub id: u64,
     /// Whether this batch has already been reconciled
     pub reconciled: bool,
-    /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
+    /// Total amount of shares remaining this batch. Each `ustake` burned = 1 share
     pub total_shares: Uint128,
     /// Amount of `uluna` in this batch that have not been claimed
     pub uluna_unclaimed: Uint128,

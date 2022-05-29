@@ -1,6 +1,6 @@
-# Steak: Common Types
+# Eris Staking: Common Types
 
-This crate contains definitions of common types used in Steak.
+This crate contains definitions of common types used in Eris Staking.
 
 ## License
 

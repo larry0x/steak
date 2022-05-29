@@ -5,7 +5,7 @@ use cosmwasm_std::{
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 
-use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
+use eris_staking::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
 use crate::helpers::{parse_received_fund, unwrap_reply};
 use crate::state::State;
@@ -79,10 +79,10 @@ fn receive(
         } => {
             let state = State::default();
 
-            let steak_token = state.steak_token.load(deps.storage)?;
-            if info.sender != steak_token {
+            let stake_token = state.stake_token.load(deps.storage)?;
+            if info.sender != stake_token {
                 return Err(StdError::generic_err(
-                    format!("expecting Steak token, received {}", info.sender)
+                    format!("expecting Stake token, received {}", info.sender)
                 ));
             }
 
@@ -114,7 +114,7 @@ fn callback(
 #[entry_point]
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
-        1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
+        1 => execute::register_stake_token(deps, unwrap_reply(reply)?),
         2 => execute::register_received_coins(
             deps,
             env,

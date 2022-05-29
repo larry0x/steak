@@ -1,7 +1,7 @@
 use cosmwasm_std::{Decimal, Deps, Env, Order, StdResult, Uint128};
 use cw_storage_plus::{Bound, U64Key};
 
-use steak::hub::{
+use eris_staking::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem,
 };
@@ -18,7 +18,7 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(ConfigResponse {
         owner: state.owner.load(deps.storage)?.into(),
         new_owner: state.new_owner.may_load(deps.storage)?.map(|addr| addr.into()),
-        steak_token: state.steak_token.load(deps.storage)?.into(),
+        stake_token: state.stake_token.load(deps.storage)?.into(),
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
         validators: state.validators.load(deps.storage)?,
@@ -29,21 +29,21 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
 pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
 
-    let steak_token = state.steak_token.load(deps.storage)?;
-    let total_usteak = query_cw20_total_supply(&deps.querier, &steak_token)?;
+    let stake_token = state.stake_token.load(deps.storage)?;
+    let total_ustake = query_cw20_total_supply(&deps.querier, &stake_token)?;
 
     let validators = state.validators.load(deps.storage)?;
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let total_uluna: u128 = delegations.iter().map(|d| d.amount).sum();
 
-    let exchange_rate = if total_usteak.is_zero() {
+    let exchange_rate = if total_ustake.is_zero() {
         Decimal::one()
     } else {
-        Decimal::from_ratio(total_uluna, total_usteak)
+        Decimal::from_ratio(total_uluna, total_ustake)
     };
 
     Ok(StateResponse {
-        total_usteak,
+        total_ustake,
         total_uluna: Uint128::new(total_uluna),
         exchange_rate,
         unlocked_coins: state.unlocked_coins.load(deps.storage)?,

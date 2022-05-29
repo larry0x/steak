@@ -41,7 +41,7 @@ const argv = yargs(process.argv)
     binary: {
       type: "string",
       demandOption: false,
-      default: "../artifacts/steak_hub.wasm",
+      default: "../artifacts/eris_staking_hub.wasm",
     },
   })
   .parseSync();

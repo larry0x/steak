@@ -10,6 +10,7 @@ import {
   instantiateWithConfirm,
 } from "./helpers";
 import { Wallet } from "@terra-money/terra.js";
+import { InstantiateMsg } from "./types/hub/instantiate_msg";
 
 const argv = yargs(process.argv)
   .options({
@@ -32,7 +33,7 @@ const argv = yargs(process.argv)
     },
     msg: {
       type: "string",
-      demandOption: true,
+      demandOption: false,
     },
     "hub-code-id": {
       type: "number",
@@ -45,12 +46,12 @@ const argv = yargs(process.argv)
     "hub-binary": {
       type: "string",
       demandOption: false,
-      default: "../artifacts/steak_hub.wasm",
+      default: "../artifacts/eris_staking_hub.wasm",
     },
     "token-binary": {
       type: "string",
       demandOption: false,
-      default: "../artifacts/steak_token.wasm",
+      default: "../artifacts/eris_staking_token.wasm",
     },
   })
   .parseSync();
@@ -62,15 +63,40 @@ async function uploadCode(deployer: Wallet, path: string) {
   return codeId;
 }
 
+const templates: Record<string, InstantiateMsg> = {
+  testnet: <InstantiateMsg>{
+    name: "Amplified LUNA",
+    symbol: "ampLUNA",
+    cw20_code_id: 0,
+    decimals: 6,
+    epoch_period: 3 * 24 * 60 * 60,
+    unbond_period: 21 * 24 * 60 * 60,
+    validators: ["terravaloper1cevf3xwxm8zjhj7yrnjc0qy6y6ng98lxgxp79x"],
+    protocol_fee_contract: "terra1pm8wqcrvk2qysf30u4e5mwprjfj9hj87dph3ne",
+    protocol_reward_fee: "0.05",
+    owner: "",
+  },
+};
+
 (async function () {
   const terra = createLCDClient(argv["network"]);
   const deployer = await createWallet(terra, argv["key"], argv["key-dir"]);
 
-  const hubCodeId = argv["hub-code-id"] ?? await uploadCode(deployer, path.resolve(argv["hub-binary"]));
-  const tokenCodeId = argv["token-code-id"] ?? await uploadCode(deployer, path.resolve(argv["token-binary"]));
+  const hubCodeId =
+    argv["hub-code-id"] ??
+    (await uploadCode(deployer, path.resolve(argv["hub-binary"])));
+  const tokenCodeId =
+    argv["token-code-id"] ??
+    (await uploadCode(deployer, path.resolve(argv["token-binary"])));
 
-  const msg = JSON.parse(fs.readFileSync(path.resolve(argv["msg"]), "utf8"));
+  let msg: any;
+  if (argv["msg"]) {
+    msg = JSON.parse(fs.readFileSync(path.resolve(argv["msg"]), "utf8"));
+  } else {
+    msg = templates[argv["network"]];
+  }
   msg["cw20_code_id"] = tokenCodeId;
+  msg["owner"] = msg["owner"] || deployer.key.accAddress;
 
   await waitForConfirm("Proceed to deploy contracts?");
   const result = await instantiateWithConfirm(
@@ -80,6 +106,6 @@ async function uploadCode(deployer: Wallet, path: string) {
     msg
   );
   const address =
-    result.logs[0].eventsByType.instantiate_contract.contract_address[0];
+    result.logs[0].eventsByType["instantiate_contract"]["contract_address"][0];
   console.log(`Contract instantiated! Address: ${address}`);
 })();

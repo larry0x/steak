@@ -2,7 +2,7 @@ use std::{cmp, cmp::Ordering};
 
 use cosmwasm_std::Uint128;
 
-use steak::hub::Batch;
+use eris_staking::hub::Batch;
 
 use crate::types::{Delegation, Redelegation, Undelegation};
 
@@ -10,11 +10,11 @@ use crate::types::{Delegation, Redelegation, Undelegation};
 // Minting/burning logics
 //--------------------------------------------------------------------------------------------------
 
-/// Compute the amount of Steak token to mint for a specific Luna stake amount. If current total
-/// staked amount is zero, we use 1 usteak = 1 uluna; otherwise, we calculate base on the current
+/// Compute the amount of Stake token to mint for a specific Luna stake amount. If current total
+/// staked amount is zero, we use 1 ustake = 1 uluna; otherwise, we calculate base on the current
 /// uluna per ustake ratio.
 pub(crate) fn compute_mint_amount(
-    usteak_supply: Uint128,
+    ustake_supply: Uint128,
     uluna_to_bond: Uint128,
     current_delegations: &[Delegation],
 ) -> Uint128 {
@@ -22,21 +22,21 @@ pub(crate) fn compute_mint_amount(
     if uluna_bonded == 0 {
         uluna_to_bond
     } else {
-        usteak_supply.multiply_ratio(uluna_to_bond, uluna_bonded)
+        ustake_supply.multiply_ratio(uluna_to_bond, uluna_bonded)
     }
 }
 
-/// Compute the amount of `uluna` to unbond for a specific `usteak` burn amount
+/// Compute the amount of `uluna` to unbond for a specific `ustake` burn amount
 ///
-/// There is no way `usteak` total supply is zero when the user is senting a non-zero amount of `usteak`
+/// There is no way `ustake` total supply is zero when the user is senting a non-zero amount of `ustake`
 /// to burn, so we don't need to handle division-by-zero here
 pub(crate) fn compute_unbond_amount(
-    usteak_supply: Uint128,
-    usteak_to_burn: Uint128,
+    ustake_supply: Uint128,
+    ustake_to_burn: Uint128,
     current_delegations: &[Delegation],
 ) -> Uint128 {
     let uluna_bonded: u128 = current_delegations.iter().map(|d| d.amount).sum();
-    Uint128::new(uluna_bonded).multiply_ratio(usteak_to_burn, usteak_supply)
+    Uint128::new(uluna_bonded).multiply_ratio(ustake_to_burn, ustake_supply)
 }
 
 //--------------------------------------------------------------------------------------------------

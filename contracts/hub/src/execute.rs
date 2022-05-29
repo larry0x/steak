@@ -6,10 +6,10 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use steak::DecimalCheckedOps;
+use eris_staking::DecimalCheckedOps;
 use terra_cosmwasm::{TerraMsgWrapper};
 
-use steak::hub::{
+use eris_staking::hub::{
     Batch, CallbackMsg, ExecuteMsg, FeeConfig, InstantiateMsg, PendingBatch, UnbondRequest,
 };
 
@@ -50,7 +50,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
         deps.storage,
         &PendingBatch {
             id: 1,
-            usteak_to_burn: Uint128::zero(),
+            ustake_to_burn: Uint128::zero(),
             est_unbond_start_time: env.block.time.seconds() + msg.epoch_period,
         },
     )?;
@@ -71,13 +71,13 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
                 marketing: None,
             })?,
             funds: vec![],
-            label: "steak_token".to_string(),
+            label: "stake_token".to_string(),
         }),
         1,
     )))
 }
 
-pub fn register_steak_token(
+pub fn register_stake_token(
     deps: DepsMut,
     response: SubMsgExecutionResponse,
 ) -> StdResult<Response> {
@@ -97,7 +97,7 @@ pub fn register_steak_token(
         .value;
 
     let contract_addr = deps.api.addr_validate(contract_addr_str)?;
-    state.steak_token.save(deps.storage, &contract_addr)?;
+    state.stake_token.save(deps.storage, &contract_addr)?;
 
     Ok(Response::new())
 }
@@ -121,7 +121,7 @@ pub fn bond(
     uluna_to_bond: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
-    let steak_token = state.steak_token.load(deps.storage)?;
+    let stake_token = state.stake_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
 
     // Query the current delegations made to validators, and find the validator with the smallest
@@ -141,33 +141,33 @@ pub fn bond(
         amount: uluna_to_bond.u128(),
     };
 
-    // Query the current supply of Steak and compute the amount to mint
-    let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
-    let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
+    // Query the current supply of Staking Token and compute the amount to mint
+    let ustake_supply = query_cw20_total_supply(&deps.querier, &stake_token)?;
+    let ustake_to_mint = compute_mint_amount(ustake_supply, uluna_to_bond, &delegations);
 
     let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 2);
 
     let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: steak_token.into(),
+        contract_addr: stake_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
             recipient: receiver.to_string(),
-            amount: usteak_to_mint,
+            amount: ustake_to_mint,
         })?,
         funds: vec![],
     });
 
-    let event = Event::new("steakhub/bonded")
+    let event = Event::new("erishub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("receiver", receiver)
         .add_attribute("uluna_bonded", uluna_to_bond)
-        .add_attribute("usteak_minted", usteak_to_mint);
+        .add_attribute("ustake_minted", ustake_to_mint);
 
     Ok(Response::new()
         .add_submessage(delegate_submsg)
         .add_message(mint_msg)
         .add_event(event)
-        .add_attribute("action", "steakhub/bond"))
+        .add_attribute("action", "erishub/bond"))
 }
 
 pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -195,7 +195,7 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> 
     Ok(Response::new()
         .add_submessages(withdraw_submsgs)
         .add_messages(callback_msgs)
-        .add_attribute("action", "steakhub/harvest"))
+        .add_attribute("action", "erishub/harvest"))
 }
 
 /// NOTE:
@@ -234,7 +234,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     unlocked_coins.retain(|coin| coin.denom != "uluna");
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
 
-    let event = Event::new("steakhub/harvested")
+    let event = Event::new("erishub/harvested")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("uluna_bonded", uluna_to_bond)
@@ -250,7 +250,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
     Ok(Response::new()
         .add_messages(msgs)
         .add_event(event)
-        .add_attribute("action", "steakhub/reinvest"))
+        .add_attribute("action", "erishub/reinvest"))
 }
 
 /// NOTE: a `SubMsgExecutionResponse` may contain multiple coin-receiving events, must handle them indivitually
@@ -284,7 +284,7 @@ pub fn register_received_coins(
         Ok(coins.0)
     })?;
 
-    Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
+    Ok(Response::new().add_attribute("action", "erishub/register_received_coins"))
 }
 
 fn parse_coin_receiving_event(
@@ -326,12 +326,12 @@ pub fn queue_unbond(
     deps: DepsMut,
     env: Env,
     receiver: Addr,
-    usteak_to_burn: Uint128,
+    ustake_to_burn: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
 
     let mut pending_batch = state.pending_batch.load(deps.storage)?;
-    pending_batch.usteak_to_burn += usteak_to_burn;
+    pending_batch.ustake_to_burn += ustake_to_burn;
     state.pending_batch.save(deps.storage, &pending_batch)?;
 
     state.unbond_requests.update(
@@ -343,7 +343,7 @@ pub fn queue_unbond(
                 user: receiver.clone(),
                 shares: Uint128::zero(),
             });
-            request.shares += usteak_to_burn;
+            request.shares += ustake_to_burn;
             Ok(request)
         },
     )?;
@@ -357,22 +357,22 @@ pub fn queue_unbond(
         }));
     }
 
-    let event = Event::new("steakhub/unbond_queued")
+    let event = Event::new("erishub/unbond_queued")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("id", pending_batch.id.to_string())
         .add_attribute("receiver", receiver)
-        .add_attribute("usteak_to_burn", usteak_to_burn);
+        .add_attribute("ustake_to_burn", ustake_to_burn);
 
     Ok(Response::new()
         .add_messages(msgs)
         .add_event(event)
-        .add_attribute("action", "steakhub/queue_unbond"))
+        .add_attribute("action", "erishub/queue_unbond"))
 }
 
 pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let state = State::default();
-    let steak_token = state.steak_token.load(deps.storage)?;
+    let stake_token = state.stake_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
     let unbond_period = state.unbond_period.load(deps.storage)?;
     let pending_batch = state.pending_batch.load(deps.storage)?;
@@ -386,10 +386,10 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
     }
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
+    let ustake_supply = query_cw20_total_supply(&deps.querier, &stake_token)?;
 
     let uluna_to_unbond =
-        compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
+        compute_unbond_amount(ustake_supply, pending_batch.ustake_to_burn, &delegations);
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
 
     // NOTE: Regarding the `uluna_unclaimed` value
@@ -407,7 +407,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         &Batch {
             id: pending_batch.id,
             reconciled: false,
-            total_shares: pending_batch.usteak_to_burn,
+            total_shares: pending_batch.ustake_to_burn,
             uluna_unclaimed: uluna_to_unbond,
             est_unbond_end_time: current_time + unbond_period,
         },
@@ -418,7 +418,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         deps.storage,
         &PendingBatch {
             id: pending_batch.id + 1,
-            usteak_to_burn: Uint128::zero(),
+            ustake_to_burn: Uint128::zero(),
             est_unbond_start_time: current_time + epoch_period,
         },
     )?;
@@ -429,25 +429,25 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         .collect::<Vec<_>>();
 
     let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: steak_token.into(),
+        contract_addr: stake_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Burn {
-            amount: pending_batch.usteak_to_burn,
+            amount: pending_batch.ustake_to_burn,
         })?,
         funds: vec![],
     });
 
-    let event = Event::new("steakhub/unbond_submitted")
+    let event = Event::new("erishub/unbond_submitted")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("id", pending_batch.id.to_string())
         .add_attribute("uluna_unbonded", uluna_to_unbond)
-        .add_attribute("usteak_burned", pending_batch.usteak_to_burn);
+        .add_attribute("ustake_burned", pending_batch.ustake_to_burn);
 
     Ok(Response::new()
         .add_submessages(undelegate_submsgs)
         .add_message(burn_msg)
         .add_event(event)
-        .add_attribute("action", "steakhub/unbond"))
+        .add_attribute("action", "erishub/unbond"))
 }
 
 pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -498,11 +498,11 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
 
     let ids = batches.iter().map(|b| b.id.to_string()).collect::<Vec<_>>().join(",");
 
-    let event = Event::new("steakhub/reconciled")
+    let event = Event::new("erishub/reconciled")
         .add_attribute("ids", ids)
         .add_attribute("uluna_deducted", uluna_to_deduct.to_string());
 
-    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/reconcile"))
+    Ok(Response::new().add_event(event).add_attribute("action", "erishub/reconcile"))
 }
 
 pub fn withdraw_unbonded(
@@ -569,7 +569,7 @@ pub fn withdraw_unbonded(
         amount: vec![Coin::new(total_uluna_to_refund.u128(), "uluna")],
     });
 
-    let event = Event::new("steakhub/unbonded_withdrawn")
+    let event = Event::new("erishub/unbonded_withdrawn")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("ids", ids.join(","))
@@ -580,7 +580,7 @@ pub fn withdraw_unbonded(
     Ok(Response::new()
         .add_message(refund_msg)
         .add_event(event)
-        .add_attribute("action", "steakhub/withdraw_unbonded"))
+        .add_attribute("action", "erishub/withdraw_unbonded"))
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -602,12 +602,12 @@ pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
 
     let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
 
-    let event = Event::new("steakhub/rebalanced").add_attribute("uluna_moved", amount.to_string());
+    let event = Event::new("erishub/rebalanced").add_attribute("uluna_moved", amount.to_string());
 
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
         .add_event(event)
-        .add_attribute("action", "steakhub/rebalance"))
+        .add_attribute("action", "erishub/rebalance"))
 }
 
 pub fn add_validator(
@@ -627,9 +627,9 @@ pub fn add_validator(
         Ok(validators)
     })?;
 
-    let event = Event::new("steakhub/validator_added").add_attribute("validator", validator);
+    let event = Event::new("erishub/validator_added").add_attribute("validator", validator);
 
-    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/add_validator"))
+    Ok(Response::new().add_event(event).add_attribute("action", "erishub/add_validator"))
 }
 
 pub fn remove_validator(
@@ -659,12 +659,12 @@ pub fn remove_validator(
         .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
         .collect::<Vec<_>>();
 
-    let event = Event::new("steak/validator_removed").add_attribute("validator", validator);
+    let event = Event::new("erishub/validator_removed").add_attribute("validator", validator);
 
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
         .add_event(event)
-        .add_attribute("action", "steakhub/remove_validator"))
+        .add_attribute("action", "erishub/remove_validator"))
 }
 
 pub fn transfer_ownership(
@@ -677,7 +677,7 @@ pub fn transfer_ownership(
     state.assert_owner(deps.storage, &sender)?;
     state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
 
-    Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_attribute("action", "erishub/transfer_ownership"))
 }
 
 pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<TerraMsgWrapper>> {
@@ -693,11 +693,11 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<Terra
     state.owner.save(deps.storage, &sender)?;
     state.new_owner.remove(deps.storage);
 
-    let event = Event::new("steakhub/ownership_transferred")
+    let event = Event::new("erishub/ownership_transferred")
         .add_attribute("new_owner", new_owner)
         .add_attribute("previous_owner", previous_owner);
 
-    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_event(event).add_attribute("action", "erishub/transfer_ownership"))
 }
 
 pub fn update_config(
@@ -725,5 +725,5 @@ pub fn update_config(
 
     state.fee_config.save(deps.storage, &fee_config)?;
 
-    Ok(Response::new().add_attribute("action", "steakhub/update_config"))
+    Ok(Response::new().add_attribute("action", "erishub/update_config"))
 }

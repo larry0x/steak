@@ -1,0 +1,15 @@
+
+{
+    "go.lintOnSave": "file",
+    "editor.formatOnSave": true,
+    "rust-analyzer.inlayHints.enable": false,
+    "gitlens.plusFeatures.enabled": false,
+    "gitlens.codeLens.authors.command": false,
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "workbench.colorCustomizations": {
+        "statusBar.background": "#708090",
+        "statusBar.debuggingBackground": "#708090",
+        "statusBar.noFolderBackground": "#708090",
+        "statussBar.prominentBackground": "#708090"
+    },
+}
