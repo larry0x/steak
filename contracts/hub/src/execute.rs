@@ -167,7 +167,7 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         })
         .collect::<Vec<_>>();
 
-    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
+    let callback_msgs = vec![CallbackMsg::Reinvest {}]
         .iter()
         .map(|callback| callback.into_cosmos_msg(&env.contract.address))
         .collect::<StdResult<Vec<_>>>()?;
@@ -178,50 +178,6 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         .add_attribute("action", "steakhub/harvest"))
 }
 
-pub fn swap(_deps: DepsMut) -> StdResult<Response> {
-    Err(StdError::generic_err("not supported yet"))
-}
-/*
-Will be enabled soon
-
-pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-    let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
-
-    let all_denoms = unlocked_coins
-        .iter()
-        .cloned()
-        .map(|coin| coin.denom)
-        .filter(|denom| denom != "uluna")
-        .collect::<Vec<_>>();
-
-    let known_denoms = TerraQuerier::new(&deps.querier)
-        .query_exchange_rates("uluna".to_string(), all_denoms)?
-        .exchange_rates
-        .into_iter()
-        .map(|item| item.quote_denom)
-        .collect::<HashSet<_>>();
-
-    let swap_submsgs = unlocked_coins
-        .iter()
-        .cloned()
-        .filter(|coin| known_denoms.contains(&coin.denom))
-        .map(|coin| {
-            SubMsg::reply_on_success(
-                create_swap_msg(coin, "uluna".to_string()),
-                3,
-            )
-        })
-        .collect::<Vec<_>>();
-
-    unlocked_coins.retain(|coin| !known_denoms.contains(&coin.denom));
-    state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
-
-    Ok(Response::new()
-        .add_submessages(swap_submsgs)
-        .add_attribute("action", "steakhub/swap"))
-}
-*/
 /// NOTE:
 /// 1. When delegation Luna here, we don't need to use a `SubMsg` to handle the received coins,
 /// because we have already withdrawn all claimable staking rewards previously in the same atomic
@@ -347,7 +303,7 @@ pub fn queue_unbond(
 
     state.unbond_requests.update(
         deps.storage,
-        (pending_batch.id.into(), &receiver),
+        (pending_batch.id, &receiver),
         |x| -> StdResult<_> {
             let mut request = x.unwrap_or_else(|| UnbondRequest {
                 id: pending_batch.id,
@@ -414,7 +370,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     // I don't have a solution for this... other than to manually fund contract with the slashed amount.
     state.previous_batches.save(
         deps.storage,
-        pending_batch.id.into(),
+        pending_batch.id,
         &Batch {
             id: pending_batch.id,
             reconciled: false,
@@ -504,7 +460,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     reconcile_batches(&mut batches, uluna_to_deduct);
 
     for batch in &batches {
-        state.previous_batches.save(deps.storage, batch.id.into(), batch)?;
+        state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
     let ids = batches.iter().map(|b| b.id.to_string()).collect::<Vec<_>>().join(",");
@@ -549,7 +505,7 @@ pub fn withdraw_unbonded(
     let mut total_uluna_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
     for request in &requests {
-        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id.into()) {
+        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
                 let uluna_to_refund =
                     batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
@@ -561,12 +517,12 @@ pub fn withdraw_unbonded(
                 batch.uluna_unclaimed -= uluna_to_refund;
 
                 if batch.total_shares.is_zero() {
-                    state.previous_batches.remove(deps.storage, request.id.into())?;
+                    state.previous_batches.remove(deps.storage, request.id)?;
                 } else {
-                    state.previous_batches.save(deps.storage, batch.id.into(), &batch)?;
+                    state.previous_batches.save(deps.storage, batch.id, &batch)?;
                 }
 
-                state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
+                state.unbond_requests.remove(deps.storage, (request.id, &user))?;
             }
         }
     }

@@ -42,7 +42,7 @@ pub enum ExecuteMsg {
         validator: String,
     },
     /// Remove a validator from the whitelist; callable by the owner
-    RemoveValidator{
+    RemoveValidator {
         validator: String,
     },
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
@@ -76,8 +76,6 @@ pub enum ReceiveMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
-    /// Swap Terra stablecoins held by the contract to Luna
-    Swap {},
     /// Following the swaps, stake the Luna acquired to the whitelisted validators
     Reinvest {},
 }

@@ -1,7 +1,7 @@
 [package]
 name = "steak-token"
 version = "2.0.0"
-authors = ["larry <gm@larry.engineer>"]
+authors = ["larry <gm@larry.engineer>","PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/st4k3h0us3/steak-contracts"

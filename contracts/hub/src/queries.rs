@@ -55,7 +55,7 @@ pub fn pending_batch(deps: Deps) -> StdResult<PendingBatch> {
 
 pub fn previous_batch(deps: Deps, id: u64) -> StdResult<Batch> {
     let state = State::default();
-    state.previous_batches.load(deps.storage, id.into())
+    state.previous_batches.load(deps.storage, id)
 }
 
 pub fn previous_batches(
@@ -66,7 +66,7 @@ pub fn previous_batches(
     let state = State::default();
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(|id| Bound::exclusive(id));
+    let start = start_after.map(Bound::exclusive);
 
     state
         .previous_batches
@@ -100,7 +100,7 @@ pub fn unbond_requests_by_batch(
 
     state
         .unbond_requests
-        .prefix(id.into())
+        .prefix(id)
         .range(deps.storage, start, None, Order::Ascending)
         .take(limit)
         .map(|item| {

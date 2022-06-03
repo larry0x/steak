@@ -22,12 +22,7 @@ pub fn instantiate(
 }
 
 #[entry_point]
-pub fn execute(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    msg: ExecuteMsg,
-) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let api = deps.api;
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
@@ -80,9 +75,10 @@ fn receive(
 
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
-                return Err(StdError::generic_err(
-                    format!("expecting Steak token, received {}", info.sender)
-                ));
+                return Err(StdError::generic_err(format!(
+                    "expecting Steak token, received {}",
+                    info.sender
+                )));
             }
 
             execute::queue_unbond(
@@ -106,7 +102,6 @@ fn callback(
     }
 
     match callback_msg {
-        CallbackMsg::Swap {} => execute::swap(deps),
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
 }
