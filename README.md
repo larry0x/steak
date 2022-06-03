@@ -13,7 +13,7 @@ A previous version ([v1.0.0-rc0](https://github.com/st4k3h0us3/steak-contracts/r
 
 ## Deployment
 
-### Mainnet (Phoenix-1)
+### Mainnet (phoenix-1)
 
 | Contract            | Address   |
 | ------------------- | --------- |
