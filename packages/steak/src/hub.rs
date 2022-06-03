@@ -2,7 +2,6 @@ use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, 
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-//use terra_cosmwasm::TerraMsgWrapper;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -76,8 +75,6 @@ pub enum ReceiveMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
-    /// Swap Terra stablecoins held by the contract to Luna
-    Swap {},
     /// Following the swaps, stake the Luna acquired to the whitelisted validators
     Reinvest {},
 }

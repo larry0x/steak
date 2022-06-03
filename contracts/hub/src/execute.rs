@@ -6,7 +6,6 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-//use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
 
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 
@@ -167,61 +166,14 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         })
         .collect::<Vec<_>>();
 
-    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
-        .iter()
-        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
-        .collect::<StdResult<Vec<_>>>()?;
+    let callback_msg = CallbackMsg::Reinvest {}.into_cosmos_msg(&env.contract.address)?;
 
     Ok(Response::new()
         .add_submessages(withdraw_submsgs)
-        .add_messages(callback_msgs)
+        .add_message(callback_msg)
         .add_attribute("action", "steakhub/harvest"))
 }
 
-pub fn swap(_deps: DepsMut) -> StdResult<Response> {
-    Err(StdError::generic_err("not supported yet"))
-}
-/*
-Will be enabled soon
-
-pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-    let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
-
-    let all_denoms = unlocked_coins
-        .iter()
-        .cloned()
-        .map(|coin| coin.denom)
-        .filter(|denom| denom != "uluna")
-        .collect::<Vec<_>>();
-
-    let known_denoms = TerraQuerier::new(&deps.querier)
-        .query_exchange_rates("uluna".to_string(), all_denoms)?
-        .exchange_rates
-        .into_iter()
-        .map(|item| item.quote_denom)
-        .collect::<HashSet<_>>();
-
-    let swap_submsgs = unlocked_coins
-        .iter()
-        .cloned()
-        .filter(|coin| known_denoms.contains(&coin.denom))
-        .map(|coin| {
-            SubMsg::reply_on_success(
-                create_swap_msg(coin, "uluna".to_string()),
-                3,
-            )
-        })
-        .collect::<Vec<_>>();
-
-    unlocked_coins.retain(|coin| !known_denoms.contains(&coin.denom));
-    state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
-
-    Ok(Response::new()
-        .add_submessages(swap_submsgs)
-        .add_attribute("action", "steakhub/swap"))
-}
-*/
 /// NOTE:
 /// 1. When delegation Luna here, we don't need to use a `SubMsg` to handle the received coins,
 /// because we have already withdrawn all claimable staking rewards previously in the same atomic
@@ -269,11 +221,8 @@ pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
     mut events: Vec<Event>,
-    event_type: &str,
-    receiver_key: &str,
-    received_coins_key: &str,
 ) -> StdResult<Response> {
-    events.retain(|event| event.ty == event_type);
+    events.retain(|event| event.ty == "coin_received");
     if events.is_empty() {
         return Ok(Response::new());
     }
@@ -283,8 +232,6 @@ pub fn register_received_coins(
         received_coins.add_many(&parse_coin_receiving_event(
             &env,
             event,
-            receiver_key,
-            received_coins_key,
         )?)?;
     }
 
@@ -298,35 +245,30 @@ pub fn register_received_coins(
     Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
 }
 
-fn parse_coin_receiving_event(
-    env: &Env,
-    event: &Event,
-    receiver_key: &str,
-    received_coins_key: &str,
-) -> StdResult<Coins> {
+fn parse_coin_receiving_event(env: &Env, event: &Event) -> StdResult<Coins> {
     let receiver = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == receiver_key)
-        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", receiver_key)))?
+        .find(|attr| attr.key == "receiver")
+        .ok_or_else(|| StdError::generic_err("cannot find `receiver` attribute"))?
         .value;
 
-    let received_coins_str = &event
+    let amount_str = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == received_coins_key)
+        .find(|attr| attr.key == "amount")
         .ok_or_else(|| {
-            StdError::generic_err(format!("cannot find `{}` attribute", received_coins_key))
+            StdError::generic_err("cannot find `amount` attribute")
         })?
         .value;
 
-    let received_coins = if *receiver == env.contract.address {
-        Coins::from_str(received_coins_str)?
+    let amount = if *receiver == env.contract.address {
+        Coins::from_str(amount_str)?
     } else {
         Coins(vec![])
     };
 
-    Ok(received_coins)
+    Ok(amount)
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -347,7 +289,7 @@ pub fn queue_unbond(
 
     state.unbond_requests.update(
         deps.storage,
-        (pending_batch.id.into(), &receiver),
+        (pending_batch.id, &receiver),
         |x| -> StdResult<_> {
             let mut request = x.unwrap_or_else(|| UnbondRequest {
                 id: pending_batch.id,
@@ -414,7 +356,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     // I don't have a solution for this... other than to manually fund contract with the slashed amount.
     state.previous_batches.save(
         deps.storage,
-        pending_batch.id.into(),
+        pending_batch.id,
         &Batch {
             id: pending_batch.id,
             reconciled: false,
@@ -495,19 +437,19 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     let uluna_expected = uluna_expected_received + uluna_expected_unlocked;
     let uluna_actual = deps.querier.query_balance(&env.contract.address, "uluna")?.amount;
 
-    if uluna_actual >= uluna_expected {
-        return Ok(Response::new());
+    let uluna_to_deduct = uluna_expected.checked_sub(uluna_actual).unwrap_or_else(|_| Uint128::zero());
+    if !uluna_to_deduct.is_zero() {
+        reconcile_batches(&mut batches, uluna_expected - uluna_actual);
     }
-
-    let uluna_to_deduct = uluna_expected - uluna_actual;
-
-    reconcile_batches(&mut batches, uluna_to_deduct);
 
     for batch in &batches {
-        state.previous_batches.save(deps.storage, batch.id.into(), batch)?;
+        state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
-    let ids = batches.iter().map(|b| b.id.to_string()).collect::<Vec<_>>().join(",");
+    let ids = batches
+        .iter()
+        .map(|b| b.id.to_string())
+        .collect::<Vec<_>>().join(",");
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
@@ -549,7 +491,7 @@ pub fn withdraw_unbonded(
     let mut total_uluna_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
     for request in &requests {
-        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id.into()) {
+        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
                 let uluna_to_refund =
                     batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
@@ -561,12 +503,12 @@ pub fn withdraw_unbonded(
                 batch.uluna_unclaimed -= uluna_to_refund;
 
                 if batch.total_shares.is_zero() {
-                    state.previous_batches.remove(deps.storage, request.id.into())?;
+                    state.previous_batches.remove(deps.storage, request.id)?;
                 } else {
-                    state.previous_batches.save(deps.storage, batch.id.into(), &batch)?;
+                    state.previous_batches.save(deps.storage, batch.id, &batch)?;
                 }
 
-                state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
+                state.unbond_requests.remove(deps.storage, (request.id, &user))?;
             }
         }
     }
