@@ -9,8 +9,8 @@ homepage = "https://steak.club"
 repository = "https://github.com/st4k3h0us3/steak-contracts"
 
 [dependencies]
-cosmwasm-std = "1.0.0"
-cw20 = "0.13.4"
+cosmwasm-std = "1.0"
+cw20 = "0.13"
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 

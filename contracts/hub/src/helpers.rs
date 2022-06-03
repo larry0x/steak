@@ -17,8 +17,7 @@ pub(crate) fn query_cw20_total_supply(
     querier: &QuerierWrapper,
     token_addr: &Addr,
 ) -> StdResult<Uint128> {
-    let token_info: TokenInfoResponse =
-        querier.query_wasm_smart(token_addr, &Cw20QueryMsg::TokenInfo {})?;
+    let token_info: TokenInfoResponse = querier.query_wasm_smart(token_addr, &Cw20QueryMsg::TokenInfo {})?;
     Ok(token_info.total_supply)
 }
 
@@ -75,18 +74,16 @@ pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
 /// sent together
 pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint128> {
     if funds.len() != 1 {
-        return Err(StdError::generic_err(format!(
-            "must deposit exactly one coin; received {}",
-            funds.len()
-        )));
+        return Err(StdError::generic_err(
+            format!("must deposit exactly one coin; received {}", funds.len()),
+        ));
     }
 
     let fund = &funds[0];
     if fund.denom != denom {
-        return Err(StdError::generic_err(format!(
-            "expected {} deposit, received {}",
-            denom, fund.denom
-        )));
+        return Err(StdError::generic_err(
+            format!("expected {} deposit, received {}", denom, fund.denom),
+        ));
     }
 
     if fund.amount.is_zero() {

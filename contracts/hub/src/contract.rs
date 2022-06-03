@@ -110,23 +110,8 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
-        2 => execute::register_received_coins(
-            deps,
-            env,
-            unwrap_reply(reply)?.events,
-            "coin_received",
-            "receiver",
-            "amount",
-        ),
-        3 => execute::register_received_coins(
-            deps,
-            env,
-            unwrap_reply(reply)?.events,
-            "swap",
-            "recipient",
-            "swap_coin",
-        ),
-        id => Err(StdError::generic_err(format!("invalid reply id: {}; must be 1-3", id))),
+        2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
+        id => Err(StdError::generic_err(format!("invalid reply id: {}; must be 1-2", id))),
     }
 }
 

@@ -6,7 +6,6 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-//use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
 
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 
@@ -167,14 +166,11 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         })
         .collect::<Vec<_>>();
 
-    let callback_msgs = vec![CallbackMsg::Reinvest {}]
-        .iter()
-        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
-        .collect::<StdResult<Vec<_>>>()?;
+    let callback_msg = CallbackMsg::Reinvest {}.into_cosmos_msg(&env.contract.address)?;
 
     Ok(Response::new()
         .add_submessages(withdraw_submsgs)
-        .add_messages(callback_msgs)
+        .add_message(callback_msg)
         .add_attribute("action", "steakhub/harvest"))
 }
 
@@ -225,23 +221,15 @@ pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
     mut events: Vec<Event>,
-    event_type: &str,
-    receiver_key: &str,
-    received_coins_key: &str,
 ) -> StdResult<Response> {
-    events.retain(|event| event.ty == event_type);
+    events.retain(|event| event.ty == "coin_received");
     if events.is_empty() {
         return Ok(Response::new());
     }
 
     let mut received_coins = Coins(vec![]);
     for event in &events {
-        received_coins.add_many(&parse_coin_receiving_event(
-            &env,
-            event,
-            receiver_key,
-            received_coins_key,
-        )?)?;
+        received_coins.add_many(&parse_coin_receiving_event(&env, event)?)?;
     }
 
     let state = State::default();
@@ -254,35 +242,28 @@ pub fn register_received_coins(
     Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
 }
 
-fn parse_coin_receiving_event(
-    env: &Env,
-    event: &Event,
-    receiver_key: &str,
-    received_coins_key: &str,
-) -> StdResult<Coins> {
+fn parse_coin_receiving_event(env: &Env, event: &Event) -> StdResult<Coins> {
     let receiver = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == receiver_key)
-        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", receiver_key)))?
+        .find(|attr| attr.key == "receiver")
+        .ok_or_else(|| StdError::generic_err("cannot find `receiver` attribute"))?
         .value;
 
-    let received_coins_str = &event
+    let amount_str = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == received_coins_key)
-        .ok_or_else(|| {
-            StdError::generic_err(format!("cannot find `{}` attribute", received_coins_key))
-        })?
+        .find(|attr| attr.key == "amount")
+        .ok_or_else(|| StdError::generic_err("cannot find `amount` attribute"))?
         .value;
 
-    let received_coins = if *receiver == env.contract.address {
-        Coins::from_str(received_coins_str)?
+    let amount = if *receiver == env.contract.address {
+        Coins::from_str(amount_str)?
     } else {
         Coins(vec![])
     };
 
-    Ok(received_coins)
+    Ok(amount)
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -451,13 +432,11 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     let uluna_expected = uluna_expected_received + uluna_expected_unlocked;
     let uluna_actual = deps.querier.query_balance(&env.contract.address, "uluna")?.amount;
 
-    if uluna_actual >= uluna_expected {
-        return Ok(Response::new());
+    let uluna_to_deduct =
+        uluna_expected.checked_sub(uluna_actual).unwrap_or_else(|_| Uint128::zero());
+    if !uluna_to_deduct.is_zero() {
+        reconcile_batches(&mut batches, uluna_expected - uluna_actual);
     }
-
-    let uluna_to_deduct = uluna_expected - uluna_actual;
-
-    reconcile_batches(&mut batches, uluna_to_deduct);
 
     for batch in &batches {
         state.previous_batches.save(deps.storage, batch.id, batch)?;

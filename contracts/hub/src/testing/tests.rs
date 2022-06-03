@@ -76,11 +76,9 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         )
     );
 
-    let event = Event::new("instantiate_contract")
-        .add_attribute("creator", MOCK_CONTRACT_ADDR)
-        .add_attribute("admin", "admin")
+    let event = Event::new("instantiate")
         .add_attribute("code_id", "69420")
-        .add_attribute("contract_address", "steak_token");
+        .add_attribute("_contract_address", "steak_token");
 
     let res = reply(
         deps.as_mut(),
@@ -261,7 +259,7 @@ fn harvesting() {
     let res = execute(deps.as_mut(), mock_env(), mock_info("worker", &[]), ExecuteMsg::Harvest {})
         .unwrap();
 
-    assert_eq!(res.messages.len(), 5);
+    assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(
@@ -295,19 +293,6 @@ fn harvesting() {
             id: 0,
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Swap {})).unwrap(),
-                funds: vec![]
-            }),
-            gas_limit: None,
-            reply_on: ReplyOn::Never
-        }
-    );
-    assert_eq!(
-        res.messages[4],
-        SubMsg {
-            id: 0,
-            msg: CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Reinvest {})).unwrap(),
                 funds: vec![]
             }),
@@ -316,8 +301,6 @@ fn harvesting() {
         }
     );
 }
-/*
-not relevant yet in terra 2.0
 
 #[test]
 fn registering_unlocked_coins() {
@@ -334,7 +317,7 @@ fn registering_unlocked_coins() {
         mock_env(),
         Reply {
             id: 2,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgResponse {
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
             }),
@@ -350,144 +333,11 @@ fn registering_unlocked_coins() {
             Coin::new(123, "ukrw"),
             Coin::new(234, "uluna"),
             Coin::new(345, "uusd"),
-            Coin::new(
-                69420,
-                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
-            ),
-        ]
-    );
-
-    // After swapping, we parse the `swap` event to find the received amount
-    let event = Event::new("swap")
-        .add_attribute("offer", "25959uusd")
-        .add_attribute("trader", MOCK_CONTRACT_ADDR.to_string())
-        .add_attribute("recipient", MOCK_CONTRACT_ADDR.to_string())
-        .add_attribute("swap_coin", "243uluna")
-        .add_attribute("swap_fee", "1uluna");
-
-    reply(
-        deps.as_mut(),
-        mock_env(),
-        Reply {
-            id: 3,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgResponse {
-                events: vec![event],
-                data: None,
-            }),
-        },
-    )
-    .unwrap();
-
-    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        unlocked_coins,
-        vec![
-            Coin::new(123, "ukrw"),
-            Coin::new(477, "uluna"), // 234 (balance prior to swap) + 243 (swap proceedings)
-            Coin::new(345, "uusd"),
-            Coin::new(
-                69420,
-                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
-            ),
+            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
         ]
     );
 }
 
- */
-
-/*
- This test will be re-enabled once we have the ability to have fees in things other than luna
-
-#[test]
-fn swapping() {
-    let mut deps = setup_test();
-    let state = State::default();
-
-    // Only denoms that has exchange rates defined in the oracle module can be swapped to Luna
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "ukrw",
-        Decimal::from_str("129108.193653786399948012").unwrap(),
-    );
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "usdr",
-        Decimal::from_str("77.056327779353129245").unwrap(),
-    );
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "uusd",
-        Decimal::from_str("105.476484668836552061").unwrap(),
-    );
-
-    // After withdrawing staking rewards, we have some unlocked coins. Some can be swapped for Luna,
-    // some can't.
-    state
-        .unlocked_coins
-        .save(
-            deps.as_mut().storage,
-            &vec![
-                Coin::new(123, "ukrw"),
-                Coin::new(234, "uluna"),
-                Coin::new(345, "uusd"),
-                Coin::new(
-                    69420,
-                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
-                ),
-            ],
-        )
-        .unwrap();
-
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info(MOCK_CONTRACT_ADDR, &[]),
-        ExecuteMsg::Callback(CallbackMsg::Swap {}),
-    )
-    .unwrap();
-
-    assert_eq!(res.messages.len(), 2);
-    assert_eq!(
-        res.messages[0],
-        SubMsg::reply_on_success(
-            CosmosMsg::Custom(TerraMsgWrapper {
-                route: TerraRoute::Market,
-                msg_data: TerraMsg::Swap {
-                    offer_coin: Coin::new(123, "ukrw"),
-                    ask_denom: "uluna".to_string()
-                }
-            }),
-            3
-        )
-    );
-    assert_eq!(
-        res.messages[1],
-        SubMsg::reply_on_success(
-            CosmosMsg::Custom(TerraMsgWrapper {
-                route: TerraRoute::Market,
-                msg_data: TerraMsg::Swap {
-                    offer_coin: Coin::new(345, "uusd"),
-                    ask_denom: "uluna".to_string()
-                }
-            }),
-            3
-        )
-    );
-
-    // Storage should have been updated
-    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        unlocked_coins,
-        vec![
-            Coin::new(234, "uluna"),
-            Coin::new(
-                69420,
-                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
-            ),
-        ]
-    );
-}
-*/
 #[test]
 fn reinvesting() {
     let mut deps = setup_test();
@@ -1596,13 +1446,8 @@ fn parsing_coin() {
     let coin = parse_coin("12345uatom").unwrap();
     assert_eq!(coin, Coin::new(12345, "uatom"));
 
-    let coin =
-        parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
-            .unwrap();
-    assert_eq!(
-        coin,
-        Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
-    );
+    let coin = parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B").unwrap();
+    assert_eq!(coin, Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"));
 
     let err = parse_coin("69420").unwrap_err();
     assert_eq!(err, StdError::generic_err("failed to parse coin: 69420"));
@@ -1634,10 +1479,7 @@ fn adding_coins() {
     assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
 
     coins.add_many(&Coins::from_str("76543uatom,69420uusd").unwrap()).unwrap();
-    assert_eq!(
-        coins.0,
-        vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]
-    );
+    assert_eq!(coins.0, vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]);
 }
 
 #[test]
@@ -1645,8 +1487,7 @@ fn receiving_funds() {
     let err = parse_received_fund(&[], "uluna").unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
 
-    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna")
-        .unwrap_err();
+    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna").unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 2"));
 
     let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uluna").unwrap_err();
