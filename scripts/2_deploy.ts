@@ -80,6 +80,6 @@ async function uploadCode(deployer: Wallet, path: string) {
     msg
   );
   const address =
-    result.logs[0].eventsByType.instantiate_contract.contract_address[0];
+      result.logs[0].eventsByType["instantiate_contract"]["contract_address"][0];
   console.log(`Contract instantiated! Address: ${address}`);
 })();

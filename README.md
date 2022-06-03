@@ -26,8 +26,8 @@ A previous version ([v1.0.0-rc0](https://github.com/st4k3h0us3/steak-contracts/r
 
 | Contract            | Address                                                                                   |
 | ------------------- |-------------------------------------------------------------------------------------------|
-| Steak Hub           | [`tbd`](https://terrasco.pe/testnet/address/terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy) |
-| Steak Token         | [`tbd`](https://terrasco.pe/testnet/address/terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w) |
+| Steak Hub           | [`terra1lm7d4zr97rzp3a22szdv6ucpeyckyl2l2wh6jc9qrga78eyrvamsjgs5q6`](https://finder.terra.money/testnet/address/terra1lm7d4zr97rzp3a22szdv6ucpeyckyl2l2wh6jc9qrga78eyrvamsjgs5q6) |
+| Steak Token         | [`terra1q02glqy2gcl9kavshhh9tzr3l7cjwjwk7mhatd9h9nc243gq73esdat6wj`](https://finder.terra.money/testnet/address/terra1q02glqy2gcl9kavshhh9tzr3l7cjwjwk7mhatd9h9nc243gq73esdat6wj) |
 | STEAK-LUNA Pair     | [`tbd`](https://terrasco.pe/testnet/address/terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz) |
 | STEAK-LUNA LP Token | [`tbd`](https://terrasco.pe/testnet/address/terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje) |
 

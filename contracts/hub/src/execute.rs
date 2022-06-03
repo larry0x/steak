@@ -68,14 +68,14 @@ pub fn register_steak_token(deps: DepsMut, response: SubMsgResponse) -> StdResul
     let event = response
         .events
         .iter()
-        .find(|event| event.ty == "instantiate_contract")
-        .ok_or_else(|| StdError::generic_err("cannot find `instantiate_contract` event"))?;
+        .find(|event| event.ty == "instantiate")
+        .ok_or_else(|| StdError::generic_err("cannot find `instantiate` event"))?;
 
     let contract_addr_str = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == "contract_address")
-        .ok_or_else(|| StdError::generic_err("cannot find `contract_address` attribute"))?
+        .find(|attr| attr.key == "_contract_address")
+        .ok_or_else(|| StdError::generic_err("cannot find `_contract_address` attribute"))?
         .value;
 
     let contract_addr = deps.api.addr_validate(contract_addr_str)?;
