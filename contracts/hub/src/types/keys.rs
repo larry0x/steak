@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use cw_storage_plus::{Prefixer, PrimaryKey};
+use cw_storage_plus::{Key, Prefixer, PrimaryKey};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BooleanKey {
@@ -30,14 +30,16 @@ impl From<bool> for BooleanKey {
 impl<'a> PrimaryKey<'a> for BooleanKey {
     type Prefix = ();
     type SubPrefix = ();
+    type Suffix = ();
+    type SuperSuffix = ();
 
-    fn key(&self) -> Vec<&[u8]> {
+    fn key(&self) -> Vec<Key> {
         self.wrapped.key()
     }
 }
 
 impl<'a> Prefixer<'a> for BooleanKey {
-    fn prefix(&self) -> Vec<&[u8]> {
+    fn prefix(&self) -> Vec<Key> {
         self.wrapped.prefix()
     }
 }

@@ -3,11 +3,11 @@ use std::str::FromStr;
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order, OwnedDeps,
-    Reply, ReplyOn, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    Reply, ReplyOn, StdError, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
+//use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
 
 use steak::hub::{
     Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
@@ -17,7 +17,9 @@ use steak::hub::{
 
 use crate::contract::{execute, instantiate, reply};
 use crate::helpers::{parse_coin, parse_received_fund};
-use crate::math::{compute_undelegations, compute_redelegations_for_removal, compute_redelegations_for_rebalancing};
+use crate::math::{
+    compute_redelegations_for_rebalancing, compute_redelegations_for_removal, compute_undelegations,
+};
 use crate::state::State;
 use crate::types::{Coins, Delegation, Redelegation, Undelegation};
 
@@ -85,7 +87,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         mock_env_at_timestamp(10000),
         Reply {
             id: 1,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
             }),
@@ -256,13 +258,8 @@ fn harvesting() {
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info("worker", &[]),
-        ExecuteMsg::Harvest {}
-    )
-    .unwrap();
+    let res = execute(deps.as_mut(), mock_env(), mock_info("worker", &[]), ExecuteMsg::Harvest {})
+        .unwrap();
 
     assert_eq!(res.messages.len(), 5);
     assert_eq!(
@@ -319,6 +316,8 @@ fn harvesting() {
         }
     );
 }
+/*
+not relevant yet in terra 2.0
 
 #[test]
 fn registering_unlocked_coins() {
@@ -335,7 +334,7 @@ fn registering_unlocked_coins() {
         mock_env(),
         Reply {
             id: 2,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+            result: cosmwasm_std::ContractResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
             }),
@@ -351,7 +350,10 @@ fn registering_unlocked_coins() {
             Coin::new(123, "ukrw"),
             Coin::new(234, "uluna"),
             Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+            Coin::new(
+                69420,
+                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+            ),
         ]
     );
 
@@ -368,7 +370,7 @@ fn registering_unlocked_coins() {
         mock_env(),
         Reply {
             id: 3,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+            result: cosmwasm_std::ContractResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
             }),
@@ -383,10 +385,18 @@ fn registering_unlocked_coins() {
             Coin::new(123, "ukrw"),
             Coin::new(477, "uluna"), // 234 (balance prior to swap) + 243 (swap proceedings)
             Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+            Coin::new(
+                69420,
+                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+            ),
         ]
     );
 }
+
+ */
+
+/*
+ This test will be re-enabled once we have the ability to have fees in things other than luna
 
 #[test]
 fn swapping() {
@@ -412,15 +422,21 @@ fn swapping() {
 
     // After withdrawing staking rewards, we have some unlocked coins. Some can be swapped for Luna,
     // some can't.
-    state.unlocked_coins.save(
-        deps.as_mut().storage,
-        &vec![
-            Coin::new(123, "ukrw"),
-            Coin::new(234, "uluna"),
-            Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    ).unwrap();
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(123, "ukrw"),
+                Coin::new(234, "uluna"),
+                Coin::new(345, "uusd"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
+            ],
+        )
+        .unwrap();
 
     let res = execute(
         deps.as_mut(),
@@ -464,11 +480,14 @@ fn swapping() {
         unlocked_coins,
         vec![
             Coin::new(234, "uluna"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+            Coin::new(
+                69420,
+                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+            ),
         ]
     );
 }
-
+*/
 #[test]
 fn reinvesting() {
     let mut deps = setup_test();
@@ -481,13 +500,19 @@ fn reinvesting() {
     ]);
 
     // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
-    state.unlocked_coins.save(
-        deps.as_mut().storage,
-        &vec![
-            Coin::new(234, "uluna"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    ).unwrap();
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(234, "uluna"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
+            ],
+        )
+        .unwrap();
 
     // Bob has the smallest amount of delegations, so all proceeds go to him
     let res = execute(
@@ -513,7 +538,10 @@ fn reinvesting() {
     let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
     assert_eq!(
         unlocked_coins,
-        vec![Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")],
+        vec![Coin::new(
+            69420,
+            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+        )],
     );
 }
 
@@ -789,7 +817,7 @@ fn reconciling() {
             total_shares: Uint128::new(1567),
             uluna_unclaimed: Uint128::new(1629), // 1.040 Luna per Steak
             est_unbond_end_time: 40000,          // not yet finished unbonding, ignored
-        }
+        },
     ];
 
     for previous_batch in &previous_batches {
@@ -799,13 +827,21 @@ fn reconciling() {
             .unwrap();
     }
 
-    state.unlocked_coins.save(deps.as_mut().storage, &vec![
-        Coin::new(10000, "uluna"),
-        Coin::new(234, "ukrw"),
-        Coin::new(345, "uusd"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ])
-    .unwrap();
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(10000, "uluna"),
+                Coin::new(234, "ukrw"),
+                Coin::new(345, "uusd"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
+            ],
+        )
+        .unwrap();
 
     deps.querier.set_bank_balances(&[
         Coin::new(12345, "uluna"),
@@ -818,8 +854,9 @@ fn reconciling() {
         deps.as_mut(),
         mock_env_at_timestamp(35000),
         mock_info("worker", &[]),
-        ExecuteMsg::Reconcile {}
-    ).unwrap();
+        ExecuteMsg::Reconcile {},
+    )
+    .unwrap();
 
     // Expected received: batch 2 + batch 3 = 1385 + 1506 = 2891
     // Expected unlocked: 10000
@@ -928,7 +965,7 @@ fn withdrawing_unbonded() {
         },
         Batch {
             id: 3,
-            reconciled: false,                    // finished unbonding, but not reconciled; ignored
+            reconciled: false, // finished unbonding, but not reconciled; ignored
             total_shares: Uint128::new(45678),
             uluna_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
             est_unbond_end_time: 20000,
@@ -938,8 +975,8 @@ fn withdrawing_unbonded() {
             reconciled: true,
             total_shares: Uint128::new(56789),
             uluna_unclaimed: Uint128::new(59060), // 1.040 Luna per Steak
-            est_unbond_end_time: 30000,           // reconciled, but not yet finished unbonding; ignored
-        }
+            est_unbond_end_time: 30000, // reconciled, but not yet finished unbonding; ignored
+        },
     ];
 
     for previous_batch in &previous_batches {
@@ -1109,7 +1146,9 @@ fn adding_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::AddValidator { validator: "dave".to_string() },
+        ExecuteMsg::AddValidator {
+            validator: "dave".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1119,7 +1158,9 @@ fn adding_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::AddValidator { validator: "alice".to_string() },
+        ExecuteMsg::AddValidator {
+            validator: "alice".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1129,7 +1170,9 @@ fn adding_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::AddValidator { validator: "dave".to_string() },
+        ExecuteMsg::AddValidator {
+            validator: "dave".to_string(),
+        },
     )
     .unwrap();
 
@@ -1138,7 +1181,12 @@ fn adding_validator() {
     let validators = state.validators.load(deps.as_ref().storage).unwrap();
     assert_eq!(
         validators,
-        vec![String::from("alice"), String::from("bob"), String::from("charlie"), String::from("dave")],
+        vec![
+            String::from("alice"),
+            String::from("bob"),
+            String::from("charlie"),
+            String::from("dave")
+        ],
     );
 }
 
@@ -1157,7 +1205,9 @@ fn removing_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::RemoveValidator { validator: "charlie".to_string() },
+        ExecuteMsg::RemoveValidator {
+            validator: "charlie".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1167,7 +1217,9 @@ fn removing_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::RemoveValidator { validator: "dave".to_string() },
+        ExecuteMsg::RemoveValidator {
+            validator: "dave".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1181,31 +1233,24 @@ fn removing_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::RemoveValidator { validator: "charlie".to_string() },
+        ExecuteMsg::RemoveValidator {
+            validator: "charlie".to_string(),
+        },
     )
     .unwrap();
 
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(
-            Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(),
-            2,
-        ),
+        SubMsg::reply_on_success(Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(), 2,),
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(
-            Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(),
-            2,
-        ),
+        SubMsg::reply_on_success(Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(), 2,),
     );
 
     let validators = state.validators.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        validators,
-        vec![String::from("alice"), String::from("bob")],
-    );
+    assert_eq!(validators, vec![String::from("alice"), String::from("bob")],);
 }
 
 #[test]
@@ -1217,7 +1262,9 @@ fn transferring_ownership() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::TransferOwnership { new_owner: "jake".to_string() },
+        ExecuteMsg::TransferOwnership {
+            new_owner: "jake".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1227,7 +1274,9 @@ fn transferring_ownership() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::TransferOwnership { new_owner: "jake".to_string() },
+        ExecuteMsg::TransferOwnership {
+            new_owner: "jake".to_string(),
+        },
     )
     .unwrap();
 
@@ -1246,13 +1295,9 @@ fn transferring_ownership() {
 
     assert_eq!(err, StdError::generic_err("unauthorized: sender is not new owner"));
 
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info("jake", &[]),
-        ExecuteMsg::AcceptOwnership {},
-    )
-    .unwrap();
+    let res =
+        execute(deps.as_mut(), mock_env(), mock_info("jake", &[]), ExecuteMsg::AcceptOwnership {})
+            .unwrap();
 
     assert_eq!(res.messages.len(), 0);
 
@@ -1443,13 +1488,7 @@ fn querying_unbond_requests() {
             limit: None,
         },
     );
-    assert_eq!(
-        res,
-        vec![
-            unbond_requests[0].clone().into(),
-            unbond_requests[3].clone().into(),
-        ]
-    );
+    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into(),]);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1545,10 +1584,7 @@ fn computing_redelegations_for_rebalancing() {
         Redelegation::new("charlie", "evan", 38126),
     ];
 
-    assert_eq!(
-        compute_redelegations_for_rebalancing(&current_delegations),
-        expected,
-    );
+    assert_eq!(compute_redelegations_for_rebalancing(&current_delegations), expected,);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1560,8 +1596,13 @@ fn parsing_coin() {
     let coin = parse_coin("12345uatom").unwrap();
     assert_eq!(coin, Coin::new(12345, "uatom"));
 
-    let coin = parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B").unwrap();
-    assert_eq!(coin, Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"));
+    let coin =
+        parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
+            .unwrap();
+    assert_eq!(
+        coin,
+        Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
+    );
 
     let err = parse_coin("69420").unwrap_err();
     assert_eq!(err, StdError::generic_err("failed to parse coin: 69420"));
@@ -1593,7 +1634,10 @@ fn adding_coins() {
     assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
 
     coins.add_many(&Coins::from_str("76543uatom,69420uusd").unwrap()).unwrap();
-    assert_eq!(coins.0, vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]);
+    assert_eq!(
+        coins.0,
+        vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]
+    );
 }
 
 #[test]
@@ -1601,7 +1645,8 @@ fn receiving_funds() {
     let err = parse_received_fund(&[], "uluna").unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
 
-    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna").unwrap_err();
+    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna")
+        .unwrap_err();
     assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 2"));
 
     let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uluna").unwrap_err();

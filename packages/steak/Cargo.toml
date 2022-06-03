@@ -1,6 +1,6 @@
 [package]
 name = "steak"
-version = "1.0.0"
+version = "2.0.0"
 authors = ["larry <gm@larry.engineer>"]
 edition = "2018"
 description = "Liquid staking protocol for the cosmos"
@@ -9,8 +9,8 @@ homepage = "https://steak.club"
 repository = "https://github.com/st4k3h0us3/steak-contracts"
 
 [dependencies]
-cosmwasm-std = "0.16"
-cw20 = "0.9"
+cosmwasm-std = "1.0.0"
+cw20 = "0.13.4"
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-terra-cosmwasm = "2.2"
+#terra-cosmwasm = "2.2"

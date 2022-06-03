@@ -23,6 +23,7 @@ pub(super) fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, CustomQueri
         storage: MockStorage::default(),
         api: MockApi::default(),
         querier: CustomQuerier::default(),
+        custom_query_type: Default::default(),
     }
 }
 
@@ -33,6 +34,7 @@ pub(super) fn mock_env_at_timestamp(timestamp: u64) -> Env {
             time: Timestamp::from_seconds(timestamp),
             chain_id: "cosmos-testnet-14002".to_string(),
         },
+        transaction: None,
         contract: ContractInfo {
             address: Addr::unchecked(MOCK_CONTRACT_ADDR),
         },

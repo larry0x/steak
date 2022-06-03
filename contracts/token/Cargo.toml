@@ -1,6 +1,6 @@
 [package]
 name = "steak-token"
-version = "1.0.0"
+version = "2.0.0"
 authors = ["larry <gm@larry.engineer>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
@@ -13,6 +13,6 @@ crate-type = ["cdylib", "rlib"]
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-cosmwasm-std = { version = "0.16", features = ["staking"] }
-cw20 = "0.9"
-cw20-base = { version = "0.9", features = ["library"] }
+cosmwasm-std = { version = "1.0.0", features = ["staking"] }
+cw20 = "0.13.4"
+cw20-base = { version = "0.13.4", features = ["library"] }

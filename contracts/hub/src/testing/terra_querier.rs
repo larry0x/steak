@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use cosmwasm_std::{to_binary, Decimal, QuerierResult, SystemError, SystemResult};
-use terra_cosmwasm::{ExchangeRateItem, ExchangeRatesResponse, TerraQuery};
+//use terra_cosmwasm::{ExchangeRateItem, ExchangeRatesResponse, TerraQuery};
 
 use super::helpers::err_unsupported_query;
 

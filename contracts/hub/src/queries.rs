@@ -1,5 +1,5 @@
-use cosmwasm_std::{Decimal, Deps, Env, Order, StdResult, Uint128};
-use cw_storage_plus::{Bound, U64Key};
+use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdError, StdResult, Uint128};
+use cw_storage_plus::Bound;
 
 use steak::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
@@ -66,7 +66,7 @@ pub fn previous_batches(
     let state = State::default();
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(|id| Bound::exclusive(U64Key::from(id)));
+    let start = start_after.map(|id| Bound::exclusive(id));
 
     state
         .previous_batches
@@ -88,7 +88,15 @@ pub fn unbond_requests_by_batch(
     let state = State::default();
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(Bound::exclusive);
+    let addr: Addr;
+    let start = match start_after {
+        None => None,
+        Some(address_string) => {
+            addr = deps.api.addr_validate(&address_string)?;
+            Some(Bound::exclusive(&addr))
+        },
+    };
+    //  let start = start_after_addr.map(|addr| Bound::exclusive(&addr.clone()));
 
     state
         .unbond_requests
@@ -111,7 +119,11 @@ pub fn unbond_requests_by_user(
     let state = State::default();
 
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(|id| Bound::exclusive(U64Key::from(id)));
+    if let Some(_num) = start_after {
+        return Err(StdError::generic_err("start_after not supported yet"));
+    }
+    // let start = start_after.map(|id| Bound::exclusive(id));
+    let start = None;
 
     state
         .unbond_requests
