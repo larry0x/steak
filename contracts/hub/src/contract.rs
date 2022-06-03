@@ -3,7 +3,6 @@ use cosmwasm_std::{
     StdError, StdResult,
 };
 use cw20::Cw20ReceiveMsg;
-//use terra_cosmwasm::TerraMsgWrapper;
 
 use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
@@ -75,10 +74,9 @@ fn receive(
 
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
-                return Err(StdError::generic_err(format!(
-                    "expecting Steak token, received {}",
-                    info.sender
-                )));
+                return Err(StdError::generic_err(
+                    format!("expecting Steak token, received {}", info.sender),
+                ));
             }
 
             execute::queue_unbond(

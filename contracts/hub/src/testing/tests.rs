@@ -7,7 +7,6 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-//use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
 
 use steak::hub::{
     Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
@@ -256,8 +255,13 @@ fn harvesting() {
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
-    let res = execute(deps.as_mut(), mock_env(), mock_info("worker", &[]), ExecuteMsg::Harvest {})
-        .unwrap();
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("worker", &[]),
+        ExecuteMsg::Harvest {}
+    )
+    .unwrap();
 
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
@@ -356,10 +360,7 @@ fn reinvesting() {
             deps.as_mut().storage,
             &vec![
                 Coin::new(234, "uluna"),
-                Coin::new(
-                    69420,
-                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
-                ),
+                Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
             ],
         )
         .unwrap();
@@ -388,10 +389,7 @@ fn reinvesting() {
     let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
     assert_eq!(
         unlocked_coins,
-        vec![Coin::new(
-            69420,
-            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
-        )],
+        vec![Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")],
     );
 }
 
@@ -685,10 +683,7 @@ fn reconciling() {
                 Coin::new(10000, "uluna"),
                 Coin::new(234, "ukrw"),
                 Coin::new(345, "uusd"),
-                Coin::new(
-                    69420,
-                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
-                ),
+                Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
             ],
         )
         .unwrap();
@@ -912,9 +907,7 @@ fn withdrawing_unbonded() {
     let err = state.previous_batches.load(deps.as_ref().storage, 2u64.into()).unwrap_err();
     assert_eq!(
         err,
-        StdError::NotFound {
-            kind: "steak::hub::Batch".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::Batch".to_string() }
     );
 
     // User 1's unbond requests in batches 1 and 2 should have been deleted
@@ -929,15 +922,11 @@ fn withdrawing_unbonded() {
 
     assert_eq!(
         err1,
-        StdError::NotFound {
-            kind: "steak::hub::UnbondRequest".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
     );
     assert_eq!(
         err2,
-        StdError::NotFound {
-            kind: "steak::hub::UnbondRequest".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
     );
 
     // User 3 attempt to withdraw; also specifying a receiver
@@ -981,9 +970,7 @@ fn withdrawing_unbonded() {
 
     assert_eq!(
         err,
-        StdError::NotFound {
-            kind: "steak::hub::UnbondRequest".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
     );
 }
 
@@ -1145,9 +1132,13 @@ fn transferring_ownership() {
 
     assert_eq!(err, StdError::generic_err("unauthorized: sender is not new owner"));
 
-    let res =
-        execute(deps.as_mut(), mock_env(), mock_info("jake", &[]), ExecuteMsg::AcceptOwnership {})
-            .unwrap();
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::AcceptOwnership {}
+    )
+    .unwrap();
 
     assert_eq!(res.messages.len(), 0);
 
@@ -1338,7 +1329,17 @@ fn querying_unbond_requests() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into(),]);
+    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into()]);
+
+    let res: Vec<UnbondRequestsByUserResponseItem> = query_helper(
+        deps.as_ref(),
+        QueryMsg::UnbondRequestsByUser {
+            user: "alice".to_string(),
+            start_after: Some(2),
+            limit: None,
+        },
+    );
+    assert_eq!(res, vec![unbond_requests[3].clone().into()]);
 }
 
 //--------------------------------------------------------------------------------------------------

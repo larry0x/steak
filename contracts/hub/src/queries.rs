@@ -1,5 +1,5 @@
-use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdError, StdResult, Uint128};
-use cw_storage_plus::Bound;
+use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdResult, Uint128};
+use cw_storage_plus::{Bound, CwIntKey};
 
 use steak::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
@@ -65,8 +65,8 @@ pub fn previous_batches(
 ) -> StdResult<Vec<Batch>> {
     let state = State::default();
 
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = start_after.map(Bound::exclusive);
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
     state
         .previous_batches
@@ -87,16 +87,15 @@ pub fn unbond_requests_by_batch(
 ) -> StdResult<Vec<UnbondRequestsByBatchResponseItem>> {
     let state = State::default();
 
-    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let addr: Addr;
     let start = match start_after {
         None => None,
-        Some(address_string) => {
-            addr = deps.api.addr_validate(&address_string)?;
+        Some(addr_str) => {
+            addr = deps.api.addr_validate(&addr_str)?;
             Some(Bound::exclusive(&addr))
         },
     };
-    //  let start = start_after_addr.map(|addr| Bound::exclusive(&addr.clone()));
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
     state
         .unbond_requests
@@ -118,12 +117,12 @@ pub fn unbond_requests_by_user(
 ) -> StdResult<Vec<UnbondRequestsByUserResponseItem>> {
     let state = State::default();
 
+    let start = start_after.map(|id| {
+        let mut key = vec![0u8, 8u8]; // when `u64` are used as keys, they are prefixed with the length, which is [0, 8]
+        key.extend(id.to_cw_bytes());
+        Bound::exclusive(key)
+    });
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    if let Some(_num) = start_after {
-        return Err(StdError::generic_err("start_after not supported yet"));
-    }
-    // let start = start_after.map(|id| Bound::exclusive(id));
-    let start = None;
 
     state
         .unbond_requests
