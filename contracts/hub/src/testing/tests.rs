@@ -3,11 +3,10 @@ use std::str::FromStr;
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order, OwnedDeps,
-    Reply, ReplyOn, StdError, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    Reply, ReplyOn, StdError, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{TerraMsg, TerraMsgWrapper, TerraRoute};
 
 use steak::hub::{
     Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
@@ -17,7 +16,9 @@ use steak::hub::{
 
 use crate::contract::{execute, instantiate, reply};
 use crate::helpers::{parse_coin, parse_received_fund};
-use crate::math::{compute_undelegations, compute_redelegations_for_removal, compute_redelegations_for_rebalancing};
+use crate::math::{
+    compute_redelegations_for_rebalancing, compute_redelegations_for_removal, compute_undelegations,
+};
 use crate::state::State;
 use crate::types::{Coins, Delegation, Redelegation, Undelegation};
 
@@ -74,18 +75,16 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         )
     );
 
-    let event = Event::new("instantiate_contract")
-        .add_attribute("creator", MOCK_CONTRACT_ADDR)
-        .add_attribute("admin", "admin")
+    let event = Event::new("instantiate")
         .add_attribute("code_id", "69420")
-        .add_attribute("contract_address", "steak_token");
+        .add_attribute("_contract_address", "steak_token");
 
     let res = reply(
         deps.as_mut(),
         mock_env_at_timestamp(10000),
         Reply {
             id: 1,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
             }),
@@ -264,7 +263,7 @@ fn harvesting() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 5);
+    assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(
@@ -298,19 +297,6 @@ fn harvesting() {
             id: 0,
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Swap {})).unwrap(),
-                funds: vec![]
-            }),
-            gas_limit: None,
-            reply_on: ReplyOn::Never
-        }
-    );
-    assert_eq!(
-        res.messages[4],
-        SubMsg {
-            id: 0,
-            msg: CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Reinvest {})).unwrap(),
                 funds: vec![]
             }),
@@ -335,7 +321,7 @@ fn registering_unlocked_coins() {
         mock_env(),
         Reply {
             id: 2,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
             }),
@@ -354,119 +340,6 @@ fn registering_unlocked_coins() {
             Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
         ]
     );
-
-    // After swapping, we parse the `swap` event to find the received amount
-    let event = Event::new("swap")
-        .add_attribute("offer", "25959uusd")
-        .add_attribute("trader", MOCK_CONTRACT_ADDR.to_string())
-        .add_attribute("recipient", MOCK_CONTRACT_ADDR.to_string())
-        .add_attribute("swap_coin", "243uluna")
-        .add_attribute("swap_fee", "1uluna");
-
-    reply(
-        deps.as_mut(),
-        mock_env(),
-        Reply {
-            id: 3,
-            result: cosmwasm_std::ContractResult::Ok(SubMsgExecutionResponse {
-                events: vec![event],
-                data: None,
-            }),
-        },
-    )
-    .unwrap();
-
-    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        unlocked_coins,
-        vec![
-            Coin::new(123, "ukrw"),
-            Coin::new(477, "uluna"), // 234 (balance prior to swap) + 243 (swap proceedings)
-            Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    );
-}
-
-#[test]
-fn swapping() {
-    let mut deps = setup_test();
-    let state = State::default();
-
-    // Only denoms that has exchange rates defined in the oracle module can be swapped to Luna
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "ukrw",
-        Decimal::from_str("129108.193653786399948012").unwrap(),
-    );
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "usdr",
-        Decimal::from_str("77.056327779353129245").unwrap(),
-    );
-    deps.querier.set_terra_exchange_rate(
-        "uluna",
-        "uusd",
-        Decimal::from_str("105.476484668836552061").unwrap(),
-    );
-
-    // After withdrawing staking rewards, we have some unlocked coins. Some can be swapped for Luna,
-    // some can't.
-    state.unlocked_coins.save(
-        deps.as_mut().storage,
-        &vec![
-            Coin::new(123, "ukrw"),
-            Coin::new(234, "uluna"),
-            Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    ).unwrap();
-
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info(MOCK_CONTRACT_ADDR, &[]),
-        ExecuteMsg::Callback(CallbackMsg::Swap {}),
-    )
-    .unwrap();
-
-    assert_eq!(res.messages.len(), 2);
-    assert_eq!(
-        res.messages[0],
-        SubMsg::reply_on_success(
-            CosmosMsg::Custom(TerraMsgWrapper {
-                route: TerraRoute::Market,
-                msg_data: TerraMsg::Swap {
-                    offer_coin: Coin::new(123, "ukrw"),
-                    ask_denom: "uluna".to_string()
-                }
-            }),
-            3
-        )
-    );
-    assert_eq!(
-        res.messages[1],
-        SubMsg::reply_on_success(
-            CosmosMsg::Custom(TerraMsgWrapper {
-                route: TerraRoute::Market,
-                msg_data: TerraMsg::Swap {
-                    offer_coin: Coin::new(345, "uusd"),
-                    ask_denom: "uluna".to_string()
-                }
-            }),
-            3
-        )
-    );
-
-    // Storage should have been updated
-    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        unlocked_coins,
-        vec![
-            Coin::new(234, "uluna"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    );
 }
 
 #[test]
@@ -481,13 +354,16 @@ fn reinvesting() {
     ]);
 
     // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
-    state.unlocked_coins.save(
-        deps.as_mut().storage,
-        &vec![
-            Coin::new(234, "uluna"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-        ]
-    ).unwrap();
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(234, "uluna"),
+                Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+            ],
+        )
+        .unwrap();
 
     // Bob has the smallest amount of delegations, so all proceeds go to him
     let res = execute(
@@ -789,7 +665,7 @@ fn reconciling() {
             total_shares: Uint128::new(1567),
             uluna_unclaimed: Uint128::new(1629), // 1.040 Luna per Steak
             est_unbond_end_time: 40000,          // not yet finished unbonding, ignored
-        }
+        },
     ];
 
     for previous_batch in &previous_batches {
@@ -799,13 +675,18 @@ fn reconciling() {
             .unwrap();
     }
 
-    state.unlocked_coins.save(deps.as_mut().storage, &vec![
-        Coin::new(10000, "uluna"),
-        Coin::new(234, "ukrw"),
-        Coin::new(345, "uusd"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
-    ])
-    .unwrap();
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(10000, "uluna"),
+                Coin::new(234, "ukrw"),
+                Coin::new(345, "uusd"),
+                Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+            ],
+        )
+        .unwrap();
 
     deps.querier.set_bank_balances(&[
         Coin::new(12345, "uluna"),
@@ -818,8 +699,9 @@ fn reconciling() {
         deps.as_mut(),
         mock_env_at_timestamp(35000),
         mock_info("worker", &[]),
-        ExecuteMsg::Reconcile {}
-    ).unwrap();
+        ExecuteMsg::Reconcile {},
+    )
+    .unwrap();
 
     // Expected received: batch 2 + batch 3 = 1385 + 1506 = 2891
     // Expected unlocked: 10000
@@ -928,7 +810,7 @@ fn withdrawing_unbonded() {
         },
         Batch {
             id: 3,
-            reconciled: false,                    // finished unbonding, but not reconciled; ignored
+            reconciled: false, // finished unbonding, but not reconciled; ignored
             total_shares: Uint128::new(45678),
             uluna_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
             est_unbond_end_time: 20000,
@@ -938,8 +820,8 @@ fn withdrawing_unbonded() {
             reconciled: true,
             total_shares: Uint128::new(56789),
             uluna_unclaimed: Uint128::new(59060), // 1.040 Luna per Steak
-            est_unbond_end_time: 30000,           // reconciled, but not yet finished unbonding; ignored
-        }
+            est_unbond_end_time: 30000, // reconciled, but not yet finished unbonding; ignored
+        },
     ];
 
     for previous_batch in &previous_batches {
@@ -1025,9 +907,7 @@ fn withdrawing_unbonded() {
     let err = state.previous_batches.load(deps.as_ref().storage, 2u64.into()).unwrap_err();
     assert_eq!(
         err,
-        StdError::NotFound {
-            kind: "steak::hub::Batch".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::Batch".to_string() }
     );
 
     // User 1's unbond requests in batches 1 and 2 should have been deleted
@@ -1042,15 +922,11 @@ fn withdrawing_unbonded() {
 
     assert_eq!(
         err1,
-        StdError::NotFound {
-            kind: "steak::hub::UnbondRequest".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
     );
     assert_eq!(
         err2,
-        StdError::NotFound {
-            kind: "steak::hub::UnbondRequest".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
     );
 
     // User 3 attempt to withdraw; also specifying a receiver
@@ -1094,9 +970,7 @@ fn withdrawing_unbonded() {
 
     assert_eq!(
         err,
-        StdError::NotFound {
-            kind: "steak::hub::UnbondRequest".to_string()
-        }
+        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
     );
 }
 
@@ -1109,7 +983,9 @@ fn adding_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::AddValidator { validator: "dave".to_string() },
+        ExecuteMsg::AddValidator {
+            validator: "dave".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1119,7 +995,9 @@ fn adding_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::AddValidator { validator: "alice".to_string() },
+        ExecuteMsg::AddValidator {
+            validator: "alice".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1129,7 +1007,9 @@ fn adding_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::AddValidator { validator: "dave".to_string() },
+        ExecuteMsg::AddValidator {
+            validator: "dave".to_string(),
+        },
     )
     .unwrap();
 
@@ -1138,7 +1018,12 @@ fn adding_validator() {
     let validators = state.validators.load(deps.as_ref().storage).unwrap();
     assert_eq!(
         validators,
-        vec![String::from("alice"), String::from("bob"), String::from("charlie"), String::from("dave")],
+        vec![
+            String::from("alice"),
+            String::from("bob"),
+            String::from("charlie"),
+            String::from("dave")
+        ],
     );
 }
 
@@ -1157,7 +1042,9 @@ fn removing_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::RemoveValidator { validator: "charlie".to_string() },
+        ExecuteMsg::RemoveValidator {
+            validator: "charlie".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1167,7 +1054,9 @@ fn removing_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::RemoveValidator { validator: "dave".to_string() },
+        ExecuteMsg::RemoveValidator {
+            validator: "dave".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1181,31 +1070,24 @@ fn removing_validator() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::RemoveValidator { validator: "charlie".to_string() },
+        ExecuteMsg::RemoveValidator {
+            validator: "charlie".to_string(),
+        },
     )
     .unwrap();
 
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(
-            Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(),
-            2,
-        ),
+        SubMsg::reply_on_success(Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(), 2,),
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(
-            Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(),
-            2,
-        ),
+        SubMsg::reply_on_success(Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(), 2,),
     );
 
     let validators = state.validators.load(deps.as_ref().storage).unwrap();
-    assert_eq!(
-        validators,
-        vec![String::from("alice"), String::from("bob")],
-    );
+    assert_eq!(validators, vec![String::from("alice"), String::from("bob")],);
 }
 
 #[test]
@@ -1217,7 +1099,9 @@ fn transferring_ownership() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::TransferOwnership { new_owner: "jake".to_string() },
+        ExecuteMsg::TransferOwnership {
+            new_owner: "jake".to_string(),
+        },
     )
     .unwrap_err();
 
@@ -1227,7 +1111,9 @@ fn transferring_ownership() {
         deps.as_mut(),
         mock_env(),
         mock_info("larry", &[]),
-        ExecuteMsg::TransferOwnership { new_owner: "jake".to_string() },
+        ExecuteMsg::TransferOwnership {
+            new_owner: "jake".to_string(),
+        },
     )
     .unwrap();
 
@@ -1250,7 +1136,7 @@ fn transferring_ownership() {
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::AcceptOwnership {},
+        ExecuteMsg::AcceptOwnership {}
     )
     .unwrap();
 
@@ -1443,13 +1329,17 @@ fn querying_unbond_requests() {
             limit: None,
         },
     );
-    assert_eq!(
-        res,
-        vec![
-            unbond_requests[0].clone().into(),
-            unbond_requests[3].clone().into(),
-        ]
+    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into()]);
+
+    let res: Vec<UnbondRequestsByUserResponseItem> = query_helper(
+        deps.as_ref(),
+        QueryMsg::UnbondRequestsByUser {
+            user: "alice".to_string(),
+            start_after: Some(2),
+            limit: None,
+        },
     );
+    assert_eq!(res, vec![unbond_requests[3].clone().into()]);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1545,10 +1435,7 @@ fn computing_redelegations_for_rebalancing() {
         Redelegation::new("charlie", "evan", 38126),
     ];
 
-    assert_eq!(
-        compute_redelegations_for_rebalancing(&current_delegations),
-        expected,
-    );
+    assert_eq!(compute_redelegations_for_rebalancing(&current_delegations), expected,);
 }
 
 //--------------------------------------------------------------------------------------------------

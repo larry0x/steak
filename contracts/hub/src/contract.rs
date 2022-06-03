@@ -3,7 +3,6 @@ use cosmwasm_std::{
     StdError, StdResult,
 };
 use cw20::Cw20ReceiveMsg;
-use terra_cosmwasm::TerraMsgWrapper;
 
 use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
@@ -22,12 +21,7 @@ pub fn instantiate(
 }
 
 #[entry_point]
-pub fn execute(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    msg: ExecuteMsg,
-) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let api = deps.api;
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
@@ -70,7 +64,7 @@ fn receive(
     env: Env,
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
-) -> StdResult<Response<TerraMsgWrapper>> {
+) -> StdResult<Response> {
     let api = deps.api;
     match from_binary(&cw20_msg.msg)? {
         ReceiveMsg::QueueUnbond {
@@ -81,7 +75,7 @@ fn receive(
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
                 return Err(StdError::generic_err(
-                    format!("expecting Steak token, received {}", info.sender)
+                    format!("expecting Steak token, received {}", info.sender),
                 ));
             }
 
@@ -100,13 +94,12 @@ fn callback(
     env: Env,
     info: MessageInfo,
     callback_msg: CallbackMsg,
-) -> StdResult<Response<TerraMsgWrapper>> {
+) -> StdResult<Response> {
     if env.contract.address != info.sender {
         return Err(StdError::generic_err("callbacks can only be invoked by the contract itself"));
     }
 
     match callback_msg {
-        CallbackMsg::Swap {} => execute::swap(deps),
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
 }
@@ -115,23 +108,8 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
-        2 => execute::register_received_coins(
-            deps,
-            env,
-            unwrap_reply(reply)?.events,
-            "coin_received",
-            "receiver",
-            "amount",
-        ),
-        3 => execute::register_received_coins(
-            deps,
-            env,
-            unwrap_reply(reply)?.events,
-            "swap",
-            "recipient",
-            "swap_coin",
-        ),
-        id => Err(StdError::generic_err(format!("invalid reply id: {}; must be 1-3", id))),
+        2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
+        id => Err(StdError::generic_err(format!("invalid reply id: {}; must be 1-2", id))),
     }
 }
 
@@ -160,6 +138,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[entry_point]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::new())
 }

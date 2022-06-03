@@ -1,5 +1,5 @@
-use cosmwasm_std::{Addr, Coin, Storage, StdError, StdResult};
-use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex, U64Key};
+use cosmwasm_std::{Addr, Coin, StdError, StdResult, Storage};
+use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
 
@@ -23,23 +23,23 @@ pub(crate) struct State<'a> {
     /// The current batch of unbonding requests queded to be executed
     pub pending_batch: Item<'a, PendingBatch>,
     /// Previous batches that have started unbonding but not yet finished
-    pub previous_batches: IndexedMap<'a, U64Key, Batch, PreviousBatchesIndexes<'a>>,
+    pub previous_batches: IndexedMap<'a, u64, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in unbonding batches
-    pub unbond_requests: IndexedMap<'a, (U64Key, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
+    pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
 }
 
 impl Default for State<'static> {
     fn default() -> Self {
         let pb_indexes = PreviousBatchesIndexes {
             reconciled: MultiIndex::new(
-                |d: &Batch, k: Vec<u8>| (d.reconciled.into(), k),
+                |d: &Batch| d.reconciled.into(),
                 "previous_batches",
                 "previous_batches__reconciled",
             ),
         };
         let ubr_indexes = UnbondRequestsIndexes {
             user: MultiIndex::new(
-                |d: &UnbondRequest, k: Vec<u8>| (d.user.clone().into(), k),
+                |d: &UnbondRequest| d.user.clone().into(),
                 "unbond_requests",
                 "unbond_requests__user",
             ),
@@ -72,7 +72,7 @@ impl<'a> State<'a> {
 
 pub(crate) struct PreviousBatchesIndexes<'a> {
     // pk goes to second tuple element
-    pub reconciled: MultiIndex<'a, (BooleanKey, Vec<u8>), Batch>,
+    pub reconciled: MultiIndex<'a, BooleanKey, Batch, Vec<u8>>,
 }
 
 impl<'a> IndexList<Batch> for PreviousBatchesIndexes<'a> {
@@ -84,7 +84,7 @@ impl<'a> IndexList<Batch> for PreviousBatchesIndexes<'a> {
 
 pub(crate) struct UnbondRequestsIndexes<'a> {
     // pk goes to second tuple element
-    pub user: MultiIndex<'a, (String, Vec<u8>), UnbondRequest>,
+    pub user: MultiIndex<'a, String, UnbondRequest, Vec<u8>>,
 }
 
 impl<'a> IndexList<UnbondRequest> for UnbondRequestsIndexes<'a> {

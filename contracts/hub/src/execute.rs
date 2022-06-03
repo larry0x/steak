@@ -1,17 +1,15 @@
-use std::collections::HashSet;
 use std::str::FromStr;
 
 use cosmwasm_std::{
     to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, DistributionMsg, Env, Event, Order,
-    Response, StdError, StdResult, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
+    Response, StdError, StdResult, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper, TerraQuerier};
 
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 
-use crate::helpers::{query_cw20_total_supply, query_delegations, query_delegation};
+use crate::helpers::{query_cw20_total_supply, query_delegation, query_delegations};
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
@@ -63,23 +61,20 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     )))
 }
 
-pub fn register_steak_token(
-    deps: DepsMut,
-    response: SubMsgExecutionResponse,
-) -> StdResult<Response> {
+pub fn register_steak_token(deps: DepsMut, response: SubMsgResponse) -> StdResult<Response> {
     let state = State::default();
 
     let event = response
         .events
         .iter()
-        .find(|event| event.ty == "instantiate_contract")
-        .ok_or_else(|| StdError::generic_err("cannot find `instantiate_contract` event"))?;
+        .find(|event| event.ty == "instantiate")
+        .ok_or_else(|| StdError::generic_err("cannot find `instantiate` event"))?;
 
     let contract_addr_str = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == "contract_address")
-        .ok_or_else(|| StdError::generic_err("cannot find `contract_address` attribute"))?
+        .find(|attr| attr.key == "_contract_address")
+        .ok_or_else(|| StdError::generic_err("cannot find `_contract_address` attribute"))?
         .value;
 
     let contract_addr = deps.api.addr_validate(contract_addr_str)?;
@@ -105,7 +100,7 @@ pub fn bond(
     env: Env,
     receiver: Addr,
     uluna_to_bond: Uint128,
-) -> StdResult<Response<TerraMsgWrapper>> {
+) -> StdResult<Response> {
     let state = State::default();
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
@@ -131,12 +126,9 @@ pub fn bond(
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
     let usteak_to_mint = compute_mint_amount(usteak_supply, uluna_to_bond, &delegations);
 
-    let delegate_submsg = SubMsg::reply_on_success(
-        new_delegation.to_cosmos_msg(),
-        2,
-    );
+    let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 2);
 
-    let mint_msg: CosmosMsg<TerraMsgWrapper> = CosmosMsg::Wasm(WasmMsg::Execute {
+    let mint_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
             recipient: receiver.to_string(),
@@ -159,7 +151,7 @@ pub fn bond(
         .add_attribute("action", "steakhub/bond"))
 }
 
-pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     let withdraw_submsgs = deps
         .querier
         .query_all_delegations(&env.contract.address)?
@@ -174,53 +166,12 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> 
         })
         .collect::<Vec<_>>();
 
-    let callback_msgs = vec![CallbackMsg::Swap {}, CallbackMsg::Reinvest {}]
-        .iter()
-        .map(|callback| callback.into_cosmos_msg(&env.contract.address))
-        .collect::<StdResult<Vec<_>>>()?;
+    let callback_msg = CallbackMsg::Reinvest {}.into_cosmos_msg(&env.contract.address)?;
 
     Ok(Response::new()
         .add_submessages(withdraw_submsgs)
-        .add_messages(callback_msgs)
+        .add_message(callback_msg)
         .add_attribute("action", "steakhub/harvest"))
-}
-
-pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
-    let state = State::default();
-    let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
-
-    let all_denoms = unlocked_coins
-        .iter()
-        .cloned()
-        .map(|coin| coin.denom)
-        .filter(|denom| denom != "uluna")
-        .collect::<Vec<_>>();
-
-    let known_denoms = TerraQuerier::new(&deps.querier)
-        .query_exchange_rates("uluna".to_string(), all_denoms)?
-        .exchange_rates
-        .into_iter()
-        .map(|item| item.quote_denom)
-        .collect::<HashSet<_>>();
-
-    let swap_submsgs = unlocked_coins
-        .iter()
-        .cloned()
-        .filter(|coin| known_denoms.contains(&coin.denom))
-        .map(|coin| {
-            SubMsg::reply_on_success(
-                create_swap_msg(coin, "uluna".to_string()),
-                3,
-            )
-        })
-        .collect::<Vec<_>>();
-
-    unlocked_coins.retain(|coin| !known_denoms.contains(&coin.denom));
-    state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
-
-    Ok(Response::new()
-        .add_submessages(swap_submsgs)
-        .add_attribute("action", "steakhub/swap"))
 }
 
 /// NOTE:
@@ -229,7 +180,7 @@ pub fn swap(deps: DepsMut) -> StdResult<Response<TerraMsgWrapper>> {
 /// execution.
 /// 2. Same as with `bond`, in the latest implementation we only delegate staking rewards with the
 /// validator that has the smallest delegation amount.
-pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
@@ -265,23 +216,20 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>>
         .add_attribute("action", "steakhub/reinvest"))
 }
 
-/// NOTE: a `SubMsgExecutionResponse` may contain multiple coin-receiving events, must handle them indivitually
+/// NOTE: a `SubMsgResponse` may contain multiple coin-receiving events, must handle them individually
 pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
     mut events: Vec<Event>,
-    event_type: &str,
-    receiver_key: &str,
-    received_coins_key: &str
 ) -> StdResult<Response> {
-    events.retain(|event| event.ty == event_type);
+    events.retain(|event| event.ty == "coin_received");
     if events.is_empty() {
         return Ok(Response::new());
     }
 
     let mut received_coins = Coins(vec![]);
     for event in &events {
-        received_coins.add_many(&parse_coin_receiving_event(&env, event, receiver_key, received_coins_key)?)?;
+        received_coins.add_many(&parse_coin_receiving_event(&env, event)?)?;
     }
 
     let state = State::default();
@@ -291,37 +239,31 @@ pub fn register_received_coins(
         Ok(coins.0)
     })?;
 
-    Ok(Response::new()
-        .add_attribute("action", "steakhub/register_received_coins"))
+    Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
 }
 
-fn parse_coin_receiving_event(
-    env: &Env,
-    event: &Event,
-    receiver_key: &str,
-    received_coins_key: &str
-) -> StdResult<Coins> {
+fn parse_coin_receiving_event(env: &Env, event: &Event) -> StdResult<Coins> {
     let receiver = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == receiver_key)
-        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", receiver_key)))?
+        .find(|attr| attr.key == "receiver")
+        .ok_or_else(|| StdError::generic_err("cannot find `receiver` attribute"))?
         .value;
 
-    let received_coins_str = &event
+    let amount_str = &event
         .attributes
         .iter()
-        .find(|attr| attr.key == received_coins_key)
-        .ok_or_else(|| StdError::generic_err(format!("cannot find `{}` attribute", received_coins_key)))?
+        .find(|attr| attr.key == "amount")
+        .ok_or_else(|| StdError::generic_err("cannot find `amount` attribute"))?
         .value;
 
-    let received_coins = if *receiver == env.contract.address {
-        Coins::from_str(received_coins_str)?
+    let amount = if *receiver == env.contract.address {
+        Coins::from_str(amount_str)?
     } else {
         Coins(vec![])
     };
 
-    Ok(received_coins)
+    Ok(amount)
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -333,7 +275,7 @@ pub fn queue_unbond(
     env: Env,
     receiver: Addr,
     usteak_to_burn: Uint128,
-) -> StdResult<Response<TerraMsgWrapper>> {
+) -> StdResult<Response> {
     let state = State::default();
 
     let mut pending_batch = state.pending_batch.load(deps.storage)?;
@@ -342,7 +284,7 @@ pub fn queue_unbond(
 
     state.unbond_requests.update(
         deps.storage,
-        (pending_batch.id.into(), &receiver),
+        (pending_batch.id, &receiver),
         |x| -> StdResult<_> {
             let mut request = x.unwrap_or_else(|| UnbondRequest {
                 id: pending_batch.id,
@@ -354,7 +296,7 @@ pub fn queue_unbond(
         },
     )?;
 
-    let mut msgs: Vec<CosmosMsg<TerraMsgWrapper>> = vec![];
+    let mut msgs: Vec<CosmosMsg> = vec![];
     if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.into(),
@@ -376,7 +318,7 @@ pub fn queue_unbond(
         .add_attribute("action", "steakhub/queue_unbond"))
 }
 
-pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
@@ -386,14 +328,15 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
     let current_time = env.block.time.seconds();
     if current_time < pending_batch.est_unbond_start_time {
         return Err(StdError::generic_err(
-            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time)
+            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time),
         ));
     }
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    let uluna_to_unbond = compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
+    let uluna_to_unbond =
+        compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
 
     // NOTE: Regarding the `uluna_unclaimed` value
@@ -407,7 +350,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
     // I don't have a solution for this... other than to manually fund contract with the slashed amount.
     state.previous_batches.save(
         deps.storage,
-        pending_batch.id.into(),
+        pending_batch.id,
         &Batch {
             id: pending_batch.id,
             reconciled: false,
@@ -454,7 +397,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapp
         .add_attribute("action", "steakhub/unbond"))
 }
 
-pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
     let current_time = env.block.time.seconds();
 
@@ -476,10 +419,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
         .filter(|b| current_time > b.est_unbond_end_time)
         .collect::<Vec<_>>();
 
-    let uluna_expected_received: Uint128 = batches
-        .iter()
-        .map(|b| b.uluna_unclaimed)
-        .sum();
+    let uluna_expected_received: Uint128 = batches.iter().map(|b| b.uluna_unclaimed).sum();
 
     if uluna_expected_received.is_zero() {
         return Ok(Response::new());
@@ -491,23 +431,19 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
     let uluna_expected = uluna_expected_received + uluna_expected_unlocked;
     let uluna_actual = deps.querier.query_balance(&env.contract.address, "uluna")?.amount;
 
-    if uluna_actual >= uluna_expected {
-        return Ok(Response::new());
+    let uluna_to_deduct = uluna_expected.checked_sub(uluna_actual).unwrap_or_else(|_| Uint128::zero());
+    if !uluna_to_deduct.is_zero() {
+        reconcile_batches(&mut batches, uluna_expected - uluna_actual);
     }
 
-    let uluna_to_deduct = uluna_expected - uluna_actual;
-
-    reconcile_batches(&mut batches, uluna_to_deduct);
-
     for batch in &batches {
-        state.previous_batches.save(deps.storage, batch.id.into(), batch)?;
+        state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
     let ids = batches
         .iter()
         .map(|b| b.id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+        .collect::<Vec<_>>().join(",");
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
@@ -523,7 +459,7 @@ pub fn withdraw_unbonded(
     env: Env,
     user: Addr,
     receiver: Addr,
-) -> StdResult<Response<TerraMsgWrapper>> {
+) -> StdResult<Response> {
     let state = State::default();
     let current_time = env.block.time.seconds();
 
@@ -551,7 +487,7 @@ pub fn withdraw_unbonded(
     let mut total_uluna_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
     for request in &requests {
-        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id.into()) {
+        if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
                 let uluna_to_refund = batch
                     .uluna_unclaimed
@@ -564,12 +500,12 @@ pub fn withdraw_unbonded(
                 batch.uluna_unclaimed -= uluna_to_refund;
 
                 if batch.total_shares.is_zero() {
-                    state.previous_batches.remove(deps.storage, request.id.into())?;
+                    state.previous_batches.remove(deps.storage, request.id)?;
                 } else {
-                    state.previous_batches.save(deps.storage, batch.id.into(), &batch)?;
+                    state.previous_batches.save(deps.storage, batch.id, &batch)?;
                 }
 
-                state.unbond_requests.remove(deps.storage, (request.id.into(), &user))?;
+                state.unbond_requests.remove(deps.storage, (request.id, &user))?;
             }
         }
     }
@@ -601,7 +537,7 @@ pub fn withdraw_unbonded(
 // Ownership and management logics
 //--------------------------------------------------------------------------------------------------
 
-pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
 
@@ -625,11 +561,7 @@ pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>
         .add_attribute("action", "steakhub/rebalance"))
 }
 
-pub fn add_validator(
-    deps: DepsMut,
-    sender: Addr,
-    validator: String,
-) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn add_validator(deps: DepsMut, sender: Addr, validator: String) -> StdResult<Response> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
@@ -645,9 +577,7 @@ pub fn add_validator(
     let event = Event::new("steakhub/validator_added")
         .add_attribute("validator", validator);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/add_validator"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/add_validator"))
 }
 
 pub fn remove_validator(
@@ -655,7 +585,7 @@ pub fn remove_validator(
     env: Env,
     sender: Addr,
     validator: String,
-) -> StdResult<Response<TerraMsgWrapper>> {
+) -> StdResult<Response> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
@@ -686,21 +616,16 @@ pub fn remove_validator(
         .add_attribute("action", "steakhub/remove_validator"))
 }
 
-pub fn transfer_ownership(
-    deps: DepsMut,
-    sender: Addr,
-    new_owner: String,
-) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
     state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
 
-    Ok(Response::new()
-        .add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
 }
 
-pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
     let state = State::default();
 
     let previous_owner = state.owner.load(deps.storage)?;
@@ -717,7 +642,5 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response<Terra
         .add_attribute("new_owner", new_owner)
         .add_attribute("previous_owner", previous_owner);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/transfer_ownership"))
 }

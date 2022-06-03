@@ -1,5 +1,5 @@
-use cosmwasm_std::{Decimal, Deps, Env, Order, StdResult, Uint128};
-use cw_storage_plus::{Bound, U64Key};
+use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdResult, Uint128};
+use cw_storage_plus::{Bound, CwIntKey};
 
 use steak::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
@@ -55,7 +55,7 @@ pub fn pending_batch(deps: Deps) -> StdResult<PendingBatch> {
 
 pub fn previous_batch(deps: Deps, id: u64) -> StdResult<Batch> {
     let state = State::default();
-    state.previous_batches.load(deps.storage, id.into())
+    state.previous_batches.load(deps.storage, id)
 }
 
 pub fn previous_batches(
@@ -65,8 +65,8 @@ pub fn previous_batches(
 ) -> StdResult<Vec<Batch>> {
     let state = State::default();
 
+    let start = start_after.map(Bound::exclusive);
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(|id| Bound::exclusive(U64Key::from(id)));
 
     state
         .previous_batches
@@ -87,12 +87,19 @@ pub fn unbond_requests_by_batch(
 ) -> StdResult<Vec<UnbondRequestsByBatchResponseItem>> {
     let state = State::default();
 
+    let addr: Addr;
+    let start = match start_after {
+        None => None,
+        Some(addr_str) => {
+            addr = deps.api.addr_validate(&addr_str)?;
+            Some(Bound::exclusive(&addr))
+        },
+    };
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(Bound::exclusive);
 
     state
         .unbond_requests
-        .prefix(id.into())
+        .prefix(id)
         .range(deps.storage, start, None, Order::Ascending)
         .take(limit)
         .map(|item| {
@@ -110,8 +117,12 @@ pub fn unbond_requests_by_user(
 ) -> StdResult<Vec<UnbondRequestsByUserResponseItem>> {
     let state = State::default();
 
+    let start = start_after.map(|id| {
+        let mut key = vec![0u8, 8u8]; // when `u64` are used as keys, they are prefixed with the length, which is [0, 8]
+        key.extend(id.to_cw_bytes());
+        Bound::exclusive(key)
+    });
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(|id| Bound::exclusive(U64Key::from(id)));
 
     state
         .unbond_requests

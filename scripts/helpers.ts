@@ -22,13 +22,13 @@ const DEFAULT_GAS_SETTINGS = {
 export function createLCDClient(network: string): LCDClient {
   if (network === "mainnet") {
     return new LCDClient({
-      chainID: "columbus-5",
+      chainID: "phoenix-1",
       URL: "https://lcd.terra.dev",
     });
   } else if (network === "testnet") {
     return new LCDClient({
-      chainID: "bombay-12",
-      URL: "https://bombay-lcd.terra.dev",
+      chainID: "pisco-1",
+      URL: "https://terra-testnet-api.polkachu.com/",
     });
   } else if (network === "localterra") {
     return new LocalTerra();

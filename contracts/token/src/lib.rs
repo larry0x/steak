@@ -56,14 +56,16 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage};
+    use cosmwasm_std::testing::{
+        mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
+    };
     use cosmwasm_std::{OwnedDeps, Uint128};
-    use cw20_base::state::{BALANCES, TokenInfo};
+    use cw20_base::state::{TokenInfo, BALANCES};
 
     use super::*;
 
     fn setup_test() -> OwnedDeps<MockStorage, MockApi, MockQuerier> {
-        let mut deps = mock_dependencies(&[]);
+        let mut deps = mock_dependencies();
 
         TOKEN_INFO
             .save(
@@ -85,16 +87,14 @@ mod tests {
             .save(
                 deps.as_mut().storage,
                 &Addr::unchecked("steak_hub"),
-                &Uint128::new(100)
-            )
+                &Uint128::new(100))
             .unwrap();
 
         BALANCES
             .save(
                 deps.as_mut().storage,
                 &Addr::unchecked("alice"),
-                &Uint128::new(100)
-            )
+                &Uint128::new(100))
             .unwrap();
 
         deps

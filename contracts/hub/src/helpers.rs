@@ -1,14 +1,14 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    Addr, Coin, QuerierWrapper, Reply, StdError, StdResult, SubMsgExecutionResponse, Uint128,
+    Addr, Coin, QuerierWrapper, Reply, StdError, StdResult, SubMsgResponse, Uint128,
 };
 use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
 use crate::types::Delegation;
 
 /// Unwrap a `Reply` object to extract the response
-pub(crate) fn unwrap_reply(reply: Reply) -> StdResult<SubMsgExecutionResponse> {
+pub(crate) fn unwrap_reply(reply: Reply) -> StdResult<SubMsgResponse> {
     reply.result.into_result().map_err(StdError::generic_err)
 }
 
@@ -72,14 +72,14 @@ pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
 pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint128> {
     if funds.len() != 1 {
         return Err(StdError::generic_err(
-            format!("must deposit exactly one coin; received {}", funds.len())
+            format!("must deposit exactly one coin; received {}", funds.len()),
         ));
     }
 
     let fund = &funds[0];
     if fund.denom != denom {
         return Err(StdError::generic_err(
-            format!("expected {} deposit, received {}", denom, fund.denom)
+            format!("expected {} deposit, received {}", denom, fund.denom),
         ));
     }
 

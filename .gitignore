@@ -33,3 +33,6 @@ artifacts/
 # Data and key files
 scripts/data/
 scripts/keys/
+
+# Misc notes
+notes.txt

@@ -2,7 +2,6 @@ use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, 
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use terra_cosmwasm::TerraMsgWrapper;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -42,7 +41,7 @@ pub enum ExecuteMsg {
         validator: String,
     },
     /// Remove a validator from the whitelist; callable by the owner
-    RemoveValidator{
+    RemoveValidator {
         validator: String,
     },
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
@@ -76,14 +75,12 @@ pub enum ReceiveMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
-    /// Swap Terra stablecoins held by the contract to Luna
-    Swap {},
     /// Following the swaps, stake the Luna acquired to the whitelisted validators
     Reinvest {},
 }
 
 impl CallbackMsg {
-    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg<TerraMsgWrapper>> {
+    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg> {
         Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: contract_addr.to_string(),
             msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
