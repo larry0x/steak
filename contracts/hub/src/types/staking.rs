@@ -1,5 +1,4 @@
 use cosmwasm_std::{Coin, CosmosMsg, StakingMsg};
-//use terra_cosmwasm::TerraMsgWrapper;
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(Debug, PartialEq))]

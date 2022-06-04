@@ -87,14 +87,16 @@ mod tests {
             .save(
                 deps.as_mut().storage,
                 &Addr::unchecked("steak_hub"),
-                &Uint128::new(100))
+                &Uint128::new(100)
+            )
             .unwrap();
 
         BALANCES
             .save(
                 deps.as_mut().storage,
                 &Addr::unchecked("alice"),
-                &Uint128::new(100))
+                &Uint128::new(100)
+            )
             .unwrap();
 
         deps

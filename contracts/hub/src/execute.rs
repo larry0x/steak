@@ -239,7 +239,8 @@ pub fn register_received_coins(
         Ok(coins.0)
     })?;
 
-    Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
+    Ok(Response::new()
+        .add_attribute("action", "steakhub/register_received_coins"))
 }
 
 fn parse_coin_receiving_event(env: &Env, event: &Event) -> StdResult<Coins> {
@@ -335,8 +336,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    let uluna_to_unbond =
-        compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
+    let uluna_to_unbond = compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
     let new_undelegations = compute_undelegations(uluna_to_unbond, &delegations);
 
     // NOTE: Regarding the `uluna_unclaimed` value
@@ -419,11 +419,10 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         .filter(|b| current_time > b.est_unbond_end_time)
         .collect::<Vec<_>>();
 
-    let uluna_expected_received: Uint128 = batches.iter().map(|b| b.uluna_unclaimed).sum();
-
-    if uluna_expected_received.is_zero() {
-        return Ok(Response::new());
-    }
+    let uluna_expected_received: Uint128 = batches
+        .iter()
+        .map(|b| b.uluna_unclaimed)
+        .sum();
 
     let unlocked_coins = state.unlocked_coins.load(deps.storage)?;
     let uluna_expected_unlocked = Coins(unlocked_coins).find("uluna").amount;
@@ -443,7 +442,8 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     let ids = batches
         .iter()
         .map(|b| b.id.to_string())
-        .collect::<Vec<_>>().join(",");
+        .collect::<Vec<_>>()
+        .join(",");
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
@@ -622,7 +622,8 @@ pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> Std
     state.assert_owner(deps.storage, &sender)?;
     state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
 
-    Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new()
+        .add_attribute("action", "steakhub/transfer_ownership"))
 }
 
 pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
@@ -642,5 +643,7 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
         .add_attribute("new_owner", new_owner)
         .add_attribute("previous_owner", previous_owner);
 
-    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/transfer_ownership"))
 }

@@ -75,7 +75,7 @@ async function uploadCode(deployer: Wallet, path: string) {
   await waitForConfirm("Proceed to deploy contracts?");
   const result = await instantiateWithConfirm(
     deployer,
-    argv["admin"] ? argv["admin"] : deployer.key.accAddress,
+    argv["admin"] ?? deployer.key.accAddress,
     hubCodeId,
     msg
   );

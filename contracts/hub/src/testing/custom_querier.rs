@@ -15,7 +15,6 @@ use super::helpers::err_unsupported_query;
 #[derive(Default)]
 pub(super) struct CustomQuerier {
     pub cw20_querier: Cw20Querier,
-    // pub terra_querier: TerraQuerier,
     pub bank_querier: BankQuerier,
     pub staking_querier: StakingQuerier,
 }
@@ -52,11 +51,13 @@ impl CustomQuerier {
     }
 
     pub fn set_cw20_total_supply(&mut self, token: &str, total_supply: u128) {
-        self.cw20_querier.total_supplies.insert(token.to_string(), total_supply);
+        self.cw20_querier
+            .total_supplies
+            .insert(token.to_string(), total_supply);
     }
 
     pub fn set_bank_balances(&mut self, balances: &[Coin]) {
-        self.bank_querier = BankQuerier::new(&[(MOCK_CONTRACT_ADDR, balances)])
+        self.bank_querier = BankQuerier::new(&[(MOCK_CONTRACT_ADDR, balances)]);
     }
 
     pub fn set_staking_delegations(&mut self, delegations: &[Delegation]) {
