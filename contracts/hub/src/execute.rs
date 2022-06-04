@@ -577,7 +577,9 @@ pub fn add_validator(deps: DepsMut, sender: Addr, validator: String) -> StdResul
     let event = Event::new("steakhub/validator_added")
         .add_attribute("validator", validator);
 
-    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/add_validator"))
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/add_validator"))
 }
 
 pub fn remove_validator(
