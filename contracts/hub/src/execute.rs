@@ -124,7 +124,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     // Query the current delegations made to validators, and find the validator with the smallest
     // delegated amount through a linear search
     // The code for linear search is a bit uglier than using `sort_by` but cheaper: O(n) vs O(n * log(n))
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
     let mut validator = &delegations[0].validator;
     let mut amount = delegations[0].amount;
     for d in &delegations[1..] {
@@ -136,6 +136,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     let new_delegation = Delegation {
         validator: validator.clone(),
         amount: amount_to_bond.u128(),
+        denom: denom.clone(),
     };
 
     // Query the current supply of Steak and compute the amount to mint
@@ -211,7 +212,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         .ok_or_else(|| StdError::generic_err("no native amount available to be bonded"))?
         .amount;
 
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
     let mut validator = &delegations[0].validator;
     let mut amount = delegations[0].amount;
     for d in &delegations[1..] {
@@ -227,7 +228,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     };
     let amount_to_bond_minus_fees = amount_to_bond.saturating_sub(fee_amount);
 
-    let new_delegation = Delegation::new(validator, amount_to_bond_minus_fees.u128());
+    let new_delegation = Delegation::new(validator, amount_to_bond_minus_fees.u128(), &denom);
 
     unlocked_coins.retain(|coin| coin.denom != denom);
     state.unlocked_coins.save(deps.storage, &unlocked_coins)?;
@@ -365,6 +366,7 @@ pub fn queue_unbond(
 
 pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
+    let denom = state.denom.load(deps.storage)?;
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
     let unbond_period = state.unbond_period.load(deps.storage)?;
@@ -378,12 +380,12 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
         )));
     }
 
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
     let amount_to_bond =
         compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);
-    let new_undelegations = compute_undelegations(amount_to_bond, &delegations);
+    let new_undelegations = compute_undelegations(amount_to_bond, &delegations, &denom);
 
     // NOTE: Regarding the `amount_unclaimed` value
     //
@@ -593,9 +595,10 @@ pub fn withdraw_unbonded(
 
 pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
+    let denom = state.denom.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
 
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
 
     let new_redelegations = compute_redelegations_for_rebalancing(&delegations);
 
@@ -643,6 +646,7 @@ pub fn remove_validator(
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
+    let denom = state.denom.load(deps.storage)?;
 
     let validators = state.validators.update(deps.storage, |mut validators| {
         if !validators.contains(&validator) {
@@ -654,9 +658,11 @@ pub fn remove_validator(
         Ok(validators)
     })?;
 
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let delegation_to_remove = query_delegation(&deps.querier, &validator, &env.contract.address)?;
-    let new_redelegations = compute_redelegations_for_removal(&delegation_to_remove, &delegations);
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
+    let delegation_to_remove =
+        query_delegation(&deps.querier, &validator, &env.contract.address, &denom)?;
+    let new_redelegations =
+        compute_redelegations_for_removal(&delegation_to_remove, &delegations, &denom);
 
     let redelegate_submsgs = new_redelegations
         .iter()

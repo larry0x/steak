@@ -174,7 +174,7 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 1000000).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 1000000, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
@@ -197,9 +197,9 @@ fn bonding() {
     // Bond when there are existing delegations, and Luna:Steak exchange rate is >1
     // Previously user 1 delegated 1,000,000 uluna. We assume we have accumulated 2.5% yield at 1025000 staked
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 341666),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 341666, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
@@ -217,7 +217,7 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("charlie", 12345).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 12345, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
@@ -239,9 +239,9 @@ fn bonding() {
 
     // Check the state after bonding
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 354011),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 354011, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1012043);
 
@@ -263,9 +263,9 @@ fn harvesting() {
 
     // Assume users have bonded a total of 1,000,000 uluna and minted the same amount of usteak
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 341666),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 341666, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
@@ -365,9 +365,9 @@ fn reinvesting() {
     let state = State::default();
 
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 333334),
-        Delegation::new("bob", 333333),
-        Delegation::new("charlie", 333333),
+        Delegation::new("alice", 333334, "uxyz"),
+        Delegation::new("bob", 333333, "uxyz"),
+        Delegation::new("charlie", 333333, "uxyz"),
     ]);
 
     // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
@@ -399,7 +399,7 @@ fn reinvesting() {
         res.messages[0],
         SubMsg {
             id: 0,
-            msg: Delegation::new("bob", 234 - 23).to_cosmos_msg(),
+            msg: Delegation::new("bob", 234 - 23, "uxyz").to_cosmos_msg(),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
@@ -554,9 +554,9 @@ fn submitting_batch() {
     // usteak supply: 1,012,043
     // uluna per ustake: 1.025
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 345782),
-        Delegation::new("bob", 345782),
-        Delegation::new("charlie", 345781),
+        Delegation::new("alice", 345782, "uxyz"),
+        Delegation::new("bob", 345782, "uxyz"),
+        Delegation::new("charlie", 345781, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1012043);
 
@@ -622,15 +622,18 @@ fn submitting_batch() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Undelegation::new("alice", 31732).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("alice", 31732, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Undelegation::new("bob", 31733).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("bob", 31733, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[2],
-        SubMsg::reply_on_success(Undelegation::new("charlie", 31732).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(
+            Undelegation::new("charlie", 31732, "uxyz").to_cosmos_msg(),
+            2
+        )
     );
     assert_eq!(
         res.messages[3],
@@ -1135,9 +1138,9 @@ fn removing_validator() {
     let state = State::default();
 
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 341666),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 341666, "uxyz"),
     ]);
 
     let err = execute(
@@ -1188,14 +1191,14 @@ fn removing_validator() {
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(
-            Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(),
+            Redelegation::new("charlie", "alice", 170833, "uxyz").to_cosmos_msg(),
             2
         ),
     );
     assert_eq!(
         res.messages[1],
         SubMsg::reply_on_success(
-            Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(),
+            Redelegation::new("charlie", "bob", 170833, "uxyz").to_cosmos_msg(),
             2
         ),
     );
@@ -1484,9 +1487,9 @@ fn querying_unbond_requests() {
 #[test]
 fn computing_undelegations() {
     let current_delegations = vec![
-        Delegation::new("alice", 400),
-        Delegation::new("bob", 300),
-        Delegation::new("charlie", 200),
+        Delegation::new("alice", 400, "uxyz"),
+        Delegation::new("bob", 300, "uxyz"),
+        Delegation::new("charlie", 200, "uxyz"),
     ];
 
     // Target: (400 + 300 + 200 - 451) / 3 = 149
@@ -1494,11 +1497,11 @@ fn computing_undelegations() {
     // Alice:   400 - (149 + 1) = 250
     // Bob:     300 - (149 + 1) = 150
     // Charlie: 200 - (149 + 0) = 51
-    let new_undelegations = compute_undelegations(Uint128::new(451), &current_delegations);
+    let new_undelegations = compute_undelegations(Uint128::new(451), &current_delegations, "uxyz");
     let expected = vec![
-        Undelegation::new("alice", 250),
-        Undelegation::new("bob", 150),
-        Undelegation::new("charlie", 51),
+        Undelegation::new("alice", 250, "uxyz"),
+        Undelegation::new("bob", 150, "uxyz"),
+        Undelegation::new("charlie", 51, "uxyz"),
     ];
     assert_eq!(new_undelegations, expected);
 }
@@ -1506,10 +1509,10 @@ fn computing_undelegations() {
 #[test]
 fn computing_redelegations_for_removal() {
     let current_delegations = vec![
-        Delegation::new("alice", 13000),
-        Delegation::new("bob", 12000),
-        Delegation::new("charlie", 11000),
-        Delegation::new("dave", 10000),
+        Delegation::new("alice", 13000, "uxyz"),
+        Delegation::new("bob", 12000, "uxyz"),
+        Delegation::new("charlie", 11000, "uxyz"),
+        Delegation::new("dave", 10000, "uxyz"),
     ];
 
     // Suppose Dave will be removed
@@ -1519,13 +1522,17 @@ fn computing_redelegations_for_removal() {
     // to Bob:     15333 + 0 - 12000 = 3333
     // to Charlie: 15333 + 0 - 11000 = 4333
     let expected = vec![
-        Redelegation::new("dave", "alice", 2334),
-        Redelegation::new("dave", "bob", 3333),
-        Redelegation::new("dave", "charlie", 4333),
+        Redelegation::new("dave", "alice", 2334, "uxyz"),
+        Redelegation::new("dave", "bob", 3333, "uxyz"),
+        Redelegation::new("dave", "charlie", 4333, "uxyz"),
     ];
 
     assert_eq!(
-        compute_redelegations_for_removal(&current_delegations[3], &current_delegations[..3]),
+        compute_redelegations_for_removal(
+            &current_delegations[3],
+            &current_delegations[..3],
+            "uxyz"
+        ),
         expected,
     );
 }
@@ -1533,11 +1540,11 @@ fn computing_redelegations_for_removal() {
 #[test]
 fn computing_redelegations_for_rebalancing() {
     let current_delegations = vec![
-        Delegation::new("alice", 69420),
-        Delegation::new("bob", 1234),
-        Delegation::new("charlie", 88888),
-        Delegation::new("dave", 40471),
-        Delegation::new("evan", 2345),
+        Delegation::new("alice", 69420, "uxyz"),
+        Delegation::new("bob", 1234, "uxyz"),
+        Delegation::new("charlie", 88888, "uxyz"),
+        Delegation::new("dave", 40471, "uxyz"),
+        Delegation::new("evan", 2345, "uxyz"),
     ];
 
     // uluna_per_validator = (69420 + 88888 + 1234 + 40471 + 2345) / 4 = 40471
@@ -1565,9 +1572,9 @@ fn computing_redelegations_for_rebalancing() {
     // Round 3: charlie --(38126)--> evan
     // Queues are emptied
     let expected = vec![
-        Redelegation::new("alice", "bob", 28948),
-        Redelegation::new("charlie", "bob", 10290),
-        Redelegation::new("charlie", "evan", 38126),
+        Redelegation::new("alice", "bob", 28948, "uxyz"),
+        Redelegation::new("charlie", "bob", 10290, "uxyz"),
+        Redelegation::new("charlie", "evan", 38126, "uxyz"),
     ];
 
     assert_eq!(

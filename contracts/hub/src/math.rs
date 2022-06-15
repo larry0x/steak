@@ -52,6 +52,7 @@ pub(crate) fn compute_unbond_amount(
 pub(crate) fn compute_undelegations(
     native_to_unbond: Uint128,
     current_delegations: &[Delegation],
+    denom: &str,
 ) -> Vec<Undelegation> {
     let native_staked: u128 = current_delegations.iter().map(|d| d.amount).sum();
     let validator_count = current_delegations.len() as u128;
@@ -76,7 +77,7 @@ pub(crate) fn compute_undelegations(
         native_available -= native_to_undelegate;
 
         if native_to_undelegate > 0 {
-            new_undelegations.push(Undelegation::new(&d.validator, native_to_undelegate));
+            new_undelegations.push(Undelegation::new(&d.validator, native_to_undelegate, denom));
         }
 
         if native_available == 0 {
@@ -96,6 +97,7 @@ pub(crate) fn compute_undelegations(
 pub(crate) fn compute_redelegations_for_removal(
     delegation_to_remove: &Delegation,
     current_delegations: &[Delegation],
+    denom: &str,
 ) -> Vec<Redelegation> {
     let native_staked: u128 = current_delegations.iter().map(|d| d.amount).sum();
     let validator_count = current_delegations.len() as u128;
@@ -124,6 +126,7 @@ pub(crate) fn compute_redelegations_for_removal(
                 &delegation_to_remove.validator,
                 &d.validator,
                 native_to_redelegate,
+                denom,
             ));
         }
 
@@ -163,12 +166,14 @@ pub(crate) fn compute_redelegations_for_rebalancing(
                 src_delegations.push(Delegation::new(
                     &d.validator,
                     d.amount - native_for_validator,
+                    &d.denom,
                 ));
             }
             Ordering::Less => {
                 dst_delegations.push(Delegation::new(
                     &d.validator,
                     native_for_validator - d.amount,
+                    &d.denom,
                 ));
             }
             Ordering::Equal => (),
@@ -197,6 +202,7 @@ pub(crate) fn compute_redelegations_for_rebalancing(
             &src_delegation.validator,
             &dst_delegation.validator,
             native_to_redelegate,
+            &src_delegation.denom,
         ));
     }
 

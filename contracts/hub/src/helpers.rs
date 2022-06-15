@@ -17,7 +17,8 @@ pub(crate) fn query_cw20_total_supply(
     querier: &QuerierWrapper,
     token_addr: &Addr,
 ) -> StdResult<Uint128> {
-    let token_info: TokenInfoResponse = querier.query_wasm_smart(token_addr, &Cw20QueryMsg::TokenInfo {})?;
+    let token_info: TokenInfoResponse =
+        querier.query_wasm_smart(token_addr, &Cw20QueryMsg::TokenInfo {})?;
     Ok(token_info.total_supply)
 }
 
@@ -26,10 +27,15 @@ pub(crate) fn query_delegation(
     querier: &QuerierWrapper,
     validator: &str,
     delegator_addr: &Addr,
+    denom: &str,
 ) -> StdResult<Delegation> {
     Ok(Delegation {
         validator: validator.to_string(),
-        amount: querier.query_delegation(delegator_addr, validator)?.map(|fd| fd.amount.amount.u128()).unwrap_or(0),
+        amount: querier
+            .query_delegation(delegator_addr, validator)?
+            .map(|fd| fd.amount.amount.u128())
+            .unwrap_or(0),
+        denom: denom.into(),
     })
 }
 
@@ -38,10 +44,11 @@ pub(crate) fn query_delegations(
     querier: &QuerierWrapper,
     validators: &[String],
     delegator_addr: &Addr,
+    denom: &str,
 ) -> StdResult<Vec<Delegation>> {
     validators
         .iter()
-        .map(|validator| query_delegation(querier, validator, delegator_addr))
+        .map(|validator| query_delegation(querier, validator, delegator_addr, denom))
         .collect()
 }
 
@@ -64,23 +71,28 @@ pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
         }
     }
 
-    Err(StdError::generic_err(format!("failed to parse coin: {}", s)))
+    Err(StdError::generic_err(format!(
+        "failed to parse coin: {}",
+        s
+    )))
 }
 
 /// Find the amount of a denom sent along a message, assert it is non-zero, and no other denom were
 /// sent together
 pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint128> {
     if funds.len() != 1 {
-        return Err(StdError::generic_err(
-            format!("must deposit exactly one coin; received {}", funds.len()),
-        ));
+        return Err(StdError::generic_err(format!(
+            "must deposit exactly one coin; received {}",
+            funds.len()
+        )));
     }
 
     let fund = &funds[0];
     if fund.denom != denom {
-        return Err(StdError::generic_err(
-            format!("expected {} deposit, received {}", denom, fund.denom),
-        ));
+        return Err(StdError::generic_err(format!(
+            "expected {} deposit, received {}",
+            denom, fund.denom
+        )));
     }
 
     if fund.amount.is_zero() {
