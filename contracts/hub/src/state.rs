@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Coin, StdError, StdResult, Storage};
+use cosmwasm_std::{Addr, Coin, Decimal, StdError, StdResult, Storage};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
@@ -10,6 +10,14 @@ pub(crate) struct State<'a> {
     pub owner: Item<'a, Addr>,
     /// Pending ownership transfer, awaiting acceptance by the new owner
     pub new_owner: Item<'a, Addr>,
+    /// Account to send fees to
+    pub fee_account: Item<'a, Addr>,
+    /// Current fee rate
+    pub fee_rate: Item<'a, Decimal>,
+    /// Maximum fee rate
+    pub max_fee_rate: Item<'a, Decimal>,
+    /// denom to accept
+    pub denom: Item<'a, String>,
     /// Address of the Steak token
     pub steak_token: Item<'a, Addr>,
     /// How often the unbonding queue is to be executed
@@ -22,6 +30,7 @@ pub(crate) struct State<'a> {
     pub unlocked_coins: Item<'a, Vec<Coin>>,
     /// The current batch of unbonding requests queded to be executed
     pub pending_batch: Item<'a, PendingBatch>,
+
     /// Previous batches that have started unbonding but not yet finished
     pub previous_batches: IndexedMap<'a, u64, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in unbonding batches
@@ -47,6 +56,10 @@ impl Default for State<'static> {
         Self {
             owner: Item::new("owner"),
             new_owner: Item::new("new_owner"),
+            fee_account: Item::new("fee_account"),
+            fee_rate: Item::new("fee_rate"),
+            max_fee_rate: Item::new("max_fee_rate"),
+            denom: Item::new("denom"),
             steak_token: Item::new("steak_token"),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),

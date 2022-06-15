@@ -21,6 +21,14 @@ pub struct InstantiateMsg {
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+    /// denomination of coins to steak (uXXXX)
+    pub denom: String,
+    /// Fee Account to send fees too
+    pub fee_account: String,
+    /// Fee "1.00 = 100%"
+    pub fee_amount: Decimal,
+    /// Max Fee "1.00 = 100%"
+    pub max_fee_amount: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -29,25 +37,15 @@ pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
-    Bond {
-        receiver: Option<String>,
-    },
+    Bond { receiver: Option<String> },
     /// Withdraw Luna that have finished unbonding in previous batches
-    WithdrawUnbonded {
-        receiver: Option<String>,
-    },
+    WithdrawUnbonded { receiver: Option<String> },
     /// Add a validator to the whitelist; callable by the owner
-    AddValidator {
-        validator: String,
-    },
+    AddValidator { validator: String },
     /// Remove a validator from the whitelist; callable by the owner
-    RemoveValidator {
-        validator: String,
-    },
+    RemoveValidator { validator: String },
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
-    TransferOwnership {
-        new_owner: String,
-    },
+    TransferOwnership { new_owner: String },
     /// Accept an ownership transfer
     AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
@@ -58,6 +56,11 @@ pub enum ExecuteMsg {
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
+    /// Transfer Fee collection account to another account
+    TransferFeeAccount { new_fee_account: String },
+    /// Update fee collection amount
+    UpdateFee { new_fee: Decimal },
+
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
 }
@@ -67,9 +70,7 @@ pub enum ExecuteMsg {
 pub enum ReceiveMsg {
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
     /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond {
-        receiver: Option<String>,
-    },
+    QueueUnbond { receiver: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -141,9 +142,9 @@ pub struct ConfigResponse {
 pub struct StateResponse {
     /// Total supply to the Steak token
     pub total_usteak: Uint128,
-    /// Total amount of uluna staked
-    pub total_uluna: Uint128,
-    /// The exchange rate between usteak and uluna, in terms of uluna per usteak
+    /// Total amount of native staked
+    pub total_native: Uint128,
+    /// The exchange rate between usteak and native, in terms of native per usteak
     pub exchange_rate: Decimal,
     /// Staking rewards currently held by the contract that are ready to be reinvested
     pub unlocked_coins: Vec<Coin>,
@@ -167,8 +168,8 @@ pub struct Batch {
     pub reconciled: bool,
     /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
     pub total_shares: Uint128,
-    /// Amount of `uluna` in this batch that have not been claimed
-    pub uluna_unclaimed: Uint128,
+    /// Amount of `denom` in this batch that have not been claimed
+    pub amount_unclaimed: Uint128,
     /// Estimated time when this batch will finish unbonding
     pub est_unbond_end_time: u64,
 }
