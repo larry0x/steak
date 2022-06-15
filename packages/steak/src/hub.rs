@@ -134,6 +134,14 @@ pub struct ConfigResponse {
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds
     pub unbond_period: u64,
+    /// denomination of coins to steak (uXXXX)
+    pub denom: String,
+    /// Fee Account to send fees too
+    pub fee_account: String,
+    /// Fee "1.00 = 100%"
+    pub fee_rate: Decimal,
+    /// Max Fee "1.00 = 100%"
+    pub max_fee_rate: Decimal,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
 }

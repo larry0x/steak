@@ -123,6 +123,10 @@ fn proper_instantiation() {
             steak_token: "steak_token".to_string(),
             epoch_period: 259200,
             unbond_period: 1814400,
+            denom: "uxyz".to_string(),
+            fee_account: "the_fee_man".to_string(),
+            fee_rate: Decimal::from_ratio(10_u128, 100_u128),
+            max_fee_rate: Decimal::from_ratio(20_u128, 100_u128),
             validators: vec![
                 "alice".to_string(),
                 "bob".to_string(),
