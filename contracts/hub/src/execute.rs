@@ -56,7 +56,7 @@ pub fn instantiate(
         &format!("factory/{}/{}", &msg.owner, &msg.name),
     )?;
 
-    Ok(Response::new())
+    Ok(Response::new().add_message(OsmosisMsg::CreateDenom { subdenom: msg.name }))
 }
 
 //--------------------------------------------------------------------------------------------------
