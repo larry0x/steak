@@ -1,20 +1,19 @@
-use std::str::FromStr;
-
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order, OwnedDeps,
-    Reply, ReplyOn, StdError, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    coin, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order,
+    OwnedDeps, Reply, ReplyOn, StdError, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
-use cw20::{Cw20ExecuteMsg, MinterResponse};
-use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
+use std::str::FromStr;
 
+use osmo_bindings::OsmosisMsg;
 use steak::hub::{
     Batch, CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, PendingBatch, QueryMsg,
-    ReceiveMsg, StateResponse, UnbondRequest, UnbondRequestsByBatchResponseItem,
+    StateResponse, UnbondRequest, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem,
 };
 
 use crate::contract::{execute, instantiate, reply};
+use crate::error::ContractError;
 use crate::helpers::{parse_coin, parse_received_fund};
 use crate::math::{
     compute_redelegations_for_rebalancing, compute_redelegations_for_removal, compute_undelegations,
@@ -37,10 +36,9 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         mock_env_at_timestamp(10000),
         mock_info("deployer", &[]),
         InstantiateMsg {
-            cw20_code_id: 69420,
-            owner: "larry".to_string(),
-            name: "Steak Token".to_string(),
-            symbol: "STEAK".to_string(),
+            owner: "apollo".to_string(),
+            name: "apOSMO".to_string(),
+            symbol: "apOSMO".to_string(),
             decimals: 6,
             epoch_period: 259200,   // 3 * 24 * 60 * 60 = 3 days
             unbond_period: 1814400, // 21 * 24 * 60 * 60 = 21 days
@@ -53,52 +51,6 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 1);
-    assert_eq!(
-        res.messages[0],
-        SubMsg::reply_on_success(
-            CosmosMsg::Wasm(WasmMsg::Instantiate {
-                admin: Some("larry".to_string()),
-                code_id: 69420,
-                msg: to_binary(&Cw20InstantiateMsg {
-                    name: "Steak Token".to_string(),
-                    symbol: "STEAK".to_string(),
-                    decimals: 6,
-                    initial_balances: vec![],
-                    mint: Some(MinterResponse {
-                        minter: MOCK_CONTRACT_ADDR.to_string(),
-                        cap: None
-                    }),
-                    marketing: None,
-                })
-                .unwrap(),
-                funds: vec![],
-                label: "steak_token".to_string(),
-            }),
-            1
-        )
-    );
-
-    let event = Event::new("instantiate")
-        .add_attribute("code_id", "69420")
-        .add_attribute("_contract_address", "steak_token");
-
-    let res = reply(
-        deps.as_mut(),
-        mock_env_at_timestamp(10000),
-        Reply {
-            id: 1,
-            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
-                events: vec![event],
-                data: None,
-            }),
-        },
-    )
-    .unwrap();
-
-    assert_eq!(res.messages.len(), 0);
-
-    deps.querier.set_cw20_total_supply("steak_token", 0);
     deps
 }
 
@@ -114,9 +66,9 @@ fn proper_instantiation() {
     assert_eq!(
         res,
         ConfigResponse {
-            owner: "larry".to_string(),
+            owner: "apollo".to_string(),
             new_owner: None,
-            steak_token: "steak_token".to_string(),
+            steak_denom: "factory/apollo/apOSMO".to_string(),
             epoch_period: 259200,
             unbond_period: 1814400,
             validators: vec![
@@ -152,6 +104,7 @@ fn proper_instantiation() {
 #[test]
 fn bonding() {
     let mut deps = setup_test();
+    let state = State::default();
 
     // Bond when no delegation has been made
     // In this case, the full deposit simply goes to the first validator
@@ -166,20 +119,16 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 1000000).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 1000000).to_cosmos_msg(), 1)
     );
     assert_eq!(
         res.messages[1],
         SubMsg {
             id: 0,
-            msg: CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "steak_token".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Mint {
-                    recipient: "user_1".to_string(),
-                    amount: Uint128::new(1000000)
-                })
-                .unwrap(),
-                funds: vec![]
+            msg: CosmosMsg::Custom(OsmosisMsg::MintTokens {
+                denom: "factory/apollo/apOSMO".to_string(),
+                amount: Uint128::new(1000000),
+                mint_to_address: "user_1".to_string()
             }),
             gas_limit: None,
             reply_on: ReplyOn::Never,
@@ -193,7 +142,11 @@ fn bonding() {
         Delegation::new("bob", 341667),
         Delegation::new("charlie", 341666),
     ]);
-    deps.querier.set_cw20_total_supply("steak_token", 1000000);
+
+    state
+        .total_usteak_supply
+        .save(&mut deps.storage, &Uint128::new(1000000u128))
+        .unwrap();
 
     // Charlie has the smallest amount of delegation, so the full deposit goes to him
     let res = execute(
@@ -209,20 +162,16 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("charlie", 12345).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 12345).to_cosmos_msg(), 1)
     );
     assert_eq!(
         res.messages[1],
         SubMsg {
             id: 0,
-            msg: CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "steak_token".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Mint {
-                    recipient: "user_3".to_string(),
-                    amount: Uint128::new(12043)
-                })
-                .unwrap(),
-                funds: vec![]
+            msg: CosmosMsg::Custom(OsmosisMsg::MintTokens {
+                denom: "factory/apollo/apOSMO".to_string(),
+                amount: Uint128::new(12043),
+                mint_to_address: "user_3".to_string()
             }),
             gas_limit: None,
             reply_on: ReplyOn::Never
@@ -235,7 +184,10 @@ fn bonding() {
         Delegation::new("bob", 341667),
         Delegation::new("charlie", 354011),
     ]);
-    deps.querier.set_cw20_total_supply("steak_token", 1012043);
+    state
+        .total_usteak_supply
+        .save(&mut deps.storage, &Uint128::new(1012043u128))
+        .unwrap();
 
     let res: StateResponse = query_helper(deps.as_ref(), QueryMsg::State {});
     assert_eq!(
@@ -253,13 +205,14 @@ fn bonding() {
 fn harvesting() {
     let mut deps = setup_test();
 
+    let state = State::default();
     // Assume users have bonded a total of 1,000,000 uosmo and minted the same amount of usteak
     deps.querier.set_staking_delegations(&[
         Delegation::new("alice", 341667),
         Delegation::new("bob", 341667),
         Delegation::new("charlie", 341666),
     ]);
-    deps.querier.set_cw20_total_supply("steak_token", 1000000);
+    //deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
     let res = execute(
         deps.as_mut(),
@@ -276,7 +229,7 @@ fn harvesting() {
             CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                 validator: "alice".to_string(),
             }),
-            2,
+            1,
         )
     );
     assert_eq!(
@@ -285,7 +238,7 @@ fn harvesting() {
             CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                 validator: "bob".to_string(),
             }),
-            2,
+            1,
         )
     );
     assert_eq!(
@@ -294,7 +247,7 @@ fn harvesting() {
             CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                 validator: "charlie".to_string(),
             }),
-            2,
+            1,
         )
     );
     assert_eq!(
@@ -326,7 +279,7 @@ fn registering_unlocked_coins() {
         deps.as_mut(),
         mock_env(),
         Reply {
-            id: 2,
+            id: 1,
             result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
@@ -414,53 +367,45 @@ fn queuing_unbond() {
     let state = State::default();
 
     // Only Steak token is accepted for unbonding requests
-    let err = execute(
+    let mut err = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("random_token", &[]),
-        ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
-            sender: "hacker".to_string(),
-            amount: Uint128::new(69420),
-            msg: to_binary(&ReceiveMsg::QueueUnbond { receiver: None }).unwrap(),
-        }),
+        mock_info("hacker", &[]),
+        ExecuteMsg::QueueUnbond { receiver: None },
     )
     .unwrap_err();
 
-    assert_eq!(
-        err,
-        StdError::generic_err("expecting Steak token, received random_token")
-    );
+    assert_eq!(err, ContractError::NoCoinsSent {});
+
+    err = execute(
+        deps.as_mut(),
+        mock_env_at_timestamp(12345), // est_unbond_start_time = 269200
+        mock_info("user_1", &[coin(1000u128, "random")]),
+        ExecuteMsg::QueueUnbond { receiver: None },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, ContractError::InvalidCoinSent {});
 
     // User 1 creates an unbonding request before `est_unbond_start_time` is reached. The unbond
     // request is saved, but not the pending batch is not submitted for unbonding
     let res = execute(
         deps.as_mut(),
         mock_env_at_timestamp(12345), // est_unbond_start_time = 269200
-        mock_info("steak_token", &[]),
-        ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
-            sender: "user_1".to_string(),
-            amount: Uint128::new(23456),
-            msg: to_binary(&ReceiveMsg::QueueUnbond { receiver: None }).unwrap(),
-        }),
+        mock_info("user_1", &[coin(23456u128, "factory/apollo/apOSMO")]),
+        ExecuteMsg::QueueUnbond { receiver: None },
     )
     .unwrap();
 
     assert_eq!(res.messages.len(), 0);
 
-    // User 2 creates an unbonding request after `est_unbond_start_time` is reached. The unbond
+    // User 3 creates an unbonding request after `est_unbond_start_time` is reached. The unbond
     // request is saved, and the pending is automatically submitted for unbonding
     let res = execute(
         deps.as_mut(),
         mock_env_at_timestamp(269201), // est_unbond_start_time = 269200
-        mock_info("steak_token", &[]),
-        ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
-            sender: "user_2".to_string(),
-            amount: Uint128::new(69420),
-            msg: to_binary(&ReceiveMsg::QueueUnbond {
-                receiver: Some("user_3".to_string()),
-            })
-            .unwrap(),
-        }),
+        mock_info("user_3", &[coin(69420u128, "factory/apollo/apOSMO")]),
+        ExecuteMsg::QueueUnbond { receiver: None },
     )
     .unwrap();
 
@@ -537,7 +482,11 @@ fn submitting_batch() {
         Delegation::new("bob", 345782),
         Delegation::new("charlie", 345781),
     ]);
-    deps.querier.set_cw20_total_supply("steak_token", 1012043);
+
+    state
+        .total_usteak_supply
+        .save(&mut deps.storage, &Uint128::new(1012043u128))
+        .unwrap();
 
     // We continue from the contract state at the end of the last test
     let unbond_requests = vec![
@@ -601,27 +550,24 @@ fn submitting_batch() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Undelegation::new("alice", 31732).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("alice", 31732).to_cosmos_msg(), 1)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Undelegation::new("bob", 31733).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("bob", 31733).to_cosmos_msg(), 1)
     );
     assert_eq!(
         res.messages[2],
-        SubMsg::reply_on_success(Undelegation::new("charlie", 31732).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("charlie", 31732).to_cosmos_msg(), 1)
     );
     assert_eq!(
         res.messages[3],
         SubMsg {
             id: 0,
-            msg: CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "steak_token".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Burn {
-                    amount: Uint128::new(92876)
-                })
-                .unwrap(),
-                funds: vec![]
+            msg: CosmosMsg::Custom(OsmosisMsg::BurnTokens {
+                denom: "factory/apollo/apOSMO".to_string(),
+                amount: Uint128::new(92876),
+                burn_from_address: "".to_string()
             }),
             gas_limit: None,
             reply_on: ReplyOn::Never
@@ -905,7 +851,7 @@ fn withdrawing_unbonded() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("withdrawable amount is zero"));
+    assert_eq!(err, ContractError::ZeroWithdrawableAmount {});
 
     // Attempt to withdraw once batches 1 and 2 have finished unbonding, but 3 has not yet
     //
@@ -1064,15 +1010,12 @@ fn adding_validator() {
     )
     .unwrap_err();
 
-    assert_eq!(
-        err,
-        StdError::generic_err("unauthorized: sender is not owner")
-    );
+    assert_eq!(err, ContractError::Unauthorized {});
 
     let err = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("larry", &[]),
+        mock_info("apollo", &[]),
         ExecuteMsg::AddValidator {
             validator: "alice".to_string(),
         },
@@ -1081,13 +1024,13 @@ fn adding_validator() {
 
     assert_eq!(
         err,
-        StdError::generic_err("validator is already whitelisted")
+        ContractError::Std(StdError::generic_err("validator is already whitelisted"))
     );
 
     let res = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("larry", &[]),
+        mock_info("apollo", &[]),
         ExecuteMsg::AddValidator {
             validator: "dave".to_string(),
         },
@@ -1129,15 +1072,12 @@ fn removing_validator() {
     )
     .unwrap_err();
 
-    assert_eq!(
-        err,
-        StdError::generic_err("unauthorized: sender is not owner")
-    );
+    assert_eq!(err, ContractError::Unauthorized {});
 
     let err = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("larry", &[]),
+        mock_info("apollo", &[]),
         ExecuteMsg::RemoveValidator {
             validator: "dave".to_string(),
         },
@@ -1146,7 +1086,9 @@ fn removing_validator() {
 
     assert_eq!(
         err,
-        StdError::generic_err("validator is not already whitelisted")
+        ContractError::Std(StdError::generic_err(
+            "validator is not already whitelisted"
+        ))
     );
 
     // Target: (341667 + 341667 + 341666) / 2 = 512500
@@ -1156,7 +1098,7 @@ fn removing_validator() {
     let res = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("larry", &[]),
+        mock_info("apollo", &[]),
         ExecuteMsg::RemoveValidator {
             validator: "charlie".to_string(),
         },
@@ -1168,14 +1110,14 @@ fn removing_validator() {
         res.messages[0],
         SubMsg::reply_on_success(
             Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(),
-            2
+            1
         ),
     );
     assert_eq!(
         res.messages[1],
         SubMsg::reply_on_success(
             Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(),
-            2
+            1
         ),
     );
 
@@ -1198,15 +1140,12 @@ fn transferring_ownership() {
     )
     .unwrap_err();
 
-    assert_eq!(
-        err,
-        StdError::generic_err("unauthorized: sender is not owner")
-    );
+    assert_eq!(err, ContractError::Unauthorized {});
 
     let res = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("larry", &[]),
+        mock_info("apollo", &[]),
         ExecuteMsg::TransferOwnership {
             new_owner: "jake".to_string(),
         },
@@ -1216,7 +1155,7 @@ fn transferring_ownership() {
     assert_eq!(res.messages.len(), 0);
 
     let owner = state.owner.load(deps.as_ref().storage).unwrap();
-    assert_eq!(owner, Addr::unchecked("larry"));
+    assert_eq!(owner, Addr::unchecked("apollo"));
 
     let err = execute(
         deps.as_mut(),
@@ -1226,10 +1165,7 @@ fn transferring_ownership() {
     )
     .unwrap_err();
 
-    assert_eq!(
-        err,
-        StdError::generic_err("unauthorized: sender is not new owner")
-    );
+    assert_eq!(err, ContractError::Unauthorized {});
 
     let res = execute(
         deps.as_mut(),

@@ -48,6 +48,10 @@ pub enum ContractError {
     #[error("Only the steak denom can be sent")]
     InvalidCoinSent {},
 
+    /// No Coins Sent Error
+    #[error("No coins sent")]
+    NoCoinsSent {},
+
     /// Invalid Callback Sender Error
     #[error("callbacks can only be invoked by the contract itself")]
     InvalidCallbackSender {},

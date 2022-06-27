@@ -93,8 +93,7 @@ fn callback(
 #[entry_point]
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response<OsmosisMsg>, ContractError> {
     match reply.id {
-        1 => execute::register_steak_denom(deps, unwrap_reply(reply)?),
-        2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
+        1 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
         id => Err(ContractError::InvalidReplyId { id }),
     }
 }

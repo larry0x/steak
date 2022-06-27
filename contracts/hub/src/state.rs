@@ -2,7 +2,7 @@ use cosmwasm_std::{Addr, Coin, CustomMsg, StdError, StdResult, Storage, Uint128}
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
 
-use crate::types::BooleanKey;
+use crate::{error::ContractError, types::BooleanKey};
 
 pub(crate) struct State<'a> {
     /// Account who can call certain privileged functions
@@ -56,18 +56,18 @@ impl Default for State<'static> {
             pending_batch: Item::new("pending_batch"),
             previous_batches: IndexedMap::new("previous_batches", pb_indexes),
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
-            total_usteak_supply: Item::new("total_supply"),
+            total_usteak_supply: Item::new("total_usteak_supply"),
         }
     }
 }
 
 impl<'a> State<'a> {
-    pub fn assert_owner(&self, storage: &dyn Storage, sender: &Addr) -> StdResult<()> {
+    pub fn assert_owner(&self, storage: &dyn Storage, sender: &Addr) -> Result<(), ContractError> {
         let owner = self.owner.load(storage)?;
         if *sender == owner {
             Ok(())
         } else {
-            Err(StdError::generic_err("unauthorized: sender is not owner"))
+            Err(ContractError::Unauthorized {})
         }
     }
 }

@@ -51,34 +51,10 @@ pub fn instantiate(
         },
     )?;
 
-    Ok(Response::new().add_submessage(SubMsg::reply_on_success(
-        CosmosMsg::Custom(OsmosisMsg::CreateDenom {
-            subdenom: "apOSMO".to_string(),
-        }),
-        1,
-    )))
-}
-
-pub fn register_steak_denom(
-    deps: DepsMut,
-    response: SubMsgResponse,
-) -> Result<Response<OsmosisMsg>, ContractError> {
-    let state = State::default();
-
-    let event = response
-        .events
-        .iter()
-        .find(|event| event.ty == "instantiate")
-        .ok_or_else(|| StdError::generic_err("cannot find `instantiate` event"))?;
-
-    let denom = &event
-        .attributes
-        .iter()
-        .find(|attr| attr.key == "denom")
-        .ok_or_else(|| StdError::generic_err("cannot find `denom` attribute"))?
-        .value;
-
-    state.steak_denom.save(deps.storage, &denom)?;
+    state.steak_denom.save(
+        deps.storage,
+        &format!("factory/{}/{}", &msg.owner, &msg.name),
+    )?;
 
     Ok(Response::new())
 }
@@ -122,19 +98,21 @@ pub fn bond(
     let usteak_supply = state.total_usteak_supply.load(deps.storage)?;
     let usteak_to_mint = compute_mint_amount(usteak_supply, uosmo_to_bond, &delegations);
 
+    state
+        .total_usteak_supply
+        .update(deps.storage, |x| -> StdResult<_> {
+            Ok(x.checked_add(usteak_to_mint)?)
+        })?;
+
     let new_delegation = Delegation {
         validator: validator.clone(),
         amount: uosmo_to_bond.u128(),
     };
 
-    let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 2);
+    let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 1);
 
-    let mint_msg: OsmosisMsg = OsmosisMsg::MintTokens {
-        amount: usteak_to_mint,
-        denom: steak_denom,
-        mint_to_address: receiver.to_string(),
-    }
-    .into();
+    let mint_msg =
+        OsmosisMsg::mint_contract_tokens(steak_denom, usteak_to_mint, receiver.to_string());
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -160,7 +138,7 @@ pub fn harvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contract
                 CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                     validator: d.validator,
                 }),
-                2,
+                1,
             );
         })
         .collect::<Vec<SubMsg<OsmosisMsg>>>();
@@ -281,7 +259,11 @@ pub fn queue_unbond(
     let state = State::default();
     let steak_denom = state.steak_denom.load(deps.storage)?;
 
-    if info.funds.len() > 1 || info.funds[0].denom != steak_denom {
+    if info.funds.is_empty() {
+        return Err(ContractError::NoCoinsSent {});
+    }
+
+    if info.funds[0].denom != steak_denom {
         return Err(ContractError::InvalidCoinSent {});
     }
 
@@ -384,7 +366,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Con
 
     let undelegate_submsgs = new_undelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 1))
         .collect::<Vec<_>>();
 
     let burn_msg = OsmosisMsg::burn_contract_tokens(
@@ -392,6 +374,12 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Con
         pending_batch.usteak_to_burn,
         env.contract.address.to_string(),
     );
+
+    state
+        .total_usteak_supply
+        .update(deps.storage, |x| -> StdResult<_> {
+            Ok(x.checked_sub(pending_batch.usteak_to_burn)?)
+        })?;
 
     let event = Event::new("steakhub/unbond_submitted")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -563,7 +551,7 @@ pub fn rebalance(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contra
 
     let redelegate_submsgs = new_redelegations
         .iter()
-        .map(|rd| SubMsg::reply_on_success(rd.to_cosmos_msg(), 2))
+        .map(|rd| SubMsg::reply_on_success(rd.to_cosmos_msg(), 1))
         .collect::<Vec<SubMsg<OsmosisMsg>>>();
 
     let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
@@ -626,7 +614,7 @@ pub fn remove_validator(
 
     let redelegate_submsgs = new_redelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
+        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 1))
         .collect::<Vec<SubMsg<OsmosisMsg>>>();
 
     let event = Event::new("steak/validator_removed").add_attribute("validator", validator);

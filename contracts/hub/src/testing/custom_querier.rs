@@ -5,16 +5,13 @@ use cosmwasm_std::{
     from_binary, from_slice, Addr, Coin, Empty, FullDelegation, Querier, QuerierResult,
     QueryRequest, SystemError, WasmQuery,
 };
-use cw20::Cw20QueryMsg;
 
 use crate::types::Delegation;
 
-use super::cw20_querier::Cw20Querier;
 use super::helpers::err_unsupported_query;
 
 #[derive(Default)]
 pub(super) struct CustomQuerier {
-    pub cw20_querier: Cw20Querier,
     pub bank_querier: BankQuerier,
     pub staking_querier: StakingQuerier,
 }
@@ -37,27 +34,6 @@ impl Querier for CustomQuerier {
 
 impl CustomQuerier {
     #[allow(dead_code)]
-    pub fn set_cw20_balance(&mut self, token: &str, user: &str, balance: u128) {
-        match self.cw20_querier.balances.get_mut(token) {
-            Some(contract_balances) => {
-                contract_balances.insert(user.to_string(), balance);
-            }
-            None => {
-                let mut contract_balances: HashMap<String, u128> = HashMap::default();
-                contract_balances.insert(user.to_string(), balance);
-                self.cw20_querier
-                    .balances
-                    .insert(token.to_string(), contract_balances);
-            }
-        };
-    }
-
-    pub fn set_cw20_total_supply(&mut self, token: &str, total_supply: u128) {
-        self.cw20_querier
-            .total_supplies
-            .insert(token.to_string(), total_supply);
-    }
-
     pub fn set_bank_balances(&mut self, balances: &[Coin]) {
         self.bank_querier = BankQuerier::new(&[(MOCK_CONTRACT_ADDR, balances)]);
     }
@@ -80,10 +56,6 @@ impl CustomQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                if let Ok(query) = from_binary::<Cw20QueryMsg>(msg) {
-                    return self.cw20_querier.handle_query(&contract_addr, query);
-                }
-
                 err_unsupported_query(msg)
             }
 
