@@ -645,7 +645,6 @@ pub fn remove_validator_ex(
     let event = Event::new("steak/validator_removed_ex").add_attribute("validator", validator);
 
     Ok(Response::new()
-        .add_submessages(redelegate_submsgs)
         .add_event(event)
         .add_attribute("action", "steakhub/remove_validator_ex"))
 }

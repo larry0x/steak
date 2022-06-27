@@ -52,7 +52,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         } => execute::remove_validator_ex(deps, env, info.sender, validator),
         ExecuteMsg::TransferOwnership {
             new_owner,
-        } => execute::transfer_ownership(deps, info.sender, new_owner)
+        } => execute::transfer_ownership(deps, info.sender, new_owner),
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
         ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
@@ -78,7 +78,8 @@ fn receive(
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
                 return Err(StdError::generic_err(
-                    format!("expecting Steak token, received {}", info.sender)));
+                    format!("expecting Steak token, received {}", info.sender)
+                ));
             }
 
             execute::queue_unbond(
@@ -124,7 +125,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::PreviousBatch(id) => to_binary(&queries::previous_batch(deps, id)?),
         QueryMsg::PreviousBatches {
             start_after,
-            limit
+            limit,
         } => to_binary(&queries::previous_batches(deps, start_after, limit)?),
 
         QueryMsg::UnbondRequestsByBatch {
