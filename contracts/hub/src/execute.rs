@@ -53,7 +53,7 @@ pub fn instantiate(
 
     state.steak_denom.save(
         deps.storage,
-        &format!("factory/{}/{}", &msg.owner, &msg.name),
+        &format!("factory/{}/{}", &env.contract.address, &msg.name),
     )?;
 
     Ok(Response::new().add_message(OsmosisMsg::CreateDenom { subdenom: msg.name }))
