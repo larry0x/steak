@@ -44,6 +44,8 @@ pub enum ExecuteMsg {
     AddValidator { validator: String },
     /// Remove a validator from the whitelist; callable by the owner
     RemoveValidator { validator: String },
+    /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for typos
+    RemoveValidatorEx { validator: String },
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
     TransferOwnership { new_owner: String },
     /// Accept an ownership transfer
@@ -56,6 +58,11 @@ pub enum ExecuteMsg {
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
+
+    /// Transfer Fee collection account to another account
+    TransferFeeAccount { new_fee_account: String },
+    /// Update fee collection amount
+    UpdateFee { new_fee: Decimal },
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
 }
@@ -65,40 +72,7 @@ pub enum ExecuteMsg {
 pub enum ReceiveMsg {
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
     /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond {
-        receiver: Option<String>,
-    },
-    Bond {
-        receiver: Option<String>,
-    },
-    WithdrawUnbonded {
-        receiver: Option<String>,
-    },
-    AddValidator {
-        validator: String,
-    },
-    RemoveValidator {
-        validator: String,
-    },
-    /// Remove a validator from the whitelist; callable by the owner. does not check delegations. use with caution
-    RemoveValidatorEx {
-        validator: String,
-    },
-    TransferOwnership {
-        new_owner: String,
-    },
-    /// Transfer Fee collection account to another account
-    TransferFeeAccount {
-        new_fee_account: String,
-    },
-    /// Update fee collection amount
-    UpdateFee {
-        new_fee: Decimal,
-    },
-
-    QueueUnbond {
-        receiver: Option<String>,
-    },
+    QueueUnbond { receiver: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

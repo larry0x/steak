@@ -677,6 +677,33 @@ pub fn remove_validator(
         .add_attribute("action", "steakhub/remove_validator"))
 }
 
+pub fn remove_validator_ex(
+    deps: DepsMut,
+    _env: Env,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    state.validators.update(deps.storage, |mut validators| {
+        if !validators.contains(&validator) {
+            return Err(StdError::generic_err(
+                "validator is not already whitelisted",
+            ));
+        }
+        validators.retain(|v| *v != validator);
+        Ok(validators)
+    })?;
+
+    let event = Event::new("steak/validator_removed_ex").add_attribute("validator", validator);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/remove_validator_ex"))
+}
+
 pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {
     let state = State::default();
 
