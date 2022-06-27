@@ -327,9 +327,10 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let current_time = env.block.time.seconds();
     if current_time < pending_batch.est_unbond_start_time {
-        return Err(StdError::generic_err(
-            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time),
-        ));
+        return Err(StdError::generic_err(format!(
+            "batch can only be submitted for unbonding after {}",
+            pending_batch.est_unbond_start_time
+        )));
     }
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
@@ -431,7 +432,8 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     let uluna_expected = uluna_expected_received + uluna_expected_unlocked;
     let uluna_actual = deps.querier.query_balance(&env.contract.address, "uluna")?.amount;
 
-    let uluna_to_deduct = uluna_expected.checked_sub(uluna_actual).unwrap_or_else(|_| Uint128::zero());
+    let uluna_to_deduct =
+        uluna_expected.checked_sub(uluna_actual).unwrap_or_else(|_| Uint128::zero());
     if !uluna_to_deduct.is_zero() {
         reconcile_batches(&mut batches, uluna_expected - uluna_actual);
     }
@@ -440,18 +442,13 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
-    let ids = batches
-        .iter()
-        .map(|b| b.id.to_string())
-        .collect::<Vec<_>>().join(",");
+    let ids = batches.iter().map(|b| b.id.to_string()).collect::<Vec<_>>().join(",");
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
         .add_attribute("uluna_deducted", uluna_to_deduct.to_string());
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/reconcile"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/reconcile"))
 }
 
 pub fn withdraw_unbonded(
@@ -489,9 +486,8 @@ pub fn withdraw_unbonded(
     for request in &requests {
         if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
-                let uluna_to_refund = batch
-                    .uluna_unclaimed
-                    .multiply_ratio(request.shares, batch.total_shares);
+                let uluna_to_refund =
+                    batch.uluna_unclaimed.multiply_ratio(request.shares, batch.total_shares);
 
                 ids.push(request.id.to_string());
 
@@ -552,8 +548,7 @@ pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
 
-    let event = Event::new("steakhub/rebalanced")
-        .add_attribute("uluna_moved", amount.to_string());
+    let event = Event::new("steakhub/rebalanced").add_attribute("uluna_moved", amount.to_string());
 
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
@@ -574,8 +569,7 @@ pub fn add_validator(deps: DepsMut, sender: Addr, validator: String) -> StdResul
         Ok(validators)
     })?;
 
-    let event = Event::new("steakhub/validator_added")
-        .add_attribute("validator", validator);
+    let event = Event::new("steakhub/validator_added").add_attribute("validator", validator);
 
     Ok(Response::new().add_event(event).add_attribute("action", "steakhub/add_validator"))
 }
@@ -607,13 +601,35 @@ pub fn remove_validator(
         .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 2))
         .collect::<Vec<_>>();
 
-    let event = Event::new("steak/validator_removed")
-        .add_attribute("validator", validator);
+    let event = Event::new("steak/validator_removed").add_attribute("validator", validator);
 
     Ok(Response::new()
         .add_submessages(redelegate_submsgs)
         .add_event(event)
         .add_attribute("action", "steakhub/remove_validator"))
+}
+
+pub fn remove_validator_ex(
+    deps: DepsMut,
+    _env: Env,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    let _validators = state.validators.update(deps.storage, |mut validators| {
+        if !validators.contains(&validator) {
+            return Err(StdError::generic_err("validator is not already whitelisted"));
+        }
+        validators.retain(|v| *v != validator);
+        Ok(validators)
+    })?;
+
+    let event = Event::new("steak/validator_removed_ex").add_attribute("validator", validator);
+
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/remove_validator_ex"))
 }
 
 pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {

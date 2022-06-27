@@ -47,6 +47,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::RemoveValidator {
             validator,
         } => execute::remove_validator(deps, env, info.sender, validator),
+        ExecuteMsg::RemoveValidatorEx {
+            validator,
+        } => execute::remove_validator_ex(deps, env, info.sender, validator),
         ExecuteMsg::TransferOwnership {
             new_owner,
         } => execute::transfer_ownership(deps, info.sender, new_owner),
@@ -74,9 +77,10 @@ fn receive(
 
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
-                return Err(StdError::generic_err(
-                    format!("expecting Steak token, received {}", info.sender),
-                ));
+                return Err(StdError::generic_err(format!(
+                    "expecting Steak token, received {}",
+                    info.sender
+                )));
             }
 
             execute::queue_unbond(

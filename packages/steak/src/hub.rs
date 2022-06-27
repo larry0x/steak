@@ -44,6 +44,10 @@ pub enum ExecuteMsg {
     RemoveValidator {
         validator: String,
     },
+    /// Remove a validator from the whitelist; callable by the owner. does not check delegations. use with caution
+    RemoveValidatorEx {
+        validator: String,
+    },
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
     TransferOwnership {
         new_owner: String,
