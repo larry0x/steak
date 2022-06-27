@@ -25,34 +25,40 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     let api = deps.api;
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
-        ExecuteMsg::Bond { receiver } => execute::bond(
+        ExecuteMsg::Bond {
+            receiver,
+        } => execute::bond(
             deps,
             env,
-            receiver
-                .map(|s| api.addr_validate(&s))
-                .transpose()?
-                .unwrap_or(info.sender),
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
             parse_received_fund(&info.funds, "uluna")?,
         ),
-        ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
+        ExecuteMsg::WithdrawUnbonded {
+            receiver,
+        } => execute::withdraw_unbonded(
             deps,
             env,
             info.sender.clone(),
-            receiver
-                .map(|s| api.addr_validate(&s))
-                .transpose()?
-                .unwrap_or(info.sender),
+            receiver.map(|s| api.addr_validate(&s)) .transpose()?.unwrap_or(info.sender),
         ),
-        ExecuteMsg::AddValidator { validator } => {
+        ExecuteMsg::AddValidator {
+            validator,
+        } => {
             execute::add_validator(deps, info.sender, validator)
         }
-        ExecuteMsg::RemoveValidator { validator } => {
+        ExecuteMsg::RemoveValidator {
+            validator,
+        } => {
             execute::remove_validator(deps, env, info.sender, validator)
         }
-        ExecuteMsg::RemoveValidatorEx { validator } => {
+        ExecuteMsg::RemoveValidatorEx {
+            validator,
+        } => {
             execute::remove_validator_ex(deps, env, info.sender, validator)
         }
-        ExecuteMsg::TransferOwnership { new_owner } => {
+        ExecuteMsg::TransferOwnership {
+            new_owner,
+        } => {
             execute::transfer_ownership(deps, info.sender, new_owner)
         }
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
