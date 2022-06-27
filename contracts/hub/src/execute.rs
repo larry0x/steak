@@ -116,7 +116,7 @@ pub fn bond(
     }
 
     // Query the current supply of Steak and compute the amount to mint
-    let usteak_supply = state.total_supply.load(deps.storage)?;
+    let usteak_supply = state.total_usteak_supply.load(deps.storage)?;
     let usteak_to_mint = compute_mint_amount(usteak_supply, uosmo_to_bond, &delegations);
 
     let new_delegation = Delegation {
@@ -342,7 +342,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Con
     }
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let usteak_supply = state.total_supply.load(deps.storage)?;
+    let usteak_supply = state.total_usteak_supply.load(deps.storage)?;
 
     let uosmo_to_unbond =
         compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations);

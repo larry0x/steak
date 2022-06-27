@@ -31,7 +31,7 @@ pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
 
     let steak_denom = state.steak_denom.load(deps.storage)?;
-    let total_usteak = state.total_supply.load(deps.storage)?;
+    let total_usteak = state.total_usteak_supply.load(deps.storage)?;
 
     let validators = state.validators.load(deps.storage)?;
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
