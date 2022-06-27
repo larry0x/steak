@@ -186,7 +186,7 @@ fn bonding() {
         }
     );
 
-    // Bond when there are existing delegations, and Luna:Steak exchange rate is >1
+    // Bond when there are existing delegations, and OSMO:Steak exchange rate is >1
     // Previously user 1 delegated 1,000,000 uosmo. We assume we have accumulated 2.5% yield at 1025000 staked
     deps.querier.set_staking_delegations(&[
         Delegation::new("alice", 341667),
@@ -666,28 +666,28 @@ fn reconciling() {
             id: 1,
             reconciled: true,
             total_shares: Uint128::new(92876),
-            uosmo_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
+            uosmo_unclaimed: Uint128::new(95197), // 1.025 OSMO per Steak
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
             reconciled: false,
             total_shares: Uint128::new(1345),
-            uosmo_unclaimed: Uint128::new(1385), // 1.030 Luna per Steak
+            uosmo_unclaimed: Uint128::new(1385), // 1.030 OSMO per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 3,
             reconciled: false,
             total_shares: Uint128::new(1456),
-            uosmo_unclaimed: Uint128::new(1506), // 1.035 Luna per Steak
+            uosmo_unclaimed: Uint128::new(1506), // 1.035 OSMO per Steak
             est_unbond_end_time: 30000,
         },
         Batch {
             id: 4,
             reconciled: false,
             total_shares: Uint128::new(1567),
-            uosmo_unclaimed: Uint128::new(1629), // 1.040 Luna per Steak
+            uosmo_unclaimed: Uint128::new(1629), // 1.040 OSMO per Steak
             est_unbond_end_time: 40000,          // not yet finished unbonding, ignored
         },
     ];
@@ -847,28 +847,28 @@ fn withdrawing_unbonded() {
             id: 1,
             reconciled: true,
             total_shares: Uint128::new(92876),
-            uosmo_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
+            uosmo_unclaimed: Uint128::new(95197), // 1.025 OSMO per Steak
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
             reconciled: true,
             total_shares: Uint128::new(34567),
-            uosmo_unclaimed: Uint128::new(35604), // 1.030 Luna per Steak
+            uosmo_unclaimed: Uint128::new(35604), // 1.030 OSMO per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 3,
             reconciled: false, // finished unbonding, but not reconciled; ignored
             total_shares: Uint128::new(45678),
-            uosmo_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
+            uosmo_unclaimed: Uint128::new(47276), // 1.035 OSMO per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 4,
             reconciled: true,
             total_shares: Uint128::new(56789),
-            uosmo_unclaimed: Uint128::new(59060), // 1.040 Luna per Steak
+            uosmo_unclaimed: Uint128::new(59060), // 1.040 OSMO per Steak
             est_unbond_end_time: 30000, // reconciled, but not yet finished unbonding; ignored
         },
     ];

@@ -41,7 +41,7 @@ const argv = yargs(process.argv)
         bond: {},
       },
       {
-        uluna: argv["amount"],
+        uosmo: argv["amount"],
       }
     ),
   ]);

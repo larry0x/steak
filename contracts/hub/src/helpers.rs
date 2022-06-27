@@ -11,7 +11,7 @@ pub(crate) fn unwrap_reply(reply: Reply) -> StdResult<SubMsgResponse> {
     reply.result.into_result().map_err(StdError::generic_err)
 }
 
-/// Query the amounts of Luna a staker is delegating to a specific validator
+/// Query the amounts of OSMO a staker is delegating to a specific validator
 pub(crate) fn query_delegation(
     querier: &QuerierWrapper,
     validator: &str,
@@ -26,7 +26,7 @@ pub(crate) fn query_delegation(
     })
 }
 
-/// Query the amounts of Luna a staker is delegating to each of the validators specified
+/// Query the amounts of OSMO a staker is delegating to each of the validators specified
 pub(crate) fn query_delegations(
     querier: &QuerierWrapper,
     validators: &[String],

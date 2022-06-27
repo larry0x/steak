@@ -377,7 +377,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 [[package]]
 name = "osmo-bindings"
 version = "0.6.0"
-source = "git+https://github.com/apollodao/bindings.git?tag=v0.6.2#93d7caabf54d17a2b4af8507d8b7a14a4af893f4"
+source = "git+https://github.com/apollodao/bindings.git#2fc2ef693e7a22c5da00373e9bdc22e745de452e"
 dependencies = [
  "cosmwasm-std",
  "schemars",

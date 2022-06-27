@@ -26,7 +26,7 @@ ts-node 2_deploy.ts \
   --msg /path/to/instantiate_msg.json
 ```
 
-To stake Luna and mint Steak:
+To stake OSMO and mint Steak:
 
 ```bash
 ts-node 4_bond.ts \
