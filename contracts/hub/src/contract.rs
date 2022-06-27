@@ -39,28 +39,20 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             deps,
             env,
             info.sender.clone(),
-            receiver.map(|s| api.addr_validate(&s)) .transpose()?.unwrap_or(info.sender),
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
         ),
         ExecuteMsg::AddValidator {
             validator,
-        } => {
-            execute::add_validator(deps, info.sender, validator)
-        }
+        } => execute::add_validator(deps, info.sender, validator),
         ExecuteMsg::RemoveValidator {
             validator,
-        } => {
-            execute::remove_validator(deps, env, info.sender, validator)
-        }
+        } => execute::remove_validator(deps, env, info.sender, validator),
         ExecuteMsg::RemoveValidatorEx {
             validator,
-        } => {
-            execute::remove_validator_ex(deps, env, info.sender, validator)
-        }
+        } => execute::remove_validator_ex(deps, env, info.sender, validator),
         ExecuteMsg::TransferOwnership {
             new_owner,
-        } => {
-            execute::transfer_ownership(deps, info.sender, new_owner)
-        }
+        } => execute::transfer_ownership(deps, info.sender, new_owner)
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
         ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
@@ -78,15 +70,15 @@ fn receive(
 ) -> StdResult<Response> {
     let api = deps.api;
     match from_binary(&cw20_msg.msg)? {
-        ReceiveMsg::QueueUnbond { receiver } => {
+        ReceiveMsg::QueueUnbond {
+            receiver,
+        } => {
             let state = State::default();
 
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
-                return Err(StdError::generic_err(format!(
-                    "expecting Steak token, received {}",
-                    info.sender
-                )));
+                return Err(StdError::generic_err(
+                    format!("expecting Steak token, received {}", info.sender)));
             }
 
             execute::queue_unbond(
@@ -95,7 +87,7 @@ fn receive(
                 api.addr_validate(&receiver.unwrap_or(cw20_msg.sender))?,
                 cw20_msg.amount,
             )
-        }
+        },
     }
 }
 
@@ -106,9 +98,7 @@ fn callback(
     callback_msg: CallbackMsg,
 ) -> StdResult<Response> {
     if env.contract.address != info.sender {
-        return Err(StdError::generic_err(
-            "callbacks can only be invoked by the contract itself",
-        ));
+        return Err(StdError::generic_err("callbacks can only be invoked by the contract itself"));
     }
 
     match callback_msg {
@@ -121,10 +111,7 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
         2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
-        id => Err(StdError::generic_err(format!(
-            "invalid reply id: {}; must be 1-2",
-            id
-        ))),
+        id => Err(StdError::generic_err(format!("invalid reply id: {}; must be 1-2", id))),
     }
 }
 
@@ -135,29 +122,21 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::State {} => to_binary(&queries::state(deps, env)?),
         QueryMsg::PendingBatch {} => to_binary(&queries::pending_batch(deps)?),
         QueryMsg::PreviousBatch(id) => to_binary(&queries::previous_batch(deps, id)?),
-        QueryMsg::PreviousBatches { start_after, limit } => {
-            to_binary(&queries::previous_batches(deps, start_after, limit)?)
-        }
+        QueryMsg::PreviousBatches {
+            start_after,
+            limit
+        } => to_binary(&queries::previous_batches(deps, start_after, limit)?),
+
         QueryMsg::UnbondRequestsByBatch {
             id,
             start_after,
             limit,
-        } => to_binary(&queries::unbond_requests_by_batch(
-            deps,
-            id,
-            start_after,
-            limit,
-        )?),
+        } => to_binary(&queries::unbond_requests_by_batch(deps, id, start_after, limit)?),
         QueryMsg::UnbondRequestsByUser {
             user,
             start_after,
             limit,
-        } => to_binary(&queries::unbond_requests_by_user(
-            deps,
-            user,
-            start_after,
-            limit,
-        )?),
+        } => to_binary(&queries::unbond_requests_by_user(deps, user, start_after, limit)?),
     }
 }
 

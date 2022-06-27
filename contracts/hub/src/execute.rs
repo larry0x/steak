@@ -24,9 +24,7 @@ use crate::types::{Coins, Delegation};
 pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Response> {
     let state = State::default();
 
-    state
-        .owner
-        .save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
+    state.owner.save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
     state.validators.save(deps.storage, &msg.validators)?;
@@ -235,15 +233,14 @@ pub fn register_received_coins(
     }
 
     let state = State::default();
-    state
-        .unlocked_coins
-        .update(deps.storage, |coins| -> StdResult<_> {
+    state.unlocked_coins.update(deps.storage, |coins| -> StdResult<_> {
             let mut coins = Coins(coins);
             coins.add_many(&received_coins)?;
             Ok(coins.0)
         })?;
 
-    Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
+    Ok(Response::new()
+        .add_attribute("action", "steakhub/register_received_coins"))
 }
 
 fn parse_coin_receiving_event(env: &Env, event: &Event) -> StdResult<Coins> {
@@ -331,10 +328,8 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let current_time = env.block.time.seconds();
     if current_time < pending_batch.est_unbond_start_time {
-        return Err(StdError::generic_err(format!(
-            "batch can only be submitted for unbonding after {}",
-            pending_batch.est_unbond_start_time
-        )));
+        return Err(StdError::generic_err(
+            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time)));
     }
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
