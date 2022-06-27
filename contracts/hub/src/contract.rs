@@ -78,7 +78,7 @@ fn receive(
             let steak_token = state.steak_token.load(deps.storage)?;
             if info.sender != steak_token {
                 return Err(StdError::generic_err(
-                    format!("expecting Steak token, received {}", info.sender)
+                    format!("expecting Steak token, received {}", info.sender),
                 ));
             }
 
@@ -127,7 +127,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             start_after,
             limit,
         } => to_binary(&queries::previous_batches(deps, start_after, limit)?),
-
         QueryMsg::UnbondRequestsByBatch {
             id,
             start_after,
