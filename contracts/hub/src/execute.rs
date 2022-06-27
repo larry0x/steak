@@ -329,7 +329,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     let current_time = env.block.time.seconds();
     if current_time < pending_batch.est_unbond_start_time {
         return Err(StdError::generic_err(
-            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time),
+            format!("batch can only be submitted for unbonding after {}", pending_batch.est_unbond_start_time)
         ));
     }
 
@@ -419,10 +419,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         .filter(|b| current_time > b.est_unbond_end_time)
         .collect::<Vec<_>>();
 
-    let uluna_expected_received: Uint128 = batches
-        .iter()
-        .map(|b| b.uluna_unclaimed)
-        .sum();
+    let uluna_expected_received: Uint128 = batches.iter().map(|b| b.uluna_unclaimed).sum();
 
     let unlocked_coins = state.unlocked_coins.load(deps.storage)?;
     let uluna_expected_unlocked = Coins(unlocked_coins).find("uluna").amount;
@@ -574,8 +571,7 @@ pub fn add_validator(deps: DepsMut, sender: Addr, validator: String) -> StdResul
         Ok(validators)
     })?;
 
-    let event = Event::new("steakhub/validator_added")
-        .add_attribute("validator", validator);
+    let event = Event::new("steakhub/validator_added").add_attribute("validator", validator);
 
     Ok(Response::new()
         .add_event(event)
@@ -617,6 +613,31 @@ pub fn remove_validator(
         .add_event(event)
         .add_attribute("action", "steakhub/remove_validator"))
 }
+pub fn remove_validator_ex(
+    deps: DepsMut,
+    _env: Env,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    state.validators.update(deps.storage, |mut validators| {
+        if !validators.contains(&validator) {
+            return Err(StdError::generic_err("validator is not already whitelisted"));
+        }
+        validators.retain(|v| *v != validator);
+        Ok(validators)
+    })?;
+
+    let event = Event::new("steak/validator_removed_ex")
+        .add_attribute("validator", validator);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/remove_validator_ex"))
+}
 
 pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {
     let state = State::default();
@@ -624,8 +645,7 @@ pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> Std
     state.assert_owner(deps.storage, &sender)?;
     state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
 
-    Ok(Response::new()
-        .add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
 }
 
 pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
@@ -635,7 +655,9 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
     let new_owner = state.new_owner.load(deps.storage)?;
 
     if sender != new_owner {
-        return Err(StdError::generic_err("unauthorized: sender is not new owner"));
+        return Err(StdError::generic_err(
+            "unauthorized: sender is not new owner",
+        ));
     }
 
     state.owner.save(deps.storage, &sender)?;

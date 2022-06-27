@@ -29,25 +29,17 @@ pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
-    Bond {
-        receiver: Option<String>,
-    },
+    Bond { receiver: Option<String> },
     /// Withdraw Luna that have finished unbonding in previous batches
-    WithdrawUnbonded {
-        receiver: Option<String>,
-    },
+    WithdrawUnbonded { receiver: Option<String> },
     /// Add a validator to the whitelist; callable by the owner
-    AddValidator {
-        validator: String,
-    },
+    AddValidator { validator: String },
     /// Remove a validator from the whitelist; callable by the owner
-    RemoveValidator {
-        validator: String,
-    },
+    RemoveValidator { validator: String },
+    /// Remove a validator from the whitelist; callable by the owner; does not undelegate; use with caution
+    RemoveValidatorEx { validator: String },
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
-    TransferOwnership {
-        new_owner: String,
-    },
+    TransferOwnership { new_owner: String },
     /// Accept an ownership transfer
     AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
@@ -67,9 +59,7 @@ pub enum ExecuteMsg {
 pub enum ReceiveMsg {
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
     /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond {
-        receiver: Option<String>,
-    },
+    QueueUnbond { receiver: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
