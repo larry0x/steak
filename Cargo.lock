@@ -375,6 +375,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
+name = "osmo-bindings"
+version = "0.6.0"
+source = "git+https://github.com/apollodao/bindings.git?tag=v0.6.2#93d7caabf54d17a2b4af8507d8b7a14a4af893f4"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -570,7 +580,7 @@ name = "steak"
 version = "2.0.0"
 dependencies = [
  "cosmwasm-std",
- "cw20",
+ "osmo-bindings",
  "schemars",
  "serde",
 ]
@@ -581,10 +591,10 @@ version = "2.0.0"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
- "cw20",
- "cw20-base",
+ "osmo-bindings",
  "serde",
  "steak",
+ "thiserror",
 ]
 
 [[package]]
@@ -615,18 +625,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.30"
+version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "854babe52e4df1653706b98fcfc05843010039b406875930a70e4d9644e5c417"
+checksum = "bd829fe32373d27f76265620b5309d0340cb8550f523c1dda251d6298069069a"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.30"
+version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa32fd3f627f367fe16f893e2597ae3c05020f8bba2666a4e6ea73d377e5714b"
+checksum = "0396bc89e626244658bef819e22d0cc459e795a5ebe878e6ec336d1674a8d79a"
 dependencies = [
  "proc-macro2",
  "quote",

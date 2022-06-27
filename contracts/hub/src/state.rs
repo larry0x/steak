@@ -1,6 +1,5 @@
-use cosmwasm_std::{Addr, Coin, StdError, StdResult, Storage};
+use cosmwasm_std::{Addr, Coin, CustomMsg, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
-
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
 
 use crate::types::BooleanKey;
@@ -10,8 +9,8 @@ pub(crate) struct State<'a> {
     pub owner: Item<'a, Addr>,
     /// Pending ownership transfer, awaiting acceptance by the new owner
     pub new_owner: Item<'a, Addr>,
-    /// Address of the Steak token
-    pub steak_token: Item<'a, Addr>,
+    /// Denom of the Steak coin
+    pub steak_denom: Item<'a, String>,
     /// How often the unbonding queue is to be executed
     pub epoch_period: Item<'a, u64>,
     /// The staking module's unbonding time, in seconds
@@ -26,6 +25,8 @@ pub(crate) struct State<'a> {
     pub previous_batches: IndexedMap<'a, u64, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in unbonding batches
     pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
+    /// The total supply of the steak coin
+    pub total_supply: Item<'a, Uint128>,
 }
 
 impl Default for State<'static> {
@@ -47,7 +48,7 @@ impl Default for State<'static> {
         Self {
             owner: Item::new("owner"),
             new_owner: Item::new("new_owner"),
-            steak_token: Item::new("steak_token"),
+            steak_denom: Item::new("steak_denom"),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),
             validators: Item::new("validators"),
@@ -55,6 +56,7 @@ impl Default for State<'static> {
             pending_batch: Item::new("pending_batch"),
             previous_batches: IndexedMap::new("previous_batches", pb_indexes),
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
+            total_supply: Item::new("total_supply"),
         }
     }
 }

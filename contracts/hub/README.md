@@ -8,10 +8,10 @@ Steak Hub contract manages the bonding/unbonding of Luna, minting/burning of Ste
 
 Unlike [Lido's stETH](https://github.com/lidofinance/lido-dao/tree/master/contracts/0.4.24), the Steak token does not rebase; instead, the exchange rate between Luna and Steak increases (i.e. each Steak becomes worth more Luna) as staking rewards are harvested, and reduces if validators are slashed.
 
-The exchange rate, as defined by the amount of `uluna` redeemable per `usteak`, is calculated as
+The exchange rate, as defined by the amount of `uosmo` redeemable per `usteak`, is calculated as
 
 ```plain
-exchange_rate = total_uluna_staked / total_usteak_supply
+exchange_rate = total_uosmo_staked / total_usteak_supply
 ```
 
 ### Unlocked coins

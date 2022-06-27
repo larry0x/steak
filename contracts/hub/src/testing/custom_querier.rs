@@ -29,7 +29,7 @@ impl Querier for CustomQuerier {
                     request: bin_request.into(),
                 })
                 .into()
-            },
+            }
         };
         self.handle_query(&request)
     }
@@ -41,12 +41,14 @@ impl CustomQuerier {
         match self.cw20_querier.balances.get_mut(token) {
             Some(contract_balances) => {
                 contract_balances.insert(user.to_string(), balance);
-            },
+            }
             None => {
                 let mut contract_balances: HashMap<String, u128> = HashMap::default();
                 contract_balances.insert(user.to_string(), balance);
-                self.cw20_querier.balances.insert(token.to_string(), contract_balances);
-            },
+                self.cw20_querier
+                    .balances
+                    .insert(token.to_string(), contract_balances);
+            }
         };
     }
 
@@ -66,27 +68,24 @@ impl CustomQuerier {
             .map(|d| FullDelegation {
                 delegator: Addr::unchecked(MOCK_CONTRACT_ADDR),
                 validator: d.validator.clone(),
-                amount: Coin::new(d.amount, "uluna"),
-                can_redelegate: Coin::new(0, "uluna"),
+                amount: Coin::new(d.amount, "uosmo"),
+                can_redelegate: Coin::new(0, "uosmo"),
                 accumulated_rewards: vec![],
             })
             .collect::<Vec<_>>();
 
-        self.staking_querier = StakingQuerier::new("uluna", &[], &fds);
+        self.staking_querier = StakingQuerier::new("uosmo", &[], &fds);
     }
 
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match request {
-            QueryRequest::Wasm(WasmQuery::Smart {
-                contract_addr,
-                msg,
-            }) => {
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
                 if let Ok(query) = from_binary::<Cw20QueryMsg>(msg) {
                     return self.cw20_querier.handle_query(&contract_addr, query);
                 }
 
                 err_unsupported_query(msg)
-            },
+            }
 
             QueryRequest::Bank(query) => self.bank_querier.query(query),
 
