@@ -38,6 +38,9 @@ pub fn instantiate(
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
     state.validators.save(deps.storage, &msg.validators)?;
     state.unlocked_coins.save(deps.storage, &vec![])?;
+    state
+        .total_usteak_supply
+        .save(deps.storage, &Uint128::zero())?;
 
     state.pending_batch.save(
         deps.storage,
