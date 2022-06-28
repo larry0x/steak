@@ -8,6 +8,7 @@ pub mod math;
 pub mod queries;
 pub mod state;
 pub mod types;
+pub mod vault_token;
 
 #[cfg(test)]
 mod testing;

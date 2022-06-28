@@ -16,6 +16,7 @@ use crate::math::{
 };
 use crate::state::State;
 use crate::types::{Coins, Delegation};
+use crate::vault_token::{MintTokenMsg, Token};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -77,12 +78,12 @@ pub fn instantiate(
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond(
+pub fn bond<S, T: From<MintTokenMsg> + Into<CosmosMsg<S>>>(
     deps: DepsMut,
     env: Env,
     receiver: Addr,
     uosmo_to_bond: Uint128,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response<S>, ContractError> {
     let state = State::default();
     let steak_denom = state.steak_denom.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
@@ -117,8 +118,13 @@ pub fn bond(
 
     let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 1);
 
-    let mint_msg =
-        OsmosisMsg::mint_contract_tokens(steak_denom, usteak_to_mint, receiver.to_string());
+    let steak_token = Token {
+        address: steak_denom,
+    };
+
+    let mint_msg: T = steak_token
+        .mint(usteak_to_mint, receiver.to_string())
+        .into();
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -127,8 +133,8 @@ pub fn bond(
         .add_attribute("uosmo_bonded", uosmo_to_bond)
         .add_attribute("usteak_minted", usteak_to_mint);
 
-    Ok(Response::new()
-        .add_submessage(delegate_submsg)
+    Ok(Response::<S>::new()
+        // .add_submessage(delegate_submsg)
         .add_message(mint_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))

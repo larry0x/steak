@@ -18,6 +18,7 @@ cw-storage-plus = "0.13"
 osmo-bindings = {git = "https://github.com/apollodao/bindings.git"}
 steak = {path = "../../packages/steak"}
 thiserror = {version = "1.0.31"}
+cw20-base = "0.13.4"
 
 [dev-dependencies]
 serde = {version = "1.0.103", default-features = false, features = ["derive"]}

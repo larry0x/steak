@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult,
+    entry_point, from_binary, to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env,
+    MessageInfo, Reply, Response, StdError, StdResult, WasmMsg,
 };
 
 use osmo_bindings::OsmosisMsg;
@@ -25,10 +26,10 @@ pub fn execute(
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let api = deps.api;
     match msg {
-        ExecuteMsg::Bond { receiver } => execute::bond(
+        ExecuteMsg::Bond { receiver } => execute::bond::<Empty, WasmMsg>(
             deps,
             env,
             receiver
