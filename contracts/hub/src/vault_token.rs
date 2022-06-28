@@ -21,6 +21,14 @@ impl Token {
             recipient: recipient,
         }
     }
+
+    pub fn burn_from(&self, amount: Uint128, burn_from_address: String) -> BurnFromTokenMsg {
+        BurnFromTokenMsg {
+            amount,
+            token: self.to_owned(),
+            burn_from_address,
+        }
+    }
 }
 
 pub struct MintTokenMsg {
@@ -46,6 +54,36 @@ impl From<MintTokenMsg> for WasmMsg {
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: msg.recipient,
                 amount: msg.amount,
+            })
+            .unwrap(),
+            funds: vec![],
+        }
+    }
+}
+
+pub struct BurnFromTokenMsg {
+    pub burn_from_address: String,
+    pub token: Token,
+    pub amount: Uint128,
+}
+
+impl From<BurnFromTokenMsg> for OsmosisMsg {
+    fn from(msg: BurnFromTokenMsg) -> OsmosisMsg {
+        OsmosisMsg::BurnTokens {
+            denom: msg.token.address,
+            amount: msg.amount,
+            burn_from_address: msg.burn_from_address,
+        }
+    }
+}
+
+impl From<BurnFromTokenMsg> for WasmMsg {
+    fn from(msg: BurnFromTokenMsg) -> WasmMsg {
+        WasmMsg::Execute {
+            contract_addr: msg.token.address,
+            msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+                amount: msg.amount,
+                owner: msg.burn_from_address,
             })
             .unwrap(),
             funds: vec![],
