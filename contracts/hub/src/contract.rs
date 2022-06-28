@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env,
-    MessageInfo, Reply, Response, StdError, StdResult,
+    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult,
 };
 
 use osmo_bindings::OsmosisMsg;
@@ -8,7 +7,6 @@ use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 use crate::error::ContractError;
 use crate::helpers::{parse_received_fund, unwrap_reply};
-use crate::state::State;
 use crate::{execute, queries};
 
 #[entry_point]

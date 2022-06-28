@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use cosmwasm_std::testing::{BankQuerier, StakingQuerier, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, from_slice, Addr, Coin, Empty, FullDelegation, Querier, QuerierResult,
-    QueryRequest, SystemError, WasmQuery,
+    from_slice, Addr, Coin, Empty, FullDelegation, Querier, QuerierResult, QueryRequest,
+    SystemError, WasmQuery,
 };
 
 use crate::types::Delegation;
@@ -55,9 +53,10 @@ impl CustomQuerier {
 
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match request {
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                err_unsupported_query(msg)
-            }
+            QueryRequest::Wasm(WasmQuery::Smart {
+                contract_addr: _,
+                msg,
+            }) => err_unsupported_query(msg),
 
             QueryRequest::Bank(query) => self.bank_querier.query(query),
 

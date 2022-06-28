@@ -1,11 +1,8 @@
-use std::convert::TryInto;
-use std::error::Error;
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    coin, to_binary, Addr, BankMsg, Coin, CosmosMsg, CustomMsg, DepsMut, DistributionMsg, Empty,
-    Env, Event, MessageInfo, Order, Response, StakingMsg, StdError, StdResult, SubMsg,
-    SubMsgResponse, Uint128, WasmMsg,
+    coins, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env,
+    Event, MessageInfo, Order, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use osmo_bindings::OsmosisMsg;
 
@@ -55,6 +52,15 @@ pub fn instantiate(
         deps.storage,
         &format!("factory/{}/{}", &env.contract.address, &msg.name),
     )?;
+
+    state.distribution_contract.save(
+        deps.storage,
+        &deps.api.addr_validate(&msg.distribution_contract)?,
+    )?;
+
+    state
+        .performance_fee
+        .save(deps.storage, &Decimal::percent(msg.performance_fee))?;
 
     Ok(Response::new().add_message(OsmosisMsg::CreateDenom { subdenom: msg.name }))
 }
@@ -162,11 +168,21 @@ pub fn reinvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contrac
     let validators = state.validators.load(deps.storage)?;
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
-    let uosmo_to_bond = unlocked_coins
+    let total_uosmo_harvest = unlocked_coins
         .iter()
         .find(|coin| coin.denom == "uosmo")
         .ok_or_else(|| StdError::generic_err("no uosmo available to be bonded"))?
         .amount;
+
+    let performance_fee = state.performance_fee.load(deps.storage)?;
+    let uosmo_to_bond = total_uosmo_harvest * (Decimal::one() - performance_fee);
+    let uosmo_to_send_to_delegation_contract = total_uosmo_harvest - uosmo_to_bond;
+    let distribution_contract = state.distribution_contract.load(deps.storage)?;
+
+    let harvest: CosmosMsg<OsmosisMsg> = CosmosMsg::Bank(BankMsg::Send {
+        to_address: distribution_contract.to_string(),
+        amount: coins(uosmo_to_send_to_delegation_contract.u128(), "uosmo"),
+    });
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
     let mut validator = &delegations[0].validator;
@@ -190,6 +206,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contrac
 
     Ok(Response::new()
         .add_message(new_delegation.to_cosmos_msg())
+        .add_message(harvest)
         .add_event(event)
         .add_attribute("action", "steakhub/reinvest"))
 }

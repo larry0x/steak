@@ -1,6 +1,4 @@
-use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, Response, StdResult, Uint128, WasmMsg,
-};
+use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, Uint128, WasmMsg};
 use osmo_bindings::OsmosisMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -21,6 +19,10 @@ pub struct InstantiateMsg {
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+    /// Contract where reward funds are sent
+    pub distribution_contract: String,
+    /// Fee that is awarded to distribution contract when harvesting rewards
+    pub performance_fee: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -116,6 +118,10 @@ pub struct ConfigResponse {
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
+    /// Contract where reward funds are sent
+    pub distribution_contract: Addr,
+    /// Fee that is awarded to distribution contract when harvesting rewards
+    pub performance_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

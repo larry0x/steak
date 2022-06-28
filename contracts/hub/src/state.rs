@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Coin, CustomMsg, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Coin, Decimal, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
 
@@ -27,6 +27,10 @@ pub(crate) struct State<'a> {
     pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
     /// The total supply of the steak coin
     pub total_usteak_supply: Item<'a, Uint128>,
+    /// Contract where reward funds are sent
+    pub distribution_contract: Item<'a, Addr>,
+    /// Fee that is awarded to distribution contract when harvesting rewards
+    pub performance_fee: Item<'a, Decimal>,
 }
 
 impl Default for State<'static> {
@@ -57,6 +61,8 @@ impl Default for State<'static> {
             previous_batches: IndexedMap::new("previous_batches", pb_indexes),
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
             total_usteak_supply: Item::new("total_usteak_supply"),
+            distribution_contract: Item::new("distribution_contract"),
+            performance_fee: Item::new("performance_fee"),
         }
     }
 }

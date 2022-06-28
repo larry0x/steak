@@ -24,13 +24,14 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
         validators: state.validators.load(deps.storage)?,
+        distribution_contract: state.distribution_contract.load(deps.storage)?,
+        performance_fee: state.performance_fee.load(deps.storage)?,
     })
 }
 
 pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
 
-    let steak_denom = state.steak_denom.load(deps.storage)?;
     let total_usteak = state.total_usteak_supply.load(deps.storage)?;
 
     let validators = state.validators.load(deps.storage)?;

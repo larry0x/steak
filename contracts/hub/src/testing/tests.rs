@@ -1,6 +1,6 @@
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    coin, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order,
+    coin, coins, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Event, Order,
     OwnedDeps, Reply, ReplyOn, StdError, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use std::str::FromStr;
@@ -32,7 +32,7 @@ const DENOM: &str = "factory/cosmos2contract/apOSMO";
 fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
     let mut deps = mock_dependencies();
 
-    let res = instantiate(
+    let _res = instantiate(
         deps.as_mut(),
         mock_env_at_timestamp(10000),
         mock_info("deployer", &[]),
@@ -48,6 +48,8 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 "bob".to_string(),
                 "charlie".to_string(),
             ],
+            performance_fee: 5,
+            distribution_contract: "distribution_contract".to_string(),
         },
     )
     .unwrap();
@@ -75,7 +77,9 @@ fn proper_instantiation() {
                 "alice".to_string(),
                 "bob".to_string(),
                 "charlie".to_string()
-            ]
+            ],
+            performance_fee: Decimal::percent(5),
+            distribution_contract: Addr::unchecked("distribution_contract")
         }
     );
 
@@ -342,15 +346,26 @@ fn reinvesting() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 1);
+    assert_eq!(res.messages.len(), 2);
     assert_eq!(
-        res.messages[0],
-        SubMsg {
-            id: 0,
-            msg: Delegation::new("bob", 234).to_cosmos_msg(),
-            gas_limit: None,
-            reply_on: ReplyOn::Never
-        }
+        res.messages,
+        vec![
+            SubMsg {
+                id: 0,
+                msg: Delegation::new("bob", 222).to_cosmos_msg(),
+                gas_limit: None,
+                reply_on: ReplyOn::Never
+            },
+            SubMsg {
+                id: 0,
+                msg: CosmosMsg::Bank(BankMsg::Send {
+                    to_address: "distribution_contract".to_string(),
+                    amount: coins(12u128, "uosmo")
+                }),
+                gas_limit: None,
+                reply_on: ReplyOn::Never
+            }
+        ]
     );
 
     // Storage should have been updated
