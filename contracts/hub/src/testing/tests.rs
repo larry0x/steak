@@ -23,6 +23,7 @@ use crate::types::{Coins, Delegation, Redelegation, Undelegation};
 
 use super::custom_querier::CustomQuerier;
 use super::helpers::{mock_dependencies, mock_env_at_timestamp, query_helper};
+const DENOM: &str = "factory/cosmos2contract/apOSMO";
 
 //--------------------------------------------------------------------------------------------------
 // Test setup
@@ -53,7 +54,6 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
 
     deps
 }
-
 //--------------------------------------------------------------------------------------------------
 // Execution
 //--------------------------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ fn proper_instantiation() {
         ConfigResponse {
             owner: "apollo".to_string(),
             new_owner: None,
-            steak_denom: "factory/apollo/apOSMO".to_string(),
+            steak_denom: DENOM.to_string(),
             epoch_period: 259200,
             unbond_period: 1814400,
             validators: vec![
@@ -126,7 +126,7 @@ fn bonding() {
         SubMsg {
             id: 0,
             msg: CosmosMsg::Custom(OsmosisMsg::MintTokens {
-                denom: "factory/apollo/apOSMO".to_string(),
+                denom: DENOM.to_string(),
                 amount: Uint128::new(1000000),
                 mint_to_address: "user_1".to_string()
             }),
@@ -169,7 +169,7 @@ fn bonding() {
         SubMsg {
             id: 0,
             msg: CosmosMsg::Custom(OsmosisMsg::MintTokens {
-                denom: "factory/apollo/apOSMO".to_string(),
+                denom: DENOM.to_string(),
                 amount: Uint128::new(12043),
                 mint_to_address: "user_3".to_string()
             }),
@@ -212,7 +212,10 @@ fn harvesting() {
         Delegation::new("bob", 341667),
         Delegation::new("charlie", 341666),
     ]);
-    //deps.querier.set_cw20_total_supply("steak_token", 1000000);
+    state
+        .total_usteak_supply
+        .save(&mut deps.storage, &Uint128::new(1000000))
+        .unwrap();
 
     let res = execute(
         deps.as_mut(),
@@ -392,7 +395,7 @@ fn queuing_unbond() {
     let res = execute(
         deps.as_mut(),
         mock_env_at_timestamp(12345), // est_unbond_start_time = 269200
-        mock_info("user_1", &[coin(23456u128, "factory/apollo/apOSMO")]),
+        mock_info("user_1", &[coin(23456u128, DENOM)]),
         ExecuteMsg::QueueUnbond { receiver: None },
     )
     .unwrap();
@@ -404,7 +407,7 @@ fn queuing_unbond() {
     let res = execute(
         deps.as_mut(),
         mock_env_at_timestamp(269201), // est_unbond_start_time = 269200
-        mock_info("user_3", &[coin(69420u128, "factory/apollo/apOSMO")]),
+        mock_info("user_3", &[coin(69420u128, DENOM)]),
         ExecuteMsg::QueueUnbond { receiver: None },
     )
     .unwrap();
@@ -565,7 +568,7 @@ fn submitting_batch() {
         SubMsg {
             id: 0,
             msg: CosmosMsg::Custom(OsmosisMsg::BurnTokens {
-                denom: "factory/apollo/apOSMO".to_string(),
+                denom: DENOM.to_string(),
                 amount: Uint128::new(92876),
                 burn_from_address: "".to_string()
             }),
