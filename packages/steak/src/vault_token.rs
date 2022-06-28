@@ -1,6 +1,6 @@
 use std::vec;
 
-use cosmwasm_std::{to_binary, CosmosMsg, Empty, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Uint128, WasmMsg};
 use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
 use osmo_bindings::OsmosisMsg;
 

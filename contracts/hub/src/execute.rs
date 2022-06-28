@@ -16,7 +16,7 @@ use crate::math::{
 };
 use crate::state::State;
 use crate::types::{Coins, Delegation};
-use crate::vault_token::{MintTokenMsg, Token};
+use steak::vault_token::{MintTokenMsg, Token};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation

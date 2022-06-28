@@ -26,10 +26,10 @@ pub fn execute(
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response, ContractError> {
+) -> Result<Response<OsmosisMsg>, ContractError> {
     let api = deps.api;
     match msg {
-        ExecuteMsg::Bond { receiver } => execute::bond::<Empty, WasmMsg>(
+        ExecuteMsg::Bond { receiver } => execute::bond::<OsmosisMsg, OsmosisMsg>(
             deps,
             env,
             receiver
