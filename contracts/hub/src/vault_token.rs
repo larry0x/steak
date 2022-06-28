@@ -4,6 +4,7 @@ use cosmwasm_std::{to_binary, CosmosMsg, Empty, Uint128, WasmMsg};
 use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
 use osmo_bindings::OsmosisMsg;
 
+#[derive(Clone)]
 pub struct Token {
     pub address: String,
 }
@@ -16,7 +17,7 @@ impl Token {
     pub fn mint(&self, amount: Uint128, recipient: String) -> MintTokenMsg {
         MintTokenMsg {
             amount,
-            token: *self,
+            token: self.to_owned(),
             recipient: recipient,
         }
     }
