@@ -580,6 +580,8 @@ name = "steak"
 version = "2.0.0"
 dependencies = [
  "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20-base",
  "osmo-bindings",
  "schemars",
  "serde",
@@ -591,7 +593,6 @@ version = "2.0.0"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
- "cw20-base",
  "osmo-bindings",
  "serde",
  "steak",
