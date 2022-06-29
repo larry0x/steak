@@ -486,7 +486,8 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         reconcile_batches(&mut batches, native_expected - native_actual);
     }
 
-    for batch in &batches {
+    for batch in batches.iter_mut() {
+        batch.reconciled = true;
         state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
