@@ -40,6 +40,8 @@ pub enum ExecuteMsg {
     Bond { receiver: Option<String> },
     /// Withdraw Luna that have finished unbonding in previous batches
     WithdrawUnbonded { receiver: Option<String> },
+    /// Withdraw Luna that has finished unbonding in previous batches, for given address
+    WithdrawUnbondedAdmin { address: String },
     /// Add a validator to the whitelist; callable by the owner
     AddValidator { validator: String },
     /// Remove a validator from the whitelist; callable by the owner
