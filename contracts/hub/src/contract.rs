@@ -93,6 +93,7 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, ContractError> {
     match reply.id {
         1 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
+        // TODO: Call vault token reply function
         id => Err(ContractError::InvalidReplyId { id }),
     }
 }

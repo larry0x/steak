@@ -36,6 +36,8 @@ pub(crate) struct State<'a> {
     pub performance_fee: Item<'a, Decimal>,
 }
 
+pub(crate) const STEAK_TOKEN_KEY: &str = "steak_token";
+
 impl Default for State<'static> {
     fn default() -> Self {
         let pb_indexes = PreviousBatchesIndexes {
@@ -55,7 +57,7 @@ impl Default for State<'static> {
         Self {
             owner: Item::new("owner"),
             new_owner: Item::new("new_owner"),
-            steak_token: Item::new("steak_token"),
+            steak_token: Item::new(STEAK_TOKEN_KEY),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),
             validators: Item::new("validators"),

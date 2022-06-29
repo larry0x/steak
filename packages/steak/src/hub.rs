@@ -3,6 +3,8 @@ use osmo_bindings::OsmosisMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::vault_token::{TokenInitInfo, TokenInstantiator};
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     /// Account who can call certain privileged functions
@@ -23,6 +25,7 @@ pub struct InstantiateMsg {
     pub distribution_contract: String,
     /// Fee that is awarded to distribution contract when harvesting rewards
     pub performance_fee: u64,
+    pub token_init_info: TokenInitInfo,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

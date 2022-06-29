@@ -9,6 +9,7 @@ use cosmwasm_std::{
 use osmo_bindings::OsmosisMsg;
 
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
+use steak::vault_token::TokenInstantiator;
 
 use crate::error::ContractError;
 use crate::helpers::{query_delegation, query_delegations};
@@ -16,7 +17,7 @@ use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
-use crate::state::State;
+use crate::state::{State, STEAK_TOKEN_KEY};
 use crate::types::{Coins, Delegation};
 
 //--------------------------------------------------------------------------------------------------
@@ -27,7 +28,7 @@ pub fn instantiate(
     deps: DepsMut,
     env: Env,
     msg: InstantiateMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
 
     state
@@ -50,11 +51,6 @@ pub fn instantiate(
         },
     )?;
 
-    state.steak_denom.save(
-        deps.storage,
-        &format!("factory/{}/{}", &env.contract.address, &msg.name),
-    )?;
-
     state.distribution_contract.save(
         deps.storage,
         &deps.api.addr_validate(&msg.distribution_contract)?,
@@ -64,7 +60,14 @@ pub fn instantiate(
         .performance_fee
         .save(deps.storage, &Decimal::percent(msg.performance_fee))?;
 
-    Ok(Response::new().add_message(OsmosisMsg::CreateDenom { subdenom: msg.name }))
+    let token_instantiator = TokenInstantiator {
+        item_key: STEAK_TOKEN_KEY,
+        init_info: msg.token_init_info,
+    };
+
+    let init_token_msg = token_instantiator.instantiate(deps, env)?;
+
+    Ok(Response::new().add_submessage(init_token_msg))
 }
 
 //--------------------------------------------------------------------------------------------------
