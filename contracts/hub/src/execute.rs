@@ -530,7 +530,7 @@ pub fn withdraw_unbonded(
         amount: vec![Coin::new(total_uluna_to_refund.u128(), "uluna")],
     });
 
-    let event = Event::new("steakhub/unbonded_withdrawn")
+    let event = Event::new("steakhub/unbonded_withdrawn_admin")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("ids", ids.join(","))
@@ -541,7 +541,7 @@ pub fn withdraw_unbonded(
     Ok(Response::new()
         .add_message(refund_msg)
         .add_event(event)
-        .add_attribute("action", "steakhub/withdraw_unbonded"))
+        .add_attribute("action", "steakhub/withdraw_unbonded_admin"))
 }
 
 //--------------------------------------------------------------------------------------------------
