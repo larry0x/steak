@@ -435,7 +435,8 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         reconcile_batches(&mut batches, uluna_expected - uluna_actual);
     }
 
-    for batch in &batches {
+    for batch in batches.iter_mut() {
+        batch.reconciled = true;
         state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
@@ -447,7 +448,10 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
-        .add_attribute("uluna_deducted", uluna_to_deduct.to_string());
+        .add_attribute("uluna_deducted", uluna_to_deduct.to_string())
+        .add_attribute("uluna_actual", uluna_actual.to_string())
+        .add_attribute("uluna_expected", uluna_expected.to_string())
+        .add_attribute("uluna_expected_received", uluna_expected_received.to_string());
 
     Ok(Response::new()
         .add_event(event)
