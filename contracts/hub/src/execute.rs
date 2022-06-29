@@ -14,7 +14,7 @@ use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
-use crate::state::State;
+use crate::state::{State, TEST};
 use crate::types::{Coins, Delegation};
 use steak::vault_token::{MintTokenMsg, Token};
 
@@ -118,13 +118,11 @@ pub fn bond<S, T: From<MintTokenMsg> + Into<CosmosMsg<S>>>(
 
     let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 1);
 
-    let steak_token = Token {
-        address: steak_denom,
-    };
-
-    let mint_msg: T = steak_token
-        .mint(usteak_to_mint, receiver.to_string())
-        .into();
+    let steak_token = TEST.load(deps.storage)?;
+    let mint_msg = steak_token.mint(amount.into(), receiver.to_string())?;
+    // let mint_msg: T = steak_token
+    //     .mint(usteak_to_mint, receiver.to_string())
+    //     .into();
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())

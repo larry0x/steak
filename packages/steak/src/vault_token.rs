@@ -1,9 +1,9 @@
-use std::vec;
+use std::{any::Any, vec};
 
 use apollo_protocol::utils::parse_contract_addr_from_instantiate_event;
 use cosmwasm_std::{
-    to_binary, Addr, DepsMut, Env, Reply, Response, StdError, StdResult, SubMsg, SubMsgResponse,
-    Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, CosmosMsg, DepsMut, Env, Reply, Response, StdError, StdResult,
+    SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
 use cw_storage_plus::Item;
@@ -97,11 +97,18 @@ impl Token {
         ))
     }
 
-    pub fn mint(&self, amount: Uint128, recipient: String) -> MintTokenMsg {
-        MintTokenMsg {
-            amount,
-            token: self.to_owned(),
-            recipient: recipient,
+    pub fn mint(&self, amount: Uint128, recipient: String) -> StdResult<MintMsg> {
+        match self {
+            Token::OsmosisToken { denom } => Ok(MintMsg::Osmosis(OsmosisMsg::MintTokens {
+                denom: denom.clone(),
+                amount,
+                mint_to_address: recipient,
+            })),
+            Token::Cw20Token { address } => Ok(MintMsg::Cw20(WasmMsg::Execute {
+                contract_addr: address.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint { amount, recipient })?,
+                funds: vec![],
+            })),
         }
     }
 
@@ -114,32 +121,16 @@ impl Token {
     }
 }
 
-pub struct MintTokenMsg {
-    pub token: Token,
-    pub recipient: String,
-    pub amount: Uint128,
+pub enum MintMsg {
+    Osmosis(OsmosisMsg),
+    Cw20(WasmMsg),
 }
 
-impl From<MintTokenMsg> for OsmosisMsg {
-    fn from(msg: MintTokenMsg) -> OsmosisMsg {
-        OsmosisMsg::MintTokens {
-            denom: msg.token.to_string(),
-            amount: msg.amount,
-            mint_to_address: msg.recipient,
-        }
-    }
-}
-
-impl From<MintTokenMsg> for WasmMsg {
-    fn from(msg: MintTokenMsg) -> WasmMsg {
-        WasmMsg::Execute {
-            contract_addr: msg.token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Mint {
-                recipient: msg.recipient,
-                amount: msg.amount,
-            })
-            .unwrap(),
-            funds: vec![],
+impl<S> From<MintMsg> for CosmosMsg<S> {
+    fn from(msg: MintMsg) -> Self {
+        match msg {
+            MintMsg::Osmosis(msg) => msg.into(),
+            MintMsg::Cw20(msg) => msg.into(),
         }
     }
 }
@@ -173,3 +164,14 @@ impl From<BurnFromTokenMsg> for WasmMsg {
         }
     }
 }
+
+pub struct TransferTokenMsg {
+    pub token: Token,
+    pub amount: Uint128,
+    pub recipient: String,
+    pub sender: String,
+}
+
+// impl From<TransferTokenMsg> for BankMsg {
+//     fn from(msg: TransferTokenMsg) -> BankMsg {}
+// }

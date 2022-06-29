@@ -1,6 +1,9 @@
 use cosmwasm_std::{Addr, Coin, Decimal, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
-use steak::hub::{Batch, PendingBatch, UnbondRequest};
+use steak::{
+    hub::{Batch, PendingBatch, UnbondRequest},
+    vault_token::Token,
+};
 
 use crate::{error::ContractError, types::BooleanKey};
 
@@ -32,6 +35,8 @@ pub(crate) struct State<'a> {
     /// Fee that is awarded to distribution contract when harvesting rewards
     pub performance_fee: Item<'a, Decimal>,
 }
+
+pub const TEST: Item<Token> = Item::new("test");
 
 impl Default for State<'static> {
     fn default() -> Self {
