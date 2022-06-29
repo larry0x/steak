@@ -1,6 +1,6 @@
 [package]
 name = "steak-hub"
-version = "2.0.0"
+version = "2.0.2"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"

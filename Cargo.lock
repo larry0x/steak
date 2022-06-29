@@ -567,7 +567,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "steak"
-version = "2.0.0"
+version = "2.0.2"
 dependencies = [
  "cosmwasm-std",
  "cw20",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "steak-hub"
-version = "2.0.0"
+version = "2.0.2"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",

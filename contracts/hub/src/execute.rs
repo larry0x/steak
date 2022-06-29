@@ -453,7 +453,18 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         .add_event(event)
         .add_attribute("action", "steakhub/reconcile"))
 }
+pub fn withdraw_unbonded_admin(
+    deps: DepsMut,
+    env: Env,
+    user: Addr,
+    receiver: Addr,
+) -> StdResult<Response> {
+    let state = State::default();
 
+    state.assert_owner(deps.storage, &user)?;
+
+    withdraw_unbonded(deps,env,receiver.clone(),receiver)
+}
 pub fn withdraw_unbonded(
     deps: DepsMut,
     env: Env,

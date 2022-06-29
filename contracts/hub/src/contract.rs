@@ -41,6 +41,14 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             info.sender.clone(),
             receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
         ),
+        ExecuteMsg::WithdrawUnbondedAdmin {
+            address,
+        } => execute::withdraw_unbonded_admin(
+            deps,
+            env,
+            info.sender.clone(),
+             api.addr_validate(&address)?,
+        ),
         ExecuteMsg::AddValidator {
             validator,
         } => execute::add_validator(deps, info.sender, validator),
