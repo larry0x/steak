@@ -1,3 +1,5 @@
+use std::convert::{TryFrom, TryInto};
+use std::error::Error;
 use std::str::FromStr;
 
 use cosmwasm_std::{
@@ -16,7 +18,6 @@ use crate::math::{
 };
 use crate::state::{State, TEST};
 use crate::types::{Coins, Delegation};
-use steak::vault_token::{MintTokenMsg, Token};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -78,12 +79,12 @@ pub fn instantiate(
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond<S, T: From<MintTokenMsg> + Into<CosmosMsg<S>>>(
+pub fn bond(
     deps: DepsMut,
     env: Env,
     receiver: Addr,
     uosmo_to_bond: Uint128,
-) -> Result<Response<S>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
     let steak_denom = state.steak_denom.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
@@ -119,10 +120,7 @@ pub fn bond<S, T: From<MintTokenMsg> + Into<CosmosMsg<S>>>(
     let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 1);
 
     let steak_token = TEST.load(deps.storage)?;
-    let mint_msg = steak_token.mint(amount.into(), receiver.to_string())?;
-    // let mint_msg: T = steak_token
-    //     .mint(usteak_to_mint, receiver.to_string())
-    //     .into();
+    let mint_msg = steak_token.mint(env, amount.into(), receiver.to_string())?;
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -131,8 +129,8 @@ pub fn bond<S, T: From<MintTokenMsg> + Into<CosmosMsg<S>>>(
         .add_attribute("uosmo_bonded", uosmo_to_bond)
         .add_attribute("usteak_minted", usteak_to_mint);
 
-    Ok(Response::<S>::new()
-        // .add_submessage(delegate_submsg)
+    Ok(Response::new()
+        .add_submessage(delegate_submsg)
         .add_message(mint_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))

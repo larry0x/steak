@@ -1,8 +1,12 @@
-use std::{any::Any, vec};
+use std::{
+    any::Any,
+    convert::{TryFrom, TryInto},
+    vec,
+};
 
 use apollo_protocol::utils::parse_contract_addr_from_instantiate_event;
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, CosmosMsg, DepsMut, Env, Reply, Response, StdError, StdResult,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response, StdError, StdResult,
     SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
 use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
@@ -51,127 +55,121 @@ impl ToString for Token {
     }
 }
 
+/// Instantiate osmosis token. Saves the Token object to the storage in the supplied item.
+///
+/// ## Arguments
+/// * `deps` - Dependencies object
+/// * `env` - Environment object
+/// * `subdenom` - Sub-denomination of the token
+/// * `item` - Item to save the `Token` object to
+///
+/// Returns OsmosisMsg to create the denom wrapped in a [`StdResult`].
+pub fn init_osmosis_token(
+    deps: DepsMut,
+    env: Env,
+    subdenom: String,
+    item: Item<Token>,
+) -> StdResult<OsmosisMsg> {
+    item.save(
+        deps.storage,
+        &Token::OsmosisToken {
+            denom: format!("factory/{}/{}", env.contract.address, subdenom),
+        },
+    )?;
+
+    Ok(OsmosisMsg::CreateDenom { subdenom })
+}
+
+pub fn init_cw20_token(
+    code_id: u64,
+    label: String,
+    cw20_init_msg: Cw20InstantiateMsg,
+    admin: Option<String>,
+    reply_id: u64,
+) -> StdResult<SubMsg> {
+    Ok(SubMsg::reply_always(
+        WasmMsg::Instantiate {
+            admin,
+            code_id,
+            msg: to_binary(&cw20_init_msg)?,
+            funds: vec![],
+            label,
+        },
+        reply_id,
+    ))
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+struct OsmosisMintMsg {
+    amount: Coin,
+    sender: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+struct OsmosisBurnMsg {
+    amount: Coin,
+    sender: String,
+}
+
 impl Token {
-    /// Instantiate osmosis token. Saves the Token object to the storage in the supplied item.
-    ///
-    /// ## Arguments
-    /// * `deps` - Dependencies object
-    /// * `env` - Environment object
-    /// * `subdenom` - Sub-denomination of the token
-    /// * `item` - Item to save the token to
-    ///
-    /// Returns OsmosisMsg to create the denom wrapped in a [`StdResult`].
-    pub fn init_osmosis_token(
-        deps: DepsMut,
-        env: Env,
-        subdenom: String,
-        item: Item<Token>,
-    ) -> StdResult<OsmosisMsg> {
-        item.save(
-            deps.storage,
-            &Token::OsmosisToken {
-                denom: format!("factory/{}/{}", env.contract.address, subdenom),
-            },
-        )?;
-
-        Ok(OsmosisMsg::CreateDenom { subdenom })
-    }
-
-    pub fn init_cw20_token(
-        symbol: String,
-        code_id: u64,
-        label: String,
-        cw20_init_msg: Cw20InstantiateMsg,
-        admin: Option<String>,
-        reply_id: u64,
-    ) -> StdResult<SubMsg> {
-        Ok(SubMsg::reply_always(
-            WasmMsg::Instantiate {
-                admin,
-                code_id,
-                msg: to_binary(&cw20_init_msg)?,
-                funds: vec![],
-                label,
-            },
-            reply_id,
-        ))
-    }
-
-    pub fn mint(&self, amount: Uint128, recipient: String) -> StdResult<MintMsg> {
+    pub fn mint(&self, env: Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
         match self {
-            Token::OsmosisToken { denom } => Ok(MintMsg::Osmosis(OsmosisMsg::MintTokens {
-                denom: denom.clone(),
-                amount,
-                mint_to_address: recipient,
-            })),
-            Token::Cw20Token { address } => Ok(MintMsg::Cw20(WasmMsg::Execute {
+            Token::OsmosisToken { denom } => Ok(CosmosMsg::Stargate {
+                type_url: "/osmosis.tokenfactory.v1beta1.MsgMint".to_string(),
+                value: to_binary(&OsmosisMintMsg {
+                    amount: Coin {
+                        denom: denom.to_string(),
+                        amount,
+                    },
+                    sender: env.contract.address.to_string(),
+                })?,
+            }),
+            Token::Cw20Token { address } => Ok(WasmMsg::Execute {
                 contract_addr: address.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint { amount, recipient })?,
                 funds: vec![],
-            })),
+            }
+            .into()),
         }
     }
 
-    pub fn burn_from(&self, amount: Uint128, burn_from_address: String) -> BurnFromTokenMsg {
-        BurnFromTokenMsg {
-            amount,
-            token: self.to_owned(),
-            burn_from_address,
+    pub fn burn(&self, env: Env, amount: Uint128) -> StdResult<CosmosMsg> {
+        match self {
+            Token::OsmosisToken { denom } => Ok(CosmosMsg::Stargate {
+                type_url: "/osmosis.tokenfactory.v1beta1.Msg/Burn".to_string(),
+                value: to_binary(&OsmosisBurnMsg {
+                    amount: Coin {
+                        denom: denom.to_string(),
+                        amount,
+                    },
+                    sender: env.contract.address.to_string(),
+                })?,
+            }),
+            Token::Cw20Token { address } => Ok(WasmMsg::Execute {
+                contract_addr: address.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Burn { amount })?,
+                funds: vec![],
+            }
+            .into()),
+        }
+    }
+
+    pub fn transfer(&self, env: Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
+        match self {
+            Token::OsmosisToken { denom } => Ok(BankMsg::Send {
+                to_address: recipient,
+                amount: vec![Coin {
+                    amount,
+                    denom: denom.to_string(),
+                }],
+            }
+            .into()),
+            Token::Cw20Token { address } => Ok(WasmMsg::Execute {
+                contract_addr: address.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer { amount, recipient })?,
+                funds: vec![],
+            }
+            .into()),
         }
     }
 }
-
-pub enum MintMsg {
-    Osmosis(OsmosisMsg),
-    Cw20(WasmMsg),
-}
-
-impl<S> From<MintMsg> for CosmosMsg<S> {
-    fn from(msg: MintMsg) -> Self {
-        match msg {
-            MintMsg::Osmosis(msg) => msg.into(),
-            MintMsg::Cw20(msg) => msg.into(),
-        }
-    }
-}
-
-pub struct BurnFromTokenMsg {
-    pub burn_from_address: String,
-    pub token: Token,
-    pub amount: Uint128,
-}
-
-impl From<BurnFromTokenMsg> for OsmosisMsg {
-    fn from(msg: BurnFromTokenMsg) -> OsmosisMsg {
-        OsmosisMsg::BurnTokens {
-            denom: msg.token.to_string(),
-            amount: msg.amount,
-            burn_from_address: msg.burn_from_address,
-        }
-    }
-}
-
-impl From<BurnFromTokenMsg> for WasmMsg {
-    fn from(msg: BurnFromTokenMsg) -> WasmMsg {
-        WasmMsg::Execute {
-            contract_addr: msg.token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
-                amount: msg.amount,
-                owner: msg.burn_from_address,
-            })
-            .unwrap(),
-            funds: vec![],
-        }
-    }
-}
-
-pub struct TransferTokenMsg {
-    pub token: Token,
-    pub amount: Uint128,
-    pub recipient: String,
-    pub sender: String,
-}
-
-// impl From<TransferTokenMsg> for BankMsg {
-//     fn from(msg: TransferTokenMsg) -> BankMsg {}
-// }
