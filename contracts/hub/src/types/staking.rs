@@ -62,7 +62,7 @@ impl Redelegation {
         }
     }
 
-    pub fn to_cosmos_msg(&self) -> CosmosMsg<OsmosisMsg> {
+    pub fn to_cosmos_msg(&self) -> CosmosMsg {
         CosmosMsg::Staking(StakingMsg::Redelegate {
             src_validator: self.src.clone(),
             dst_validator: self.dst.clone(),

@@ -26,10 +26,10 @@ pub fn execute(
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let api = deps.api;
     match msg {
-        ExecuteMsg::Bond { receiver } => execute::bond::<OsmosisMsg, OsmosisMsg>(
+        ExecuteMsg::Bond { receiver } => execute::bond(
             deps,
             env,
             receiver
@@ -79,7 +79,7 @@ fn callback(
     env: Env,
     info: MessageInfo,
     callback_msg: CallbackMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     if env.contract.address != info.sender {
         return Err(ContractError::InvalidCallbackSender {});
     }
@@ -90,7 +90,7 @@ fn callback(
 }
 
 #[entry_point]
-pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, ContractError> {
     match reply.id {
         1 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
         id => Err(ContractError::InvalidReplyId { id }),

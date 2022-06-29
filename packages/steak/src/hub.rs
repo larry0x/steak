@@ -63,7 +63,7 @@ pub enum CallbackMsg {
 }
 
 impl CallbackMsg {
-    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg<OsmosisMsg>> {
+    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg> {
         Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: contract_addr.to_string(),
             msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
@@ -110,8 +110,8 @@ pub struct ConfigResponse {
     pub owner: String,
     /// Pending ownership transfer, awaiting acceptance by the new owner
     pub new_owner: Option<String>,
-    /// Address of the Steak denom
-    pub steak_denom: String,
+    /// Address or denom of the Steak denom
+    pub steak_token: String,
     /// How often the unbonding queue is to be executed, in seconds
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds

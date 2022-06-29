@@ -20,7 +20,7 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
             .new_owner
             .may_load(deps.storage)?
             .map(|addr| addr.into()),
-        steak_denom: state.steak_denom.load(deps.storage)?.into(),
+        steak_token: state.steak_token.load(deps.storage)?.to_string(),
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
         validators: state.validators.load(deps.storage)?,

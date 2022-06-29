@@ -13,7 +13,7 @@ pub(crate) struct State<'a> {
     /// Pending ownership transfer, awaiting acceptance by the new owner
     pub new_owner: Item<'a, Addr>,
     /// Denom of the Steak coin
-    pub steak_denom: Item<'a, String>,
+    pub steak_token: Item<'a, Token>,
     /// How often the unbonding queue is to be executed
     pub epoch_period: Item<'a, u64>,
     /// The staking module's unbonding time, in seconds
@@ -36,8 +36,6 @@ pub(crate) struct State<'a> {
     pub performance_fee: Item<'a, Decimal>,
 }
 
-pub const TEST: Item<Token> = Item::new("test");
-
 impl Default for State<'static> {
     fn default() -> Self {
         let pb_indexes = PreviousBatchesIndexes {
@@ -57,7 +55,7 @@ impl Default for State<'static> {
         Self {
             owner: Item::new("owner"),
             new_owner: Item::new("new_owner"),
-            steak_denom: Item::new("steak_denom"),
+            steak_token: Item::new("steak_token"),
             epoch_period: Item::new("epoch_period"),
             unbond_period: Item::new("unbond_period"),
             validators: Item::new("validators"),

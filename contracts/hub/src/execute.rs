@@ -16,7 +16,7 @@ use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
-use crate::state::{State, TEST};
+use crate::state::State;
 use crate::types::{Coins, Delegation};
 
 //--------------------------------------------------------------------------------------------------
@@ -136,7 +136,7 @@ pub fn bond(
         .add_attribute("action", "steakhub/bond"))
 }
 
-pub fn harvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn harvest(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let withdraw_submsgs = deps
         .querier
         .query_all_delegations(&env.contract.address)?
@@ -149,7 +149,7 @@ pub fn harvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contract
                 1,
             );
         })
-        .collect::<Vec<SubMsg<OsmosisMsg>>>();
+        .collect::<Vec<SubMsg>>();
 
     let callback_msg = CallbackMsg::Reinvest {}.into_cosmos_msg(&env.contract.address)?;
 
@@ -165,7 +165,7 @@ pub fn harvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contract
 /// execution.
 /// 2. Same as with `bond`, in the latest implementation we only delegate staking rewards with the
 /// validator that has the smallest delegation amount.
-pub fn reinvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn reinvest(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
@@ -181,7 +181,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contrac
     let uosmo_to_send_to_delegation_contract = total_uosmo_harvest - uosmo_to_bond;
     let distribution_contract = state.distribution_contract.load(deps.storage)?;
 
-    let harvest: CosmosMsg<OsmosisMsg> = CosmosMsg::Bank(BankMsg::Send {
+    let harvest = CosmosMsg::Bank(BankMsg::Send {
         to_address: distribution_contract.to_string(),
         amount: coins(uosmo_to_send_to_delegation_contract.u128(), "uosmo"),
     });
@@ -218,7 +218,7 @@ pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
     mut events: Vec<Event>,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     events.retain(|event| event.ty == "coin_received");
     if events.is_empty() {
         return Ok(Response::new());
@@ -274,9 +274,11 @@ pub fn queue_unbond(
     env: Env,
     info: MessageInfo,
     receiver: Addr,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
-    let steak_denom = state.steak_denom.load(deps.storage)?;
+
+    // TODO: handle recieving of tokens
+    let steak_token = state.steak_denom.load(deps.storage)?;
 
     if info.funds.is_empty() {
         return Err(ContractError::NoCoinsSent {});
@@ -331,9 +333,8 @@ pub fn queue_unbond(
         .add_attribute("action", "steakhub/queue_unbond"))
 }
 
-pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let state = State::default();
-    let steak_denom = state.steak_denom.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
     let unbond_period = state.unbond_period.load(deps.storage)?;
     let pending_batch = state.pending_batch.load(deps.storage)?;
@@ -388,11 +389,9 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Con
         .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 1))
         .collect::<Vec<_>>();
 
-    let burn_msg = OsmosisMsg::burn_contract_tokens(
-        steak_denom,
-        pending_batch.usteak_to_burn,
-        env.contract.address.to_string(),
-    );
+    let steak_token = state.steak_token.load(deps.storage)?;
+
+    let burn_msg = steak_token.burn(env, pending_batch.usteak_to_burn)?;
 
     state
         .total_usteak_supply
@@ -414,7 +413,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Con
         .add_attribute("action", "steakhub/unbond"))
 }
 
-pub fn reconcile(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn reconcile(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let state = State::default();
     let current_time = env.block.time.seconds();
 
@@ -478,7 +477,7 @@ pub fn withdraw_unbonded(
     env: Env,
     user: Addr,
     receiver: Addr,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
     let current_time = env.block.time.seconds();
 
@@ -560,7 +559,7 @@ pub fn withdraw_unbonded(
 // Ownership and management logics
 //--------------------------------------------------------------------------------------------------
 
-pub fn rebalance(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn rebalance(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
     let state = State::default();
     let validators = state.validators.load(deps.storage)?;
 
@@ -571,7 +570,7 @@ pub fn rebalance(deps: DepsMut, env: Env) -> Result<Response<OsmosisMsg>, Contra
     let redelegate_submsgs = new_redelegations
         .iter()
         .map(|rd| SubMsg::reply_on_success(rd.to_cosmos_msg(), 1))
-        .collect::<Vec<SubMsg<OsmosisMsg>>>();
+        .collect::<Vec<SubMsg>>();
 
     let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
 
@@ -587,7 +586,7 @@ pub fn add_validator(
     deps: DepsMut,
     sender: Addr,
     validator: String,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
@@ -612,7 +611,7 @@ pub fn remove_validator(
     env: Env,
     sender: Addr,
     validator: String,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
@@ -634,7 +633,7 @@ pub fn remove_validator(
     let redelegate_submsgs = new_redelegations
         .iter()
         .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), 1))
-        .collect::<Vec<SubMsg<OsmosisMsg>>>();
+        .collect::<Vec<SubMsg>>();
 
     let event = Event::new("steak/validator_removed").add_attribute("validator", validator);
 
@@ -648,7 +647,7 @@ pub fn transfer_ownership(
     deps: DepsMut,
     sender: Addr,
     new_owner: String,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
@@ -659,10 +658,7 @@ pub fn transfer_ownership(
     Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
 }
 
-pub fn accept_ownership(
-    deps: DepsMut,
-    sender: Addr,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+pub fn accept_ownership(deps: DepsMut, sender: Addr) -> Result<Response, ContractError> {
     let state = State::default();
 
     let previous_owner = state.owner.load(deps.storage)?;
