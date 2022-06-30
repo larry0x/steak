@@ -1,22 +1,19 @@
-use crate::hub::{Batch, BooleanKey, InstantiateMsg, UnbondRequest};
+use crate::hub::{Batch, BooleanKey, UnbondRequest};
 use std::vec;
 
 use apollo_protocol::utils::parse_contract_addr_from_instantiate_event;
 use cosmwasm_std::{
     to_binary, Addr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, DepsMut, Env,
-    MessageInfo, QuerierWrapper, QueryRequest, Reply, Response, StdError, StdResult, SubMsg,
-    SubMsgResponse, Uint128, WasmMsg, WasmQuery,
+    MessageInfo, QuerierWrapper, Reply, Response, StdError, StdResult, SubMsg, SubMsgResponse,
+    Uint128, WasmMsg, WasmQuery,
 };
 use cw20_base::msg::{ExecuteMsg as Cw20ExecuteMsg, QueryMsg as Cw20QueryMsg};
 use cw_storage_plus::{Index, IndexList, Item, MultiIndex};
-use osmo_bindings::OsmosisMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cw20::BalanceResponse as Cw20BalanceResponse;
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
-
-use crate::hub::{PendingBatch, State};
 
 const REPLY_SAVE_OSMOSIS_DENOM: u64 = 14508;
 const REPLY_SAVE_CW20_ADDRESS: u64 = 14509;
@@ -30,10 +27,8 @@ pub(crate) fn unwrap_reply(reply: Reply) -> StdResult<SubMsgResponse> {
 pub fn save_cw20_address(
     deps: DepsMut,
     res: SubMsgResponse,
-    item_key: &str,
+    item: Item<Token>,
 ) -> StdResult<Response> {
-    let item: Item<Token> = Item::new(item_key);
-
     let address = parse_contract_addr_from_instantiate_event(deps.as_ref(), res.events)
         .map_err(|e| StdError::generic_err(format!("{}", e)))?;
 
@@ -61,12 +56,9 @@ fn parse_osmosis_denom_from_event(response: SubMsgResponse) -> StdResult<String>
 
 pub fn save_osmosis_denom(
     deps: DepsMut,
-    env: Env,
     res: SubMsgResponse,
-    item_key: &str,
+    item: Item<Token>,
 ) -> StdResult<Response> {
-    let item: Item<Token> = Item::new(item_key);
-
     let denom = parse_osmosis_denom_from_event(res)?;
 
     item.save(deps.storage, &Token::Osmosis { denom })?;
@@ -74,11 +66,13 @@ pub fn save_osmosis_denom(
     Ok(Response::default())
 }
 
-pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
+pub fn reply(deps: DepsMut, reply: Reply) -> StdResult<Response> {
     let res = unwrap_reply(reply.clone())?;
+    let token_item_key = TOKEN_ITEM_KEY.load(deps.storage)?;
+    let item: Item<Token> = Item::new(&token_item_key);
     match reply.id {
-        REPLY_SAVE_OSMOSIS_DENOM => save_osmosis_denom(deps, env, res, &"token"),
-        REPLY_SAVE_CW20_ADDRESS => save_cw20_address(deps, res, &"token"),
+        REPLY_SAVE_OSMOSIS_DENOM => save_osmosis_denom(deps, res, item),
+        REPLY_SAVE_CW20_ADDRESS => save_cw20_address(deps, res, item),
         id => Err(StdError::generic_err(format!(
             "invalid reply id: {}; must be 14508-14509",
             id
@@ -95,7 +89,7 @@ pub enum TokenInitInfo {
         label: String,
         admin: Option<String>,
         code_id: u64,
-        cw20_init_msg: Cw20InstantiateMsg,
+        cw20_init_msg: Box<Cw20InstantiateMsg>,
     },
 }
 
@@ -123,7 +117,7 @@ impl TokenInstantiator {
                     type_url: "/osmosis.tokenfactory.v1beta1.MsgCreateDenom".to_string(),
                     value: to_binary(&OsmosisCreateDenomMsg {
                         sender: env.contract.address.to_string(),
-                        subdenom: subdenom.to_string(),
+                        subdenom,
                     })?,
                 },
                 REPLY_SAVE_OSMOSIS_DENOM,
@@ -135,11 +129,11 @@ impl TokenInstantiator {
                 code_id,
             } => Ok(SubMsg::reply_always(
                 WasmMsg::Instantiate {
-                    admin: admin,
-                    code_id: code_id,
+                    admin,
+                    code_id,
                     msg: to_binary(&cw20_init_msg)?,
                     funds: vec![],
-                    label: label.to_string(),
+                    label,
                 },
                 REPLY_SAVE_CW20_ADDRESS,
             )),
@@ -161,50 +155,6 @@ impl ToString for Token {
             Token::Cw20 { address } => address.to_string(),
         }
     }
-}
-
-/// Instantiate osmosis token. Saves the Token object to the storage in the supplied item.
-///
-/// ## Arguments
-/// * `deps` - Dependencies object
-/// * `env` - Environment object
-/// * `subdenom` - Sub-denomination of the token
-/// * `item` - Item to save the `Token` object to
-///
-/// Returns OsmosisMsg to create the denom wrapped in a [`StdResult`].
-pub fn init_osmosis_token(
-    deps: DepsMut,
-    env: Env,
-    subdenom: String,
-    item: Item<Token>,
-) -> StdResult<OsmosisMsg> {
-    item.save(
-        deps.storage,
-        &Token::Osmosis {
-            denom: format!("factory/{}/{}", env.contract.address, subdenom),
-        },
-    )?;
-
-    Ok(OsmosisMsg::CreateDenom { subdenom })
-}
-
-pub fn init_cw20_token(
-    code_id: u64,
-    label: String,
-    cw20_init_msg: Cw20InstantiateMsg,
-    admin: Option<String>,
-    reply_id: u64,
-) -> StdResult<SubMsg> {
-    Ok(SubMsg::reply_always(
-        WasmMsg::Instantiate {
-            admin,
-            code_id,
-            msg: to_binary(&cw20_init_msg)?,
-            funds: vec![],
-            label,
-        },
-        reply_id,
-    ))
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -353,8 +303,8 @@ impl Token {
     ) -> StdResult<Option<CosmosMsg>> {
         match self {
             Token::Osmosis { denom } => {
-                let amount = parse_received_fund(&info.funds, denom)?;
-                if amount != amount {
+                let received_amount = parse_received_fund(&info.funds, denom)?;
+                if received_amount != amount {
                     return Err(StdError::generic_err("amount differs from received amount"));
                 }
                 Ok(None)

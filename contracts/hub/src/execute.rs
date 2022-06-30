@@ -1,12 +1,9 @@
-use std::convert::{TryFrom, TryInto};
-use std::error::Error;
 use std::str::FromStr;
 
 use cosmwasm_std::{
     coins, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env,
     Event, MessageInfo, Order, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
-use osmo_bindings::OsmosisMsg;
 
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 use steak::vault_token::TokenInstantiator;
@@ -144,12 +141,12 @@ pub fn harvest(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
         .query_all_delegations(&env.contract.address)?
         .into_iter()
         .map(|d| {
-            return SubMsg::reply_on_success(
+            SubMsg::reply_on_success(
                 CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                     validator: d.validator,
                 }),
                 1,
-            );
+            )
         })
         .collect::<Vec<SubMsg>>();
 
@@ -312,11 +309,11 @@ pub fn queue_unbond(
 
     if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(
-            CosmosMsg::Wasm(WasmMsg::Execute {
+            WasmMsg::Execute {
                 contract_addr: env.contract.address.into(),
                 msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
                 funds: vec![],
-            })
+            }
             .into(),
         );
     }

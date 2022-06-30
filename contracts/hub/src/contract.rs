@@ -1,14 +1,9 @@
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env,
-    MessageInfo, Reply, Response, StdError, StdResult, WasmMsg,
+    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult,
 };
-use cw20::Cw20ReceiveMsg;
-use osmo_bindings::OsmosisMsg;
-use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
-use steak::vault_token::Token;
+use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 use crate::helpers::{parse_received_fund, unwrap_reply};
-use crate::state::State;
 use crate::{execute, queries};
 use steak::error::ContractError;
 
@@ -16,7 +11,7 @@ use steak::error::ContractError;
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     execute::instantiate(deps, env, msg)
@@ -47,7 +42,7 @@ pub fn execute(
             receiver
                 .map(|s| api.addr_validate(&s))
                 .transpose()?
-                .unwrap_or(info.sender.clone()),
+                .unwrap_or_else(|| info.sender.clone()),
         ),
         ExecuteMsg::AddValidator { validator } => {
             execute::add_validator(deps, info.sender, validator)
@@ -56,9 +51,9 @@ pub fn execute(
             execute::remove_validator(deps, env, info.sender, validator)
         }
         ExecuteMsg::TransferOwnership { new_owner } => {
-            execute::transfer_ownership(deps, info.sender.clone(), new_owner)
+            execute::transfer_ownership(deps, info.sender, new_owner)
         }
-        ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender.clone()),
+        ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
         ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
@@ -70,7 +65,7 @@ pub fn execute(
             receiver
                 .map(|s| api.addr_validate(&s))
                 .transpose()?
-                .unwrap_or(info.sender.clone()),
+                .unwrap_or_else(|| info.sender.clone()),
             amount,
         ),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
