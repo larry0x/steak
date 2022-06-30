@@ -243,68 +243,6 @@ impl<'a> IndexList<UnbondRequest> for UnbondRequestsIndexes<'a> {
 }
 
 impl Token {
-    pub fn instantiate(
-        &self,
-        deps: DepsMut,
-        env: Env,
-        info: MessageInfo,
-        init_msg: InstantiateMsg,
-    ) -> StdResult<Response> {
-        match self {
-            Token::Osmosis { denom } => todo!(),
-            Token::Cw20 { address } => {
-                let state = State::default();
-                let cw20_init: TokenInitInfo = init_msg.token_init_info.into();
-                match cw20_init {
-                    TokenInitInfo::Osmosis { subdenom } => {
-                        return Err(StdError::generic_err(
-                            "Use Cw20 init msg as token_init_info",
-                        ));
-                    }
-                    TokenInitInfo::Cw20 {
-                        label,
-                        admin,
-                        code_id,
-                        cw20_init_msg,
-                    } => {
-                        state
-                            .owner
-                            .save(deps.storage, &deps.api.addr_validate(&init_msg.owner)?)?;
-                        state
-                            .epoch_period
-                            .save(deps.storage, &init_msg.epoch_period)?;
-                        state
-                            .unbond_period
-                            .save(deps.storage, &init_msg.unbond_period)?;
-                        state.validators.save(deps.storage, &init_msg.validators)?;
-                        state.unlocked_coins.save(deps.storage, &vec![])?;
-
-                        state.pending_batch.save(
-                            deps.storage,
-                            &PendingBatch {
-                                id: 1,
-                                usteak_to_burn: Uint128::zero(),
-                                est_unbond_start_time: env.block.time.seconds()
-                                    + init_msg.epoch_period,
-                            },
-                        )?;
-
-                        Ok(Response::new().add_submessage(SubMsg::reply_on_success(
-                            CosmosMsg::Wasm(WasmMsg::Instantiate {
-                                admin: admin, // use the owner as admin for now; can be changed later by a `MsgUpdateAdmin`
-                                code_id: code_id,
-                                msg: to_binary(&cw20_init_msg)?,
-                                funds: vec![],
-                                label: label,
-                            }),
-                            1,
-                        )))
-                    }
-                }
-            }
-        }
-    }
-
     pub fn mint(&self, env: Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
         match self {
             Token::Osmosis { denom } => Ok(CosmosMsg::Stargate {

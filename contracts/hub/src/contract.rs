@@ -7,10 +7,10 @@ use osmo_bindings::OsmosisMsg;
 use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 use steak::vault_token::Token;
 
-use crate::error::ContractError;
 use crate::helpers::{parse_received_fund, unwrap_reply};
 use crate::state::State;
 use crate::{execute, queries};
+use steak::error::ContractError;
 
 #[entry_point]
 pub fn instantiate(
@@ -18,7 +18,7 @@ pub fn instantiate(
     env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     match msg.token_init_info {
         steak::vault_token::TokenInitInfo::Osmosis { subdenom } => {
             Token::Osmosis { denom: msg.name }.instantiate(deps, env, info, msg)

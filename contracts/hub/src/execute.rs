@@ -61,7 +61,7 @@ pub fn instantiate(
         .save(deps.storage, &Decimal::percent(msg.performance_fee))?;
 
     let token_instantiator = TokenInstantiator {
-        item_key: STEAK_TOKEN_KEY,
+        item_key: STEAK_TOKEN_KEY.to_string(),
         init_info: msg.token_init_info,
     };
 
