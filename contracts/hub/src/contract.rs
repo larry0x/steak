@@ -19,17 +19,7 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    match msg.token_init_info {
-        steak::vault_token::TokenInitInfo::Osmosis { subdenom } => {
-            Token::Osmosis { denom: msg.name }.instantiate(deps, env, info, msg)
-        }
-        steak::vault_token::TokenInitInfo::Cw20 {
-            label,
-            admin,
-            code_id,
-            cw20_init_msg,
-        } => todo!(),
-    }
+    execute::instantiate(deps, env, msg)
 }
 
 #[entry_point]
