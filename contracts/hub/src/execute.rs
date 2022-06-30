@@ -86,10 +86,10 @@ pub fn bond(
     deps: DepsMut,
     env: Env,
     receiver: Addr,
-    uosmo_to_bond: Uint128,
+    denom_to_bond: Uint128,
 ) -> Result<Response, ContractError> {
     let state = State::default();
-    let steak_denom = state.steak_denom.load(deps.storage)?;
+    let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
 
     // Query the current delegations made to validators, and find the validator with the smallest
@@ -107,7 +107,7 @@ pub fn bond(
 
     // Query the current supply of Steak and compute the amount to mint
     let usteak_supply = state.total_usteak_supply.load(deps.storage)?;
-    let usteak_to_mint = compute_mint_amount(usteak_supply, uosmo_to_bond, &delegations);
+    let usteak_to_mint = compute_mint_amount(usteak_supply, denom_to_bond, &delegations);
 
     state
         .total_usteak_supply
@@ -117,19 +117,18 @@ pub fn bond(
 
     let new_delegation = Delegation {
         validator: validator.clone(),
-        amount: uosmo_to_bond.u128(),
+        amount: denom_to_bond.u128(),
     };
 
     let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 1);
 
-    let steak_token = TEST.load(deps.storage)?;
     let mint_msg = steak_token.mint(env, amount.into(), receiver.to_string())?;
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
         .add_attribute("receiver", receiver)
-        .add_attribute("uosmo_bonded", uosmo_to_bond)
+        .add_attribute("uosmo_bonded", denom_to_bond)
         .add_attribute("usteak_minted", usteak_to_mint);
 
     Ok(Response::new()
