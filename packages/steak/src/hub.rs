@@ -39,8 +39,6 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    /// Implements the Cw20 receiver interface
-    Receive(Cw20ReceiveMsg),
     /// Bond specified amount of osmo
     Bond { receiver: Option<String> },
     /// Withdraw osmo that have finished unbonding in previous batches

@@ -41,7 +41,6 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let api = deps.api;
     match msg {
-        ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
         ExecuteMsg::Bond { receiver } => execute::bond(
             deps,
             env,
@@ -85,40 +84,6 @@ pub fn execute(
             amount,
         ),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
-    }
-}
-
-fn receive(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    cw20_msg: Cw20ReceiveMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
-    let api = deps.api;
-    match from_binary(&cw20_msg.msg)? {
-        ReceiveMsg::QueueUnbond { receiver } => {
-            let state = State::default();
-
-            let steak_token = state.steak_token.load(deps.storage)?;
-            if (Token::Cw20 {
-                address: info.sender,
-            } != steak_token)
-            {
-                return Err(StdError::generic_err(format!(
-                    "expecting Steak token, received {}",
-                    info.sender
-                ))
-                .into());
-            }
-
-            execute::queue_unbond(
-                deps,
-                env,
-                info,
-                api.addr_validate(&receiver.unwrap_or(cw20_msg.sender))?,
-                Some(cw20_msg.amount),
-            )
-        }
     }
 }
 
