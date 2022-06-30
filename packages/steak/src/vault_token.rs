@@ -243,6 +243,32 @@ impl<'a> IndexList<UnbondRequest> for UnbondRequestsIndexes<'a> {
     }
 }
 
+/// Find the amount of a denom sent along a message, assert it is non-zero, and no other denom were
+/// sent together
+/// TODO: Took from steakcontracts. Move out to protocol utils and use here and in main steak contracts
+pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint128> {
+    if funds.len() != 1 {
+        return Err(StdError::generic_err(format!(
+            "must deposit exactly one coin; received {}",
+            funds.len()
+        )));
+    }
+
+    let fund = &funds[0];
+    if fund.denom != denom {
+        return Err(StdError::generic_err(format!(
+            "expected {} deposit, received {}",
+            denom, fund.denom
+        )));
+    }
+
+    if fund.amount.is_zero() {
+        return Err(StdError::generic_err("deposit amount must be non-zero"));
+    }
+
+    Ok(fund.amount)
+}
+
 impl Token {
     pub fn mint(&self, env: Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
         match self {
@@ -302,6 +328,35 @@ impl Token {
                 funds: vec![],
             }
             .into()),
+        }
+    }
+
+    pub fn assert_received_token(
+        &self,
+        env: Env,
+        info: &MessageInfo,
+        amount: Uint128,
+    ) -> StdResult<Option<CosmosMsg>> {
+        match self {
+            Token::Osmosis { denom } => {
+                let amount = parse_received_fund(&info.funds, denom)?;
+                if amount != amount {
+                    return Err(StdError::generic_err("amount differs from received amount"));
+                }
+                Ok(None)
+            }
+            Token::Cw20 { address } => {
+                let transfer_from_msg = WasmMsg::Execute {
+                    contract_addr: address.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                        owner: info.sender.to_string(),
+                        recipient: env.contract.address.to_string(),
+                        amount,
+                    })?,
+                    funds: vec![],
+                };
+                Ok(Some(transfer_from_msg.into()))
+            }
         }
     }
 
