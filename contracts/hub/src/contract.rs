@@ -2,6 +2,7 @@ use cosmwasm_std::{
     entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult,
 };
 use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use steak::vault_token::reply_save_token;
 
 use crate::helpers::{parse_received_fund, unwrap_reply};
 use crate::{execute, queries};
@@ -91,8 +92,7 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, ContractError> {
     match reply.id {
         1 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
-        // TODO: Call vault token reply function
-        id => Err(ContractError::InvalidReplyId { id }),
+        _id => reply_save_token(deps, reply).map_err(|e| e.into()),
     }
 }
 

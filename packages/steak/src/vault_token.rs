@@ -66,7 +66,7 @@ pub fn save_osmosis_denom(
     Ok(Response::default())
 }
 
-pub fn reply(deps: DepsMut, reply: Reply) -> StdResult<Response> {
+pub fn reply_save_token(deps: DepsMut, reply: Reply) -> StdResult<Response> {
     let res = unwrap_reply(reply.clone())?;
     let token_item_key = TOKEN_ITEM_KEY.load(deps.storage)?;
     let item: Item<Token> = Item::new(&token_item_key);
