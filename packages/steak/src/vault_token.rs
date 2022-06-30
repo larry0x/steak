@@ -3,16 +3,17 @@ use std::vec;
 
 use apollo_protocol::utils::parse_contract_addr_from_instantiate_event;
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Reply, Response,
-    StdError, StdResult, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    to_binary, Addr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, DepsMut, Env,
+    MessageInfo, QuerierWrapper, QueryRequest, Reply, Response, StdError, StdResult, SubMsg,
+    SubMsgResponse, Uint128, WasmMsg, WasmQuery,
 };
-use cw20::MinterResponse;
-use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
+use cw20_base::msg::{ExecuteMsg as Cw20ExecuteMsg, QueryMsg as Cw20QueryMsg};
 use cw_storage_plus::{Index, IndexList, Item, MultiIndex};
 use osmo_bindings::OsmosisMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use cw20::BalanceResponse as Cw20BalanceResponse;
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
 use crate::hub::{PendingBatch, State};
@@ -301,6 +302,29 @@ impl Token {
                 funds: vec![],
             }
             .into()),
+        }
+    }
+
+    pub fn query_balance(&self, querier: &QuerierWrapper, address: Addr) -> StdResult<Uint128> {
+        match self {
+            Token::Osmosis { denom } => {
+                let query = BankQuery::Balance {
+                    address: address.to_string(),
+                    denom: denom.to_string(),
+                };
+                let res: BalanceResponse = querier.query(&query.into())?;
+                Ok(res.amount.amount)
+            }
+            Token::Cw20 { address } => {
+                let query = WasmQuery::Smart {
+                    contract_addr: address.to_string(),
+                    msg: to_binary(&Cw20QueryMsg::Balance {
+                        address: address.to_string(),
+                    })?,
+                };
+                let res: Cw20BalanceResponse = querier.query(&query.into())?;
+                Ok(res.balance)
+            }
         }
     }
 }

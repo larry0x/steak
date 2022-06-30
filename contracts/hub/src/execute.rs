@@ -11,7 +11,6 @@ use osmo_bindings::OsmosisMsg;
 use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
 use steak::vault_token::TokenInstantiator;
 
-use crate::error::ContractError;
 use crate::helpers::{query_delegation, query_delegations};
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
@@ -19,6 +18,7 @@ use crate::math::{
 };
 use crate::state::{State, STEAK_TOKEN_KEY};
 use crate::types::{Coins, Delegation};
+use steak::error::ContractError;
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -28,7 +28,7 @@ pub fn instantiate(
     deps: DepsMut,
     env: Env,
     msg: InstantiateMsg,
-) -> Result<Response<OsmosisMsg>, ContractError> {
+) -> Result<Response, ContractError> {
     let state = State::default();
 
     state
