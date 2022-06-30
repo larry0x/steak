@@ -331,6 +331,20 @@ impl Token {
         }
     }
 
+    /// Assert that `amount` of token has been received. For Osmosis this function asserts that the
+    /// correct amount was sent along the message and returns None. For CW20 this function returns
+    /// Some([`CosmosMsg::Wasm`]) containing [`WasmMsg::Execute`] to execute
+    /// [`Cw20ExecuteMsg::TransferFrom`] `amount` of tokens from the `info.sender` to
+    /// `env.contract.address`.
+    ///
+    /// # Arguments
+    /// * `env` - The environment of the contract
+    /// * `info` - The message info
+    /// * `amount` - The amount of tokens received
+    ///
+    /// # Returns
+    /// * `None` - If Osmosis
+    /// * `Some([`CosmosMsg::Wasm`])` - If CW20
     pub fn assert_received_token(
         &self,
         env: Env,

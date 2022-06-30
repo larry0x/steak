@@ -74,7 +74,7 @@ pub fn execute(
         ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
-        ExecuteMsg::QueueUnbond { receiver } => execute::queue_unbond(
+        ExecuteMsg::QueueUnbond { receiver, amount } => execute::queue_unbond(
             deps,
             env,
             info.clone(),
@@ -82,7 +82,7 @@ pub fn execute(
                 .map(|s| api.addr_validate(&s))
                 .transpose()?
                 .unwrap_or(info.sender.clone()),
-            None,
+            amount,
         ),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
     }

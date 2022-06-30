@@ -63,7 +63,10 @@ pub enum ExecuteMsg {
     SubmitBatch {},
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
     /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond { receiver: Option<String> },
+    QueueUnbond {
+        amount: Uint128,
+        receiver: Option<String>,
+    },
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
 }
