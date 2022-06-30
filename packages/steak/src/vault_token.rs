@@ -101,8 +101,8 @@ pub enum TokenInitInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TokenInstantiator {
-    item_key: String,
-    init_info: TokenInitInfo,
+    pub item_key: String,
+    pub init_info: TokenInitInfo,
 }
 
 const TOKEN_ITEM_KEY: Item<String> = Item::new("token_item_key");
@@ -270,7 +270,7 @@ pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint
 }
 
 impl Token {
-    pub fn mint(&self, env: Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
+    pub fn mint(&self, env: &Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
         match self {
             Token::Osmosis { denom } => Ok(CosmosMsg::Stargate {
                 type_url: "/osmosis.tokenfactory.v1beta1.MsgMint".to_string(),
@@ -291,7 +291,7 @@ impl Token {
         }
     }
 
-    pub fn burn(&self, env: Env, amount: Uint128) -> StdResult<CosmosMsg> {
+    pub fn burn(&self, env: &Env, amount: Uint128) -> StdResult<CosmosMsg> {
         match self {
             Token::Osmosis { denom } => Ok(CosmosMsg::Stargate {
                 type_url: "/osmosis.tokenfactory.v1beta1.Msg/Burn".to_string(),
@@ -312,7 +312,7 @@ impl Token {
         }
     }
 
-    pub fn transfer(&self, env: Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
+    pub fn transfer(&self, _env: &Env, amount: Uint128, recipient: String) -> StdResult<CosmosMsg> {
         match self {
             Token::Osmosis { denom } => Ok(BankMsg::Send {
                 to_address: recipient,
@@ -347,7 +347,7 @@ impl Token {
     /// * `Some([`CosmosMsg::Wasm`])` - If CW20
     pub fn assert_received_token(
         &self,
-        env: Env,
+        env: &Env,
         info: &MessageInfo,
         amount: Uint128,
     ) -> StdResult<Option<CosmosMsg>> {

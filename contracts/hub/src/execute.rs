@@ -122,7 +122,7 @@ pub fn bond(
 
     let delegate_submsg = SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), 1);
 
-    let mint_msg = steak_token.mint(env, amount.into(), receiver.to_string())?;
+    let mint_msg = steak_token.mint(&env, amount.into(), receiver.to_string())?;
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -287,7 +287,7 @@ pub fn queue_unbond(
     // will fail. Causing the transaction to revert.
     let mut msgs: Vec<CosmosMsg> = vec![];
     if let Some(transfer_from_msg) =
-        steak_token.assert_received_token(env, &info, usteak_to_burn)?
+        steak_token.assert_received_token(&env, &info, usteak_to_burn)?
     {
         msgs.push(transfer_from_msg);
     }
@@ -392,7 +392,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response, ContractError> 
 
     let steak_token = state.steak_token.load(deps.storage)?;
 
-    let burn_msg = steak_token.burn(env, pending_batch.usteak_to_burn)?;
+    let burn_msg = steak_token.burn(&env, pending_batch.usteak_to_burn)?;
 
     state
         .total_usteak_supply

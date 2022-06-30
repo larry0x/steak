@@ -5,7 +5,9 @@ use steak::{
     vault_token::Token,
 };
 
-use crate::{error::ContractError, types::BooleanKey};
+use steak::error::ContractError;
+
+use crate::types::BooleanKey;
 
 pub(crate) struct State<'a> {
     /// Account who can call certain privileged functions
