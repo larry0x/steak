@@ -1,21 +1,21 @@
-use std::{
-    any::Any,
-    convert::{TryFrom, TryInto},
-    vec,
-};
+use crate::hub::{Batch, BooleanKey, InstantiateMsg, UnbondRequest};
+use std::vec;
 
 use apollo_protocol::utils::parse_contract_addr_from_instantiate_event;
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response, StdError, StdResult,
-    SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Reply, Response,
+    StdError, StdResult, SubMsg, SubMsgResponse, Uint128, WasmMsg,
 };
+use cw20::MinterResponse;
 use cw20_base::msg::ExecuteMsg as Cw20ExecuteMsg;
-use cw_storage_plus::Item;
+use cw_storage_plus::{Index, IndexList, Item, MultiIndex};
 use osmo_bindings::OsmosisMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
+
+use crate::hub::{PendingBatch, State};
 
 const REPLY_SAVE_OSMOSIS_DENOM: u64 = 14508;
 const REPLY_SAVE_CW20_ADDRESS: u64 = 14509;
@@ -74,10 +74,14 @@ pub fn save_osmosis_denom(
 }
 
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
-    let res = unwrap_reply(reply)?;
+    let res = unwrap_reply(reply.clone())?;
     match reply.id {
-        REPLY_SAVE_OSMOSIS_DENOM => save_osmosis_denom(deps, env, res, item),
-        REPLY_SAVE_CW20_ADDRESS => save_cw20_address(deps, res, item),
+        REPLY_SAVE_OSMOSIS_DENOM => save_osmosis_denom(deps, env, res, &"token"),
+        REPLY_SAVE_CW20_ADDRESS => save_cw20_address(deps, res, &"token"),
+        id => Err(StdError::generic_err(format!(
+            "invalid reply id: {}; must be 14508-14509",
+            id
+        ))),
     }
 }
 
@@ -112,13 +116,13 @@ impl TokenInstantiator {
     pub fn instantiate(&self, deps: DepsMut, env: Env) -> StdResult<SubMsg> {
         TOKEN_ITEM_KEY.save(deps.storage, &self.item_key)?;
 
-        match self.init_info {
+        match self.init_info.clone() {
             TokenInitInfo::Osmosis { subdenom } => Ok(SubMsg::reply_always(
                 CosmosMsg::Stargate {
                     type_url: "/osmosis.tokenfactory.v1beta1.MsgCreateDenom".to_string(),
                     value: to_binary(&OsmosisCreateDenomMsg {
                         sender: env.contract.address.to_string(),
-                        subdenom,
+                        subdenom: subdenom.to_string(),
                     })?,
                 },
                 REPLY_SAVE_OSMOSIS_DENOM,
@@ -130,11 +134,11 @@ impl TokenInstantiator {
                 code_id,
             } => Ok(SubMsg::reply_always(
                 WasmMsg::Instantiate {
-                    admin,
-                    code_id,
+                    admin: admin,
+                    code_id: code_id,
                     msg: to_binary(&cw20_init_msg)?,
                     funds: vec![],
-                    label,
+                    label: label.to_string(),
                 },
                 REPLY_SAVE_CW20_ADDRESS,
             )),
@@ -214,17 +218,90 @@ struct OsmosisBurnMsg {
     sender: String,
 }
 
+pub(crate) struct PreviousBatchesIndexes<'a> {
+    // pk goes to second tuple element
+    pub reconciled: MultiIndex<'a, BooleanKey, Batch, Vec<u8>>,
+}
+
+impl<'a> IndexList<Batch> for PreviousBatchesIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<Batch>> + '_> {
+        let v: Vec<&dyn Index<Batch>> = vec![&self.reconciled];
+        Box::new(v.into_iter())
+    }
+}
+
+pub(crate) struct UnbondRequestsIndexes<'a> {
+    // pk goes to second tuple element
+    pub user: MultiIndex<'a, String, UnbondRequest, Vec<u8>>,
+}
+
+impl<'a> IndexList<UnbondRequest> for UnbondRequestsIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<UnbondRequest>> + '_> {
+        let v: Vec<&dyn Index<UnbondRequest>> = vec![&self.user];
+        Box::new(v.into_iter())
+    }
+}
+
 impl Token {
     pub fn instantiate(
         &self,
         deps: DepsMut,
         env: Env,
-        subdenom: String,
-        item: Item<Token>,
-    ) -> StdResult<SubMsg> {
+        info: MessageInfo,
+        init_msg: InstantiateMsg,
+    ) -> StdResult<Response> {
         match self {
             Token::Osmosis { denom } => todo!(),
-            Token::Cw20 { address } => todo!(),
+            Token::Cw20 { address } => {
+                let state = State::default();
+                let cw20_init: TokenInitInfo = init_msg.token_init_info.into();
+                match cw20_init {
+                    TokenInitInfo::Osmosis { subdenom } => {
+                        return Err(StdError::generic_err(
+                            "Use Cw20 init msg as token_init_info",
+                        ));
+                    }
+                    TokenInitInfo::Cw20 {
+                        label,
+                        admin,
+                        code_id,
+                        cw20_init_msg,
+                    } => {
+                        state
+                            .owner
+                            .save(deps.storage, &deps.api.addr_validate(&init_msg.owner)?)?;
+                        state
+                            .epoch_period
+                            .save(deps.storage, &init_msg.epoch_period)?;
+                        state
+                            .unbond_period
+                            .save(deps.storage, &init_msg.unbond_period)?;
+                        state.validators.save(deps.storage, &init_msg.validators)?;
+                        state.unlocked_coins.save(deps.storage, &vec![])?;
+
+                        state.pending_batch.save(
+                            deps.storage,
+                            &PendingBatch {
+                                id: 1,
+                                usteak_to_burn: Uint128::zero(),
+                                est_unbond_start_time: env.block.time.seconds()
+                                    + init_msg.epoch_period,
+                            },
+                        )?;
+
+                        Ok(Response::new().add_submessage(SubMsg::reply_on_success(
+                            CosmosMsg::Wasm(WasmMsg::Instantiate {
+                                admin: admin, // use the owner as admin for now; can be changed later by a `MsgUpdateAdmin`
+                                code_id: code_id,
+                                msg: to_binary(&cw20_init_msg)?,
+                                funds: vec![],
+                                label: label,
+                            }),
+                            1,
+                        )))
+                    }
+                }
+            }
         }
     }
 

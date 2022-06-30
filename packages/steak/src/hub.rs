@@ -1,9 +1,17 @@
-use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, Uint128, WasmMsg};
-use osmo_bindings::OsmosisMsg;
+use cosmwasm_std::{
+    to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, Storage, Uint128, WasmMsg,
+};
+use cw20::Cw20ReceiveMsg;
+use cw_storage_plus::{IndexedMap, Item, MultiIndex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::vault_token::{TokenInitInfo, TokenInstantiator};
+use crate::{
+    error::ContractError,
+    vault_token::{
+        PreviousBatchesIndexes, Token, TokenInitInfo, TokenInstantiator, UnbondRequestsIndexes,
+    },
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -31,6 +39,8 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
+    /// Implements the Cw20 receiver interface
+    Receive(Cw20ReceiveMsg),
     /// Bond specified amount of osmo
     Bond { receiver: Option<String> },
     /// Withdraw osmo that have finished unbonding in previous batches
@@ -56,6 +66,89 @@ pub enum ExecuteMsg {
     QueueUnbond { receiver: Option<String> },
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
+}
+pub(crate) struct State<'a> {
+    /// Account who can call certain privileged functions
+    pub owner: Item<'a, Addr>,
+    /// Pending ownership transfer, awaiting acceptance by the new owner
+    pub new_owner: Item<'a, Addr>,
+    /// Denom of the Steak coin
+    pub steak_token: Item<'a, Token>,
+    /// How often the unbonding queue is to be executed
+    pub epoch_period: Item<'a, u64>,
+    /// The staking module's unbonding time, in seconds
+    pub unbond_period: Item<'a, u64>,
+    /// Validators who will receive the delegations
+    pub validators: Item<'a, Vec<String>>,
+    /// Coins that can be reinvested
+    pub unlocked_coins: Item<'a, Vec<Coin>>,
+    /// The current batch of unbonding requests queded to be executed
+    pub pending_batch: Item<'a, PendingBatch>,
+    /// Previous batches that have started unbonding but not yet finished
+    pub previous_batches: IndexedMap<'a, u64, Batch, PreviousBatchesIndexes<'a>>,
+    /// Users' shares in unbonding batches
+    pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
+    /// The total supply of the steak coin
+    pub total_usteak_supply: Item<'a, Uint128>,
+    /// Contract where reward funds are sent
+    pub distribution_contract: Item<'a, Addr>,
+    /// Fee that is awarded to distribution contract when harvesting rewards
+    pub performance_fee: Item<'a, Decimal>,
+}
+
+pub(crate) const STEAK_TOKEN_KEY: &str = "steak_token";
+
+impl Default for State<'static> {
+    fn default() -> Self {
+        let pb_indexes = PreviousBatchesIndexes {
+            reconciled: MultiIndex::new(
+                |d: &Batch| d.reconciled.into(),
+                "previous_batches",
+                "previous_batches__reconciled",
+            ),
+        };
+        let ubr_indexes = UnbondRequestsIndexes {
+            user: MultiIndex::new(
+                |d: &UnbondRequest| d.user.clone().into(),
+                "unbond_requests",
+                "unbond_requests__user",
+            ),
+        };
+        Self {
+            owner: Item::new("owner"),
+            new_owner: Item::new("new_owner"),
+            steak_token: Item::new(STEAK_TOKEN_KEY),
+            epoch_period: Item::new("epoch_period"),
+            unbond_period: Item::new("unbond_period"),
+            validators: Item::new("validators"),
+            unlocked_coins: Item::new("unlocked_coins"),
+            pending_batch: Item::new("pending_batch"),
+            previous_batches: IndexedMap::new("previous_batches", pb_indexes),
+            unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
+            total_usteak_supply: Item::new("total_usteak_supply"),
+            distribution_contract: Item::new("distribution_contract"),
+            performance_fee: Item::new("performance_fee"),
+        }
+    }
+}
+
+impl<'a> State<'a> {
+    pub fn assert_owner(&self, storage: &dyn Storage, sender: &Addr) -> Result<(), ContractError> {
+        let owner = self.owner.load(storage)?;
+        if *sender == owner {
+            Ok(())
+        } else {
+            Err(ContractError::Unauthorized {})
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReceiveMsg {
+    /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
+    /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
+    QueueUnbond { receiver: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -208,3 +301,45 @@ impl From<UnbondRequest> for UnbondRequestsByUserResponseItem {
 }
 
 pub type MigrateMsg = Empty;
+
+use std::marker::PhantomData;
+
+use cw_storage_plus::{Key, Prefixer, PrimaryKey};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BooleanKey {
+    pub wrapped: Vec<u8>,
+    pub data: PhantomData<bool>,
+}
+
+impl BooleanKey {
+    pub fn new(val: bool) -> Self {
+        BooleanKey {
+            wrapped: if val { vec![1] } else { vec![0] },
+            data: PhantomData,
+        }
+    }
+}
+
+impl From<bool> for BooleanKey {
+    fn from(val: bool) -> Self {
+        Self::new(val)
+    }
+}
+
+impl<'a> PrimaryKey<'a> for BooleanKey {
+    type Prefix = ();
+    type SubPrefix = ();
+    type Suffix = ();
+    type SuperSuffix = ();
+
+    fn key(&self) -> Vec<Key> {
+        self.wrapped.key()
+    }
+}
+
+impl<'a> Prefixer<'a> for BooleanKey {
+    fn prefix(&self) -> Vec<Key> {
+        self.wrapped.prefix()
+    }
+}

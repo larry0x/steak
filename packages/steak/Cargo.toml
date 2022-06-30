@@ -9,10 +9,12 @@ repository = "https://github.com/st4k3h0us3/steak-contracts"
 version = "2.0.0"
 
 [dependencies]
-cosmwasm-std = { version = "1.0.0", features = ["stargate"] } 
+apollo-protocol = {git = "https://github.com/apollodao/apollo-protocol.git", tag = "v0.11.3"}
+cosmwasm-std = {version = "1.0.0", features = ["stargate"]}
+cw-storage-plus = "0.13.4"
+cw20 = "0.13.4"
+cw20-base = "0.13.4"
 osmo-bindings = {git = "https://github.com/apollodao/bindings.git"}
 schemars = "0.8.1"
 serde = {version = "1.0.103", default-features = false, features = ["derive"]}
-cw20-base = "0.13.4"
-cw-storage-plus = "0.13.4"
-apollo-protocol = {git = "https://github.com/apollodao/apollo-protocol.git", tag = "v0.11.3"}
+thiserror = {version = "1.0.31"}

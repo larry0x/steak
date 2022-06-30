@@ -1,7 +1,6 @@
 #[cfg(not(feature = "library"))]
 pub mod contract;
 
-pub mod error;
 pub mod execute;
 pub mod helpers;
 pub mod math;

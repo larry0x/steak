@@ -621,10 +621,12 @@ dependencies = [
  "apollo-protocol",
  "cosmwasm-std",
  "cw-storage-plus",
+ "cw20",
  "cw20-base",
  "osmo-bindings",
  "schemars",
  "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -633,6 +635,7 @@ version = "2.0.0"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
+ "cw20",
  "osmo-bindings",
  "serde",
  "steak",

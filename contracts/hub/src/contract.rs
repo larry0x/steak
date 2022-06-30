@@ -2,22 +2,34 @@ use cosmwasm_std::{
     entry_point, from_binary, to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env,
     MessageInfo, Reply, Response, StdError, StdResult, WasmMsg,
 };
-
+use cw20::Cw20ReceiveMsg;
 use osmo_bindings::OsmosisMsg;
-use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
+use steak::vault_token::Token;
 
 use crate::error::ContractError;
 use crate::helpers::{parse_received_fund, unwrap_reply};
+use crate::state::State;
 use crate::{execute, queries};
 
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response<OsmosisMsg>, ContractError> {
-    execute::instantiate(deps, env, msg)
+    match msg.token_init_info {
+        steak::vault_token::TokenInitInfo::Osmosis { subdenom } => {
+            Token::Osmosis { denom: msg.name }.instantiate(deps, env, info, msg)
+        }
+        steak::vault_token::TokenInitInfo::Cw20 {
+            label,
+            admin,
+            code_id,
+            cw20_init_msg,
+        } => todo!(),
+    }
 }
 
 #[entry_point]
@@ -29,6 +41,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let api = deps.api;
     match msg {
+        ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
         ExecuteMsg::Bond { receiver } => execute::bond(
             deps,
             env,
@@ -69,8 +82,43 @@ pub fn execute(
                 .map(|s| api.addr_validate(&s))
                 .transpose()?
                 .unwrap_or(info.sender.clone()),
+            None,
         ),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
+    }
+}
+
+fn receive(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    cw20_msg: Cw20ReceiveMsg,
+) -> Result<Response<OsmosisMsg>, ContractError> {
+    let api = deps.api;
+    match from_binary(&cw20_msg.msg)? {
+        ReceiveMsg::QueueUnbond { receiver } => {
+            let state = State::default();
+
+            let steak_token = state.steak_token.load(deps.storage)?;
+            if (Token::Cw20 {
+                address: info.sender,
+            } != steak_token)
+            {
+                return Err(StdError::generic_err(format!(
+                    "expecting Steak token, received {}",
+                    info.sender
+                ))
+                .into());
+            }
+
+            execute::queue_unbond(
+                deps,
+                env,
+                info,
+                api.addr_validate(&receiver.unwrap_or(cw20_msg.sender))?,
+                Some(cw20_msg.amount),
+            )
+        }
     }
 }
 

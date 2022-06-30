@@ -28,7 +28,7 @@ pub fn instantiate(
     deps: DepsMut,
     env: Env,
     msg: InstantiateMsg,
-) -> Result<Response, ContractError> {
+) -> Result<Response<OsmosisMsg>, ContractError> {
     let state = State::default();
 
     state
@@ -277,63 +277,111 @@ pub fn queue_unbond(
     env: Env,
     info: MessageInfo,
     receiver: Addr,
+    usteak_to_burn: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let state = State::default();
 
     // TODO: handle recieving of tokens
-    let steak_token = state.steak_denom.load(deps.storage)?;
+    let steak_token = state.steak_token.load(deps.storage)?;
 
-    if info.funds.is_empty() {
-        return Err(ContractError::NoCoinsSent {});
+    match steak_token {
+        steak::vault_token::Token::Osmosis { denom } => {
+            if info.funds.is_empty() {
+                return Err(ContractError::NoCoinsSent {});
+            }
+            if info.funds[0].denom != denom {
+                return Err(ContractError::InvalidCoinSent {});
+            }
+
+            let usteak_to_burn = info.funds[0].amount;
+
+            let mut pending_batch = state.pending_batch.load(deps.storage)?;
+            pending_batch.usteak_to_burn += usteak_to_burn;
+            state.pending_batch.save(deps.storage, &pending_batch)?;
+
+            state.unbond_requests.update(
+                deps.storage,
+                (pending_batch.id, &receiver),
+                |x| -> StdResult<_> {
+                    let mut request = x.unwrap_or_else(|| UnbondRequest {
+                        id: pending_batch.id,
+                        user: receiver.clone(),
+                        shares: Uint128::zero(),
+                    });
+                    request.shares += usteak_to_burn;
+                    Ok(request)
+                },
+            )?;
+
+            let mut msgs: Vec<CosmosMsg> = vec![];
+            if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
+                msgs.push(
+                    CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: env.contract.address.into(),
+                        msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
+                        funds: vec![],
+                    })
+                    .into(),
+                );
+            }
+
+            let event = Event::new("steakhub/unbond_queued")
+                .add_attribute("time", env.block.time.seconds().to_string())
+                .add_attribute("height", env.block.height.to_string())
+                .add_attribute("id", pending_batch.id.to_string())
+                .add_attribute("receiver", receiver)
+                .add_attribute("usteak_to_burn", usteak_to_burn);
+
+            Ok(Response::new()
+                .add_messages(msgs)
+                .add_event(event)
+                .add_attribute("action", "steakhub/queue_unbond"))
+        }
+
+        steak::vault_token::Token::Cw20 { address } => {
+            let state = State::default();
+
+            let usteak_to_burn = usteak_to_burn.unwrap();
+            let mut pending_batch = state.pending_batch.load(deps.storage)?;
+            pending_batch.usteak_to_burn += usteak_to_burn;
+            state.pending_batch.save(deps.storage, &pending_batch)?;
+
+            state.unbond_requests.update(
+                deps.storage,
+                (pending_batch.id, &receiver),
+                |x| -> StdResult<_> {
+                    let mut request = x.unwrap_or_else(|| UnbondRequest {
+                        id: pending_batch.id,
+                        user: receiver.clone(),
+                        shares: Uint128::zero(),
+                    });
+                    request.shares += usteak_to_burn;
+                    Ok(request)
+                },
+            )?;
+
+            let mut msgs: Vec<CosmosMsg<OsmosisMsg>> = vec![];
+            if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
+                msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: env.contract.address.into(),
+                    msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
+                    funds: vec![],
+                }));
+            }
+
+            let event = Event::new("steakhub/unbond_queued")
+                .add_attribute("time", env.block.time.seconds().to_string())
+                .add_attribute("height", env.block.height.to_string())
+                .add_attribute("id", pending_batch.id.to_string())
+                .add_attribute("receiver", receiver)
+                .add_attribute("usteak_to_burn", usteak_to_burn);
+
+            Ok(Response::new()
+                .add_messages(msgs)
+                .add_event(event)
+                .add_attribute("action", "steakhub/queue_unbond"))
+        }
     }
-
-    if info.funds[0].denom != steak_denom {
-        return Err(ContractError::InvalidCoinSent {});
-    }
-
-    let usteak_to_burn = info.funds[0].amount;
-
-    let mut pending_batch = state.pending_batch.load(deps.storage)?;
-    pending_batch.usteak_to_burn += usteak_to_burn;
-    state.pending_batch.save(deps.storage, &pending_batch)?;
-
-    state.unbond_requests.update(
-        deps.storage,
-        (pending_batch.id, &receiver),
-        |x| -> StdResult<_> {
-            let mut request = x.unwrap_or_else(|| UnbondRequest {
-                id: pending_batch.id,
-                user: receiver.clone(),
-                shares: Uint128::zero(),
-            });
-            request.shares += usteak_to_burn;
-            Ok(request)
-        },
-    )?;
-
-    let mut msgs: Vec<CosmosMsg<OsmosisMsg>> = vec![];
-    if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
-        msgs.push(
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: env.contract.address.into(),
-                msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
-                funds: vec![],
-            })
-            .into(),
-        );
-    }
-
-    let event = Event::new("steakhub/unbond_queued")
-        .add_attribute("time", env.block.time.seconds().to_string())
-        .add_attribute("height", env.block.height.to_string())
-        .add_attribute("id", pending_batch.id.to_string())
-        .add_attribute("receiver", receiver)
-        .add_attribute("usteak_to_burn", usteak_to_burn);
-
-    Ok(Response::new()
-        .add_messages(msgs)
-        .add_event(event)
-        .add_attribute("action", "steakhub/queue_unbond"))
 }
 
 pub fn submit_batch(deps: DepsMut, env: Env) -> Result<Response, ContractError> {
