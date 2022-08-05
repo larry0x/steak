@@ -228,7 +228,7 @@ pub(crate) fn reconcile_batches(batches: &mut [Batch], native_to_deduct: Uint128
         let remainder_for_batch: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
         let native_for_batch = native_per_batch + remainder_for_batch;
 
-        batch.amount_unclaimed -= Uint128::new(native_for_batch);
+        batch.uluna_unclaimed -= Uint128::new(native_for_batch);
         batch.reconciled = true;
     }
 }

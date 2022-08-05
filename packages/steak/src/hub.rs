@@ -181,7 +181,7 @@ pub struct Batch {
     /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
     pub total_shares: Uint128,
     /// Amount of `denom` in this batch that have not been claimed
-    pub amount_unclaimed: Uint128,
+    pub uluna_unclaimed: Uint128,
     /// Estimated time when this batch will finish unbonding
     pub est_unbond_end_time: u64,
 }

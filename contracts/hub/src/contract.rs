@@ -53,7 +53,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::WithdrawUnbondedAdmin { address } => execute::withdraw_unbonded_admin(
             deps,
             env,
-            info.sender.clone(),
+            info.sender,
             api.addr_validate(&address)?,
         ),
         ExecuteMsg::AddValidator { validator } => {

@@ -403,7 +403,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
             id: pending_batch.id,
             reconciled: false,
             total_shares: pending_batch.usteak_to_burn,
-            amount_unclaimed: amount_to_bond,
+            uluna_unclaimed: amount_to_bond,
             est_unbond_end_time: current_time + unbond_period,
         },
     )?;
@@ -467,7 +467,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         .filter(|b| current_time > b.est_unbond_end_time)
         .collect::<Vec<_>>();
 
-    let native_expected_received: Uint128 = batches.iter().map(|b| b.amount_unclaimed).sum();
+    let native_expected_received: Uint128 = batches.iter().map(|b| b.uluna_unclaimed).sum();
     let denom = state.denom.load(deps.storage)?;
     let unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
@@ -555,14 +555,14 @@ pub fn withdraw_unbonded(
         if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
                 let native_to_refund = batch
-                    .amount_unclaimed
+                    .uluna_unclaimed
                     .multiply_ratio(request.shares, batch.total_shares);
 
                 ids.push(request.id.to_string());
 
                 total_native_to_refund += native_to_refund;
                 batch.total_shares -= request.shares;
-                batch.amount_unclaimed -= native_to_refund;
+                batch.uluna_unclaimed -= native_to_refund;
 
                 if batch.total_shares.is_zero() {
                     state.previous_batches.remove(deps.storage, request.id)?;
