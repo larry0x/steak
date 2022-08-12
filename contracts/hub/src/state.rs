@@ -4,6 +4,8 @@ use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
 
 use crate::types::BooleanKey;
+pub(crate) const BATCH_KEY_V101: &str = "previous_batches_101";
+pub(crate) const BATCH_KEY_RECONCILED_V101: &str = "previous_batches__reconciled_101";
 
 pub(crate) struct State<'a> {
     /// Account who can call certain privileged functions
@@ -26,6 +28,7 @@ pub(crate) struct State<'a> {
     pub unbond_period: Item<'a, u64>,
     /// Validators who will receive the delegations
     pub validators: Item<'a, Vec<String>>,
+
     /// Coins that can be reinvested
     pub unlocked_coins: Item<'a, Vec<Coin>>,
     /// The current batch of unbonding requests queded to be executed
@@ -35,6 +38,7 @@ pub(crate) struct State<'a> {
     pub previous_batches: IndexedMap<'a, u64, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in unbonding batches
     pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
+    pub validators_active: Item<'a, Vec<String>>,
 }
 
 impl Default for State<'static> {
@@ -42,8 +46,8 @@ impl Default for State<'static> {
         let pb_indexes = PreviousBatchesIndexes {
             reconciled: MultiIndex::new(
                 |d: &Batch| d.reconciled.into(),
-                "previous_batches",
-                "previous_batches__reconciled",
+                BATCH_KEY_V101,
+                BATCH_KEY_RECONCILED_V101,
             ),
         };
         let ubr_indexes = UnbondRequestsIndexes {
@@ -66,8 +70,9 @@ impl Default for State<'static> {
             validators: Item::new("validators"),
             unlocked_coins: Item::new("unlocked_coins"),
             pending_batch: Item::new("pending_batch"),
-            previous_batches: IndexedMap::new("previous_batches", pb_indexes),
+            previous_batches: IndexedMap::new(BATCH_KEY_V101, pb_indexes),
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
+            validators_active: Item::new("validators_active"),
         }
     }
 }

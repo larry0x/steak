@@ -10,11 +10,12 @@ use crate::helpers::unwrap_reply;
 use crate::state::State;
 use crate::{execute, queries};
 use cw2::{get_contract_version, set_contract_version, ContractVersion};
+use crate::migrations::ConfigV100;
 
 /// Contract name that is used for migration.
-const CONTRACT_NAME: &str = "steak-hub";
+pub const CONTRACT_NAME: &str = "steak-hub";
 /// Contract version that is used for migration.
-const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[entry_point]
 pub fn instantiate(
@@ -70,7 +71,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         }
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
-        ExecuteMsg::Rebalance {} => execute::rebalance(deps, env),
+        ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env,minimum),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::TransferFeeAccount { new_fee_account } => {
@@ -78,6 +79,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         }
         ExecuteMsg::UpdateFee { new_fee } => execute::update_fee(deps, info.sender, new_fee),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
+        ExecuteMsg::PauseValidator { validator } => execute::pause_validator(deps,env, info.sender, validator),
+        ExecuteMsg::UnPauseValidator { validator } =>  execute::unpause_validator(deps, env,info.sender, validator),
     }
 }
 
@@ -192,6 +195,13 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
                 state.fee_account.save(deps.storage, &owner)?;
                 state.max_fee_rate.save(deps.storage, &Decimal::zero())?;
                 state.fee_rate.save(deps.storage, &Decimal::zero())?;
+                ConfigV100::upgrade_stores(deps.storage)?;
+            },
+            "2.1.4"  => {
+                 ConfigV100::upgrade_stores(deps.storage)?;
+            }
+            "2.1.5"  => {
+                 ConfigV100::upgrade_stores(deps.storage)?;
             }
             _ => {}
         },
@@ -202,5 +212,10 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
         }
     }
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    Ok(Response::new())
+
+    Ok(Response::new()
+        .add_attribute("previous_contract_name", &contract_version.contract)
+        .add_attribute("previous_contract_version", &contract_version.version)
+        .add_attribute("new_contract_name", CONTRACT_NAME)
+        .add_attribute("new_contract_version", CONTRACT_VERSION))
 }

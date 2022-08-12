@@ -57,6 +57,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
             est_unbond_start_time: env.block.time.seconds() + msg.epoch_period,
         },
     )?;
+    state.validators_active.save(deps.storage, &msg.validators)?;
 
     Ok(Response::new().add_submessage(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Instantiate {
@@ -119,7 +120,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     let denom = state.denom.load(deps.storage)?;
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
     let steak_token = state.steak_token.load(deps.storage)?;
-    let validators = state.validators.load(deps.storage)?;
+    let validators = state.validators_active.load(deps.storage)?;
 
     // Query the current delegations made to validators, and find the validator with the smallest
     // delegated amount through a linear search
@@ -203,7 +204,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     let denom = state.denom.load(deps.storage)?;
     let fee = state.fee_rate.load(deps.storage)?;
 
-    let validators = state.validators.load(deps.storage)?;
+    let validators = state.validators_active.load(deps.storage)?;
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
     let amount_to_bond = unlocked_coins
@@ -403,7 +404,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
             id: pending_batch.id,
             reconciled: false,
             total_shares: pending_batch.usteak_to_burn,
-            uluna_unclaimed: amount_to_bond,
+            amount_unclaimed: amount_to_bond,
             est_unbond_end_time: current_time + unbond_period,
         },
     )?;
@@ -467,7 +468,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         .filter(|b| current_time > b.est_unbond_end_time)
         .collect::<Vec<_>>();
 
-    let native_expected_received: Uint128 = batches.iter().map(|b| b.uluna_unclaimed).sum();
+    let native_expected_received: Uint128 = batches.iter().map(|b| b.amount_unclaimed).sum();
     let denom = state.denom.load(deps.storage)?;
     let unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
@@ -555,14 +556,14 @@ pub fn withdraw_unbonded(
         if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
                 let native_to_refund = batch
-                    .uluna_unclaimed
+                    .amount_unclaimed
                     .multiply_ratio(request.shares, batch.total_shares);
 
                 ids.push(request.id.to_string());
 
                 total_native_to_refund += native_to_refund;
                 batch.total_shares -= request.shares;
-                batch.uluna_unclaimed -= native_to_refund;
+                batch.amount_unclaimed -= native_to_refund;
 
                 if batch.total_shares.is_zero() {
                     state.previous_batches.remove(deps.storage, request.id)?;
@@ -606,14 +607,15 @@ pub fn withdraw_unbonded(
 // Ownership and management logics
 //--------------------------------------------------------------------------------------------------
 
-pub fn rebalance(deps: DepsMut, env: Env) -> StdResult<Response> {
+pub fn rebalance(deps: DepsMut, env: Env,minimum:Uint128) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let validators = state.validators.load(deps.storage)?;
+    let validators_active = state.validators_active.load(deps.storage)?;
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
 
-    let new_redelegations = compute_redelegations_for_rebalancing(&delegations);
+    let new_redelegations = compute_redelegations_for_rebalancing(validators_active,&delegations,minimum);
 
     let redelegate_submsgs = new_redelegations
         .iter()
@@ -643,6 +645,12 @@ pub fn add_validator(deps: DepsMut, sender: Addr, validator: String) -> StdResul
         Ok(validators)
     })?;
 
+    let mut validators_active = state.validators_active.load(deps.storage)?;
+    if !validators_active.contains(&validator) {
+        validators_active.push(validator.clone());
+
+    }
+    state.validators_active.save(deps.storage, &validators_active)?;
     let event = Event::new("steakhub/validator_added").add_attribute("validator", validator);
 
     Ok(Response::new()
@@ -670,6 +678,12 @@ pub fn remove_validator(
         validators.retain(|v| *v != validator);
         Ok(validators)
     })?;
+    let mut validators_active = state.validators_active.load(deps.storage)?;
+    if !validators_active.contains(&validator) {
+        validators_active.push(validator.clone());
+
+    }
+    state.validators_active.save(deps.storage, &validators_active)?;
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
     let delegation_to_remove =
@@ -715,6 +729,54 @@ pub fn remove_validator_ex(
     Ok(Response::new()
         .add_event(event)
         .add_attribute("action", "steakhub/remove_validator_ex"))
+}
+pub fn pause_validator(
+    deps: DepsMut,
+    _env: Env,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    state.validators_active.update(deps.storage, |mut validators| {
+        if !validators.contains(&validator) {
+            return Err(StdError::generic_err(
+                "validator is not already whitelisted",
+            ));
+        }
+        validators.retain(|v| *v != validator);
+        Ok(validators)
+    })?;
+
+    let event = Event::new("steak/pause_validator").add_attribute("validator", validator);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/pause_validator"))
+}
+
+pub fn unpause_validator(
+    deps: DepsMut,
+    _env: Env,
+    sender: Addr,
+    validator: String,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+    let mut validators_active = state.validators_active.load(deps.storage)?;
+    if !validators_active.contains(&validator) {
+        validators_active.push(validator.clone());
+    }
+    state.validators_active.save(deps.storage, &validators_active)?;
+
+    let event = Event::new("steak/unpause_validator").add_attribute("validator", validator);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/unpause_validator"))
 }
 
 pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {

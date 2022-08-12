@@ -53,6 +53,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 "bob".to_string(),
                 "charlie".to_string(),
             ],
+
         },
     )
     .unwrap();
@@ -1546,7 +1547,9 @@ fn computing_redelegations_for_rebalancing() {
         Delegation::new("dave", 40471, "uxyz"),
         Delegation::new("evan", 2345, "uxyz"),
     ];
-
+    let active_validators:Vec<String> = vec!["alice".to_string(),"bob".to_string(),
+                                             "charlie".to_string(), "dave".to_string(),
+                                             "evan".to_string()];
     // uluna_per_validator = (69420 + 88888 + 1234 + 40471 + 2345) / 4 = 40471
     // remainer = 3
     // src_delegations:
@@ -1578,8 +1581,33 @@ fn computing_redelegations_for_rebalancing() {
     ];
 
     assert_eq!(
-        compute_redelegations_for_rebalancing(&current_delegations),
+        compute_redelegations_for_rebalancing(active_validators,&current_delegations,Uint128::from(10 as u64)),
         expected,
+    );
+
+
+    let partially_active =  vec![ "alice".to_string(),
+                                             "charlie".to_string(),
+                                             "dave".to_string(),
+                                             "evan".to_string()];
+
+    let partially_expected = vec![
+        Redelegation::new("alice", "dave", 10118, "uxyz"),
+        Redelegation::new("alice", "evan", 8712, "uxyz"),
+        Redelegation::new("charlie", "evan", 38299, "uxyz"),
+    ];
+    assert_eq!(
+        compute_redelegations_for_rebalancing(partially_active.clone(),&current_delegations,Uint128::from(10 as u64)),
+        partially_expected,
+    );
+
+    let partially_expected_minimums = vec![
+        Redelegation::new("alice", "evan", 18830, "uxyz"),
+        Redelegation::new("charlie", "evan", 29414, "uxyz"),
+    ];
+    assert_eq!(
+        compute_redelegations_for_rebalancing(partially_active,&current_delegations,Uint128::from(15_000 as u64)),
+        partially_expected_minimums,
     );
 }
 

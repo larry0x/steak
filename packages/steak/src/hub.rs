@@ -48,6 +48,11 @@ pub enum ExecuteMsg {
     RemoveValidator { validator: String },
     /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for typos
     RemoveValidatorEx { validator: String },
+    /// Pause a validator from accepting new delegations
+    PauseValidator { validator: String },
+    /// Unpause a validator from accepting new delegations
+    UnPauseValidator { validator: String },
+
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
     TransferOwnership { new_owner: String },
     /// Accept an ownership transfer
@@ -55,7 +60,7 @@ pub enum ExecuteMsg {
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
     /// Use redelegations to balance the amounts of Luna delegated to validators
-    Rebalance {},
+    Rebalance { minimum: Uint128 },
     /// Update Luna amounts in unbonding batches to reflect any slashing or rounding errors
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
@@ -181,7 +186,7 @@ pub struct Batch {
     /// Total amount of shares remaining this batch. Each `usteak` burned = 1 share
     pub total_shares: Uint128,
     /// Amount of `denom` in this batch that have not been claimed
-    pub uluna_unclaimed: Uint128,
+    pub amount_unclaimed: Uint128,
     /// Estimated time when this batch will finish unbonding
     pub est_unbond_end_time: u64,
 }
