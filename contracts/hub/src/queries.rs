@@ -16,10 +16,17 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
     Ok(ConfigResponse {
         owner: state.owner.load(deps.storage)?.into(),
-        new_owner: state.new_owner.may_load(deps.storage)?.map(|addr| addr.into()),
+        new_owner: state
+            .new_owner
+            .may_load(deps.storage)?
+            .map(|addr| addr.into()),
         steak_token: state.steak_token.load(deps.storage)?.into(),
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
+        denom: state.denom.load(deps.storage)?,
+        fee_account: state.fee_account.load(deps.storage)?.to_string(),
+        fee_rate: state.fee_rate.load(deps.storage)?,
+        max_fee_rate: state.max_fee_rate.load(deps.storage)?,
         validators: state.validators.load(deps.storage)?,
     })
 }
@@ -27,22 +34,23 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
 pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
 
+    let denom = state.denom.load(deps.storage)?;
     let steak_token = state.steak_token.load(deps.storage)?;
     let total_usteak = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
     let validators = state.validators.load(deps.storage)?;
-    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address)?;
-    let total_uluna: u128 = delegations.iter().map(|d| d.amount).sum();
+    let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
+    let total_native: u128 = delegations.iter().map(|d| d.amount).sum();
 
     let exchange_rate = if total_usteak.is_zero() {
         Decimal::one()
     } else {
-        Decimal::from_ratio(total_uluna, total_usteak)
+        Decimal::from_ratio(total_native, total_usteak)
     };
 
     Ok(StateResponse {
         total_usteak,
-        total_uluna: Uint128::new(total_uluna),
+        total_native: Uint128::new(total_native),
         exchange_rate,
         unlocked_coins: state.unlocked_coins.load(deps.storage)?,
     })
@@ -93,7 +101,7 @@ pub fn unbond_requests_by_batch(
         Some(addr_str) => {
             addr = deps.api.addr_validate(&addr_str)?;
             Some(Bound::exclusive(&addr))
-        },
+        }
     };
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 

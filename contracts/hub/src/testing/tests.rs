@@ -41,10 +41,19 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
             owner: "larry".to_string(),
             name: "Steak Token".to_string(),
             symbol: "STEAK".to_string(),
+            denom: "uxyz".to_string(),
+            fee_account: "the_fee_man".to_string(),
+            fee_amount: Decimal::from_ratio(10_u128, 100_u128), //10%
+            max_fee_amount: Decimal::from_ratio(20_u128, 100_u128), //20%
             decimals: 6,
             epoch_period: 259200,   // 3 * 24 * 60 * 60 = 3 days
             unbond_period: 1814400, // 21 * 24 * 60 * 60 = 21 days
-            validators: vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()],
+            validators: vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "charlie".to_string(),
+            ],
+
         },
     )
     .unwrap();
@@ -115,7 +124,15 @@ fn proper_instantiation() {
             steak_token: "steak_token".to_string(),
             epoch_period: 259200,
             unbond_period: 1814400,
-            validators: vec!["alice".to_string(), "bob".to_string(), "charlie".to_string()]
+            denom: "uxyz".to_string(),
+            fee_account: "the_fee_man".to_string(),
+            fee_rate: Decimal::from_ratio(10_u128, 100_u128),
+            max_fee_rate: Decimal::from_ratio(20_u128, 100_u128),
+            validators: vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "charlie".to_string()
+            ]
         }
     );
 
@@ -124,7 +141,7 @@ fn proper_instantiation() {
         res,
         StateResponse {
             total_usteak: Uint128::zero(),
-            total_uluna: Uint128::zero(),
+            total_native: Uint128::zero(),
             exchange_rate: Decimal::one(),
             unlocked_coins: vec![],
         },
@@ -150,17 +167,15 @@ fn bonding() {
     let res = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("user_1", &[Coin::new(1000000, "uluna")]),
-        ExecuteMsg::Bond {
-            receiver: None,
-        },
+        mock_info("user_1", &[Coin::new(1000000, "uxyz")]),
+        ExecuteMsg::Bond { receiver: None },
     )
     .unwrap();
 
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 1000000).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 1000000, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
@@ -183,9 +198,9 @@ fn bonding() {
     // Bond when there are existing delegations, and Luna:Steak exchange rate is >1
     // Previously user 1 delegated 1,000,000 uluna. We assume we have accumulated 2.5% yield at 1025000 staked
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 341666),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 341666, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
@@ -193,7 +208,7 @@ fn bonding() {
     let res = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("user_2", &[Coin::new(12345, "uluna")]),
+        mock_info("user_2", &[Coin::new(12345, "uxyz")]),
         ExecuteMsg::Bond {
             receiver: Some("user_3".to_string()),
         },
@@ -203,7 +218,7 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("charlie", 12345).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 12345, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
@@ -225,9 +240,9 @@ fn bonding() {
 
     // Check the state after bonding
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 354011),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 354011, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1012043);
 
@@ -236,7 +251,7 @@ fn bonding() {
         res,
         StateResponse {
             total_usteak: Uint128::new(1012043),
-            total_uluna: Uint128::new(1037345),
+            total_native: Uint128::new(1037345),
             exchange_rate: Decimal::from_ratio(1037345u128, 1012043u128),
             unlocked_coins: vec![],
         }
@@ -249,9 +264,9 @@ fn harvesting() {
 
     // Assume users have bonded a total of 1,000,000 uluna and minted the same amount of usteak
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 341666),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 341666, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1000000);
 
@@ -259,7 +274,7 @@ fn harvesting() {
         deps.as_mut(),
         mock_env(),
         mock_info("worker", &[]),
-        ExecuteMsg::Harvest {}
+        ExecuteMsg::Harvest {},
     )
     .unwrap();
 
@@ -314,7 +329,7 @@ fn registering_unlocked_coins() {
     // After withdrawing staking rewards, we parse the `coin_received` event to find the received amounts
     let event = Event::new("coin_received")
         .add_attribute("receiver", MOCK_CONTRACT_ADDR.to_string())
-        .add_attribute("amount", "123ukrw,234uluna,345uusd,69420ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B");
+        .add_attribute("amount", "123ukrw,234uxyz,345uusd,69420ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B");
 
     reply(
         deps.as_mut(),
@@ -335,9 +350,12 @@ fn registering_unlocked_coins() {
         unlocked_coins,
         vec![
             Coin::new(123, "ukrw"),
-            Coin::new(234, "uluna"),
+            Coin::new(234, "uxyz"),
             Coin::new(345, "uusd"),
-            Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+            Coin::new(
+                69420,
+                "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+            ),
         ]
     );
 }
@@ -348,9 +366,9 @@ fn reinvesting() {
     let state = State::default();
 
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 333334),
-        Delegation::new("bob", 333333),
-        Delegation::new("charlie", 333333),
+        Delegation::new("alice", 333334, "uxyz"),
+        Delegation::new("bob", 333333, "uxyz"),
+        Delegation::new("charlie", 333333, "uxyz"),
     ]);
 
     // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
@@ -359,8 +377,11 @@ fn reinvesting() {
         .save(
             deps.as_mut().storage,
             &vec![
-                Coin::new(234, "uluna"),
-                Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+                Coin::new(234, "uxyz"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
             ],
         )
         .unwrap();
@@ -374,12 +395,25 @@ fn reinvesting() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 1);
+    assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
         SubMsg {
             id: 0,
-            msg: Delegation::new("bob", 234).to_cosmos_msg(),
+            msg: Delegation::new("bob", 234 - 23, "uxyz").to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+    let send_msg = BankMsg::Send {
+        to_address: "the_fee_man".into(),
+        amount: vec![Coin::new(23u128, "uxyz")],
+    };
+    assert_eq!(
+        res.messages[1],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Bank(send_msg),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
@@ -389,7 +423,10 @@ fn reinvesting() {
     let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
     assert_eq!(
         unlocked_coins,
-        vec![Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")],
+        vec![Coin::new(
+            69420,
+            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+        )],
     );
 }
 
@@ -406,15 +443,15 @@ fn queuing_unbond() {
         ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
             sender: "hacker".to_string(),
             amount: Uint128::new(69420),
-            msg: to_binary(&ReceiveMsg::QueueUnbond {
-                receiver: None,
-            })
-            .unwrap(),
+            msg: to_binary(&ReceiveMsg::QueueUnbond { receiver: None }).unwrap(),
         }),
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("expecting Steak token, received random_token"));
+    assert_eq!(
+        err,
+        StdError::generic_err("expecting Steak token, received random_token")
+    );
 
     // User 1 creates an unbonding request before `est_unbond_start_time` is reached. The unbond
     // request is saved, but not the pending batch is not submitted for unbonding
@@ -425,10 +462,7 @@ fn queuing_unbond() {
         ExecuteMsg::Receive(cw20::Cw20ReceiveMsg {
             sender: "user_1".to_string(),
             amount: Uint128::new(23456),
-            msg: to_binary(&ReceiveMsg::QueueUnbond {
-                receiver: None,
-            })
-            .unwrap(),
+            msg: to_binary(&ReceiveMsg::QueueUnbond { receiver: None }).unwrap(),
         }),
     )
     .unwrap();
@@ -470,11 +504,17 @@ fn queuing_unbond() {
     // The users' unbonding requests should have been saved
     let ubr1 = state
         .unbond_requests
-        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1")))
+        .load(
+            deps.as_ref().storage,
+            (1u64.into(), &Addr::unchecked("user_1")),
+        )
         .unwrap();
     let ubr2 = state
         .unbond_requests
-        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_3")))
+        .load(
+            deps.as_ref().storage,
+            (1u64.into(), &Addr::unchecked("user_3")),
+        )
         .unwrap();
 
     assert_eq!(
@@ -515,9 +555,9 @@ fn submitting_batch() {
     // usteak supply: 1,012,043
     // uluna per ustake: 1.025
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 345782),
-        Delegation::new("bob", 345782),
-        Delegation::new("charlie", 345781),
+        Delegation::new("alice", 345782, "uxyz"),
+        Delegation::new("bob", 345782, "uxyz"),
+        Delegation::new("charlie", 345781, "uxyz"),
     ]);
     deps.querier.set_cw20_total_supply("steak_token", 1012043);
 
@@ -540,7 +580,10 @@ fn submitting_batch() {
             .unbond_requests
             .save(
                 deps.as_mut().storage,
-                (unbond_request.id.into(), &Addr::unchecked(unbond_request.user.clone())),
+                (
+                    unbond_request.id.into(),
+                    &Addr::unchecked(unbond_request.user.clone()),
+                ),
                 unbond_request,
             )
             .unwrap();
@@ -580,15 +623,18 @@ fn submitting_batch() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Undelegation::new("alice", 31732).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("alice", 31732, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Undelegation::new("bob", 31733).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("bob", 31733, "uxyz").to_cosmos_msg(), 2)
     );
     assert_eq!(
         res.messages[2],
-        SubMsg::reply_on_success(Undelegation::new("charlie", 31732).to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(
+            Undelegation::new("charlie", 31732, "uxyz").to_cosmos_msg(),
+            2
+        )
     );
     assert_eq!(
         res.messages[3],
@@ -619,14 +665,17 @@ fn submitting_batch() {
     );
 
     // Previous batch should have been updated
-    let previous_batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
+    let previous_batch = state
+        .previous_batches
+        .load(deps.as_ref().storage, 1u64.into())
+        .unwrap();
     assert_eq!(
         previous_batch,
         Batch {
             id: 1,
             reconciled: false,
             total_shares: Uint128::new(92876),
-            uluna_unclaimed: Uint128::new(95197),
+            amount_unclaimed: Uint128::new(95197),
             est_unbond_end_time: 2083601 // 269,201 + 1,814,400
         }
     );
@@ -642,36 +691,40 @@ fn reconciling() {
             id: 1,
             reconciled: true,
             total_shares: Uint128::new(92876),
-            uluna_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
+            amount_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
             reconciled: false,
             total_shares: Uint128::new(1345),
-            uluna_unclaimed: Uint128::new(1385), // 1.030 Luna per Steak
+            amount_unclaimed: Uint128::new(1385), // 1.030 Luna per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 3,
             reconciled: false,
             total_shares: Uint128::new(1456),
-            uluna_unclaimed: Uint128::new(1506), // 1.035 Luna per Steak
+            amount_unclaimed: Uint128::new(1506), // 1.035 Luna per Steak
             est_unbond_end_time: 30000,
         },
         Batch {
             id: 4,
             reconciled: false,
             total_shares: Uint128::new(1567),
-            uluna_unclaimed: Uint128::new(1629), // 1.040 Luna per Steak
-            est_unbond_end_time: 40000,          // not yet finished unbonding, ignored
+            amount_unclaimed: Uint128::new(1629), // 1.040 Luna per Steak
+            est_unbond_end_time: 40000,           // not yet finished unbonding, ignored
         },
     ];
 
     for previous_batch in &previous_batches {
         state
             .previous_batches
-            .save(deps.as_mut().storage, previous_batch.id.into(), previous_batch)
+            .save(
+                deps.as_mut().storage,
+                previous_batch.id.into(),
+                previous_batch,
+            )
             .unwrap();
     }
 
@@ -680,19 +733,25 @@ fn reconciling() {
         .save(
             deps.as_mut().storage,
             &vec![
-                Coin::new(10000, "uluna"),
+                Coin::new(10000, "uxyz"),
                 Coin::new(234, "ukrw"),
                 Coin::new(345, "uusd"),
-                Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
             ],
         )
         .unwrap();
 
     deps.querier.set_bank_balances(&[
-        Coin::new(12345, "uluna"),
+        Coin::new(12345, "uxyz"),
         Coin::new(234, "ukrw"),
         Coin::new(345, "uusd"),
-        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+        Coin::new(
+            69420,
+            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+        ),
     ]);
 
     execute(
@@ -713,35 +772,47 @@ fn reconciling() {
     // remainder: 0
     // batch 2: 1385 - 273 = 1112
     // batch 3: 1506 - 273 = 1233
-    let batch = state.previous_batches.load(deps.as_ref().storage, 2u64.into()).unwrap();
+    let batch = state
+        .previous_batches
+        .load(deps.as_ref().storage, 2u64.into())
+        .unwrap();
     assert_eq!(
         batch,
         Batch {
             id: 2,
             reconciled: true,
             total_shares: Uint128::new(1345),
-            uluna_unclaimed: Uint128::new(1112), // 1385 - 273
+            amount_unclaimed: Uint128::new(1112), // 1385 - 273
             est_unbond_end_time: 20000,
         }
     );
 
-    let batch = state.previous_batches.load(deps.as_ref().storage, 3u64.into()).unwrap();
+    let batch = state
+        .previous_batches
+        .load(deps.as_ref().storage, 3u64.into())
+        .unwrap();
     assert_eq!(
         batch,
         Batch {
             id: 3,
             reconciled: true,
             total_shares: Uint128::new(1456),
-            uluna_unclaimed: Uint128::new(1233), // 1506 - 273
+            amount_unclaimed: Uint128::new(1233), // 1506 - 273
             est_unbond_end_time: 30000,
         }
     );
 
     // Batches 1 and 4 should not have changed
-    let batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
+    let batch = state
+        .previous_batches
+        .load(deps.as_ref().storage, 1u64.into())
+        .unwrap();
     assert_eq!(batch, previous_batches[0]);
 
-    let batch = state.previous_batches.load(deps.as_ref().storage, 4u64.into()).unwrap();
+    let batch = state
+        .previous_batches
+        .load(deps.as_ref().storage, 4u64.into())
+        .unwrap();
     assert_eq!(batch, previous_batches[3]);
 }
 
@@ -787,7 +858,10 @@ fn withdrawing_unbonded() {
             .unbond_requests
             .save(
                 deps.as_mut().storage,
-                (unbond_request.id.into(), &Addr::unchecked(unbond_request.user.clone())),
+                (
+                    unbond_request.id.into(),
+                    &Addr::unchecked(unbond_request.user.clone()),
+                ),
                 unbond_request,
             )
             .unwrap();
@@ -798,28 +872,28 @@ fn withdrawing_unbonded() {
             id: 1,
             reconciled: true,
             total_shares: Uint128::new(92876),
-            uluna_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
+            amount_unclaimed: Uint128::new(95197), // 1.025 Luna per Steak
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
             reconciled: true,
             total_shares: Uint128::new(34567),
-            uluna_unclaimed: Uint128::new(35604), // 1.030 Luna per Steak
+            amount_unclaimed: Uint128::new(35604), // 1.030 Luna per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 3,
             reconciled: false, // finished unbonding, but not reconciled; ignored
             total_shares: Uint128::new(45678),
-            uluna_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
+            amount_unclaimed: Uint128::new(47276), // 1.035 Luna per Steak
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 4,
             reconciled: true,
             total_shares: Uint128::new(56789),
-            uluna_unclaimed: Uint128::new(59060), // 1.040 Luna per Steak
+            amount_unclaimed: Uint128::new(59060), // 1.040 Luna per Steak
             est_unbond_end_time: 30000, // reconciled, but not yet finished unbonding; ignored
         },
     ];
@@ -827,7 +901,11 @@ fn withdrawing_unbonded() {
     for previous_batch in &previous_batches {
         state
             .previous_batches
-            .save(deps.as_mut().storage, previous_batch.id.into(), previous_batch)
+            .save(
+                deps.as_mut().storage,
+                previous_batch.id.into(),
+                previous_batch,
+            )
             .unwrap();
     }
 
@@ -848,9 +926,7 @@ fn withdrawing_unbonded() {
         deps.as_mut(),
         mock_env_at_timestamp(5000),
         mock_info("user_1", &[]),
-        ExecuteMsg::WithdrawUnbonded {
-            receiver: None,
-        },
+        ExecuteMsg::WithdrawUnbonded { receiver: None },
     )
     .unwrap_err();
 
@@ -871,9 +947,7 @@ fn withdrawing_unbonded() {
         deps.as_mut(),
         mock_env_at_timestamp(25000),
         mock_info("user_1", &[]),
-        ExecuteMsg::WithdrawUnbonded {
-            receiver: None,
-        },
+        ExecuteMsg::WithdrawUnbonded { receiver: None },
     )
     .unwrap();
 
@@ -884,7 +958,7 @@ fn withdrawing_unbonded() {
             id: 0,
             msg: CosmosMsg::Bank(BankMsg::Send {
                 to_address: "user_1".to_string(),
-                amount: vec![Coin::new(59646, "uluna")]
+                amount: vec![Coin::new(59646, "uxyz")]
             }),
             gas_limit: None,
             reply_on: ReplyOn::Never
@@ -892,41 +966,59 @@ fn withdrawing_unbonded() {
     );
 
     // Previous batches should have been updated
-    let batch = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap();
+    let batch = state
+        .previous_batches
+        .load(deps.as_ref().storage, 1u64.into())
+        .unwrap();
     assert_eq!(
         batch,
         Batch {
             id: 1,
             reconciled: true,
             total_shares: Uint128::new(69420),
-            uluna_unclaimed: Uint128::new(71155),
+            amount_unclaimed: Uint128::new(71155),
             est_unbond_end_time: 10000,
         }
     );
 
-    let err = state.previous_batches.load(deps.as_ref().storage, 2u64.into()).unwrap_err();
+    let err = state
+        .previous_batches
+        .load(deps.as_ref().storage, 2u64.into())
+        .unwrap_err();
     assert_eq!(
         err,
-        StdError::NotFound { kind: "steak::hub::Batch".to_string() }
+        StdError::NotFound {
+            kind: "steak::hub::Batch".to_string()
+        }
     );
 
     // User 1's unbond requests in batches 1 and 2 should have been deleted
     let err1 = state
         .unbond_requests
-        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1")))
+        .load(
+            deps.as_ref().storage,
+            (1u64.into(), &Addr::unchecked("user_1")),
+        )
         .unwrap_err();
     let err2 = state
         .unbond_requests
-        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1")))
+        .load(
+            deps.as_ref().storage,
+            (1u64.into(), &Addr::unchecked("user_1")),
+        )
         .unwrap_err();
 
     assert_eq!(
         err1,
-        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
+        StdError::NotFound {
+            kind: "steak::hub::UnbondRequest".to_string()
+        }
     );
     assert_eq!(
         err2,
-        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
+        StdError::NotFound {
+            kind: "steak::hub::UnbondRequest".to_string()
+        }
     );
 
     // User 3 attempt to withdraw; also specifying a receiver
@@ -947,7 +1039,7 @@ fn withdrawing_unbonded() {
             id: 0,
             msg: CosmosMsg::Bank(BankMsg::Send {
                 to_address: "user_2".to_string(),
-                amount: vec![Coin::new(71155, "uluna")]
+                amount: vec![Coin::new(71155, "uxyz")]
             }),
             gas_limit: None,
             reply_on: ReplyOn::Never
@@ -955,7 +1047,10 @@ fn withdrawing_unbonded() {
     );
 
     // Batch 1 and user 2's unbonding request should have been purged from storage
-    let err = state.previous_batches.load(deps.as_ref().storage, 1u64.into()).unwrap_err();
+    let err = state
+        .previous_batches
+        .load(deps.as_ref().storage, 1u64.into())
+        .unwrap_err();
     assert_eq!(
         err,
         StdError::NotFound {
@@ -965,12 +1060,17 @@ fn withdrawing_unbonded() {
 
     let err = state
         .unbond_requests
-        .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_3")))
+        .load(
+            deps.as_ref().storage,
+            (1u64.into(), &Addr::unchecked("user_3")),
+        )
         .unwrap_err();
 
     assert_eq!(
         err,
-        StdError::NotFound { kind: "steak::hub::UnbondRequest".to_string() }
+        StdError::NotFound {
+            kind: "steak::hub::UnbondRequest".to_string()
+        }
     );
 }
 
@@ -989,7 +1089,10 @@ fn adding_validator() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+    assert_eq!(
+        err,
+        StdError::generic_err("unauthorized: sender is not owner")
+    );
 
     let err = execute(
         deps.as_mut(),
@@ -1001,7 +1104,10 @@ fn adding_validator() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("validator is already whitelisted"));
+    assert_eq!(
+        err,
+        StdError::generic_err("validator is already whitelisted")
+    );
 
     let res = execute(
         deps.as_mut(),
@@ -1033,9 +1139,9 @@ fn removing_validator() {
     let state = State::default();
 
     deps.querier.set_staking_delegations(&[
-        Delegation::new("alice", 341667),
-        Delegation::new("bob", 341667),
-        Delegation::new("charlie", 341666),
+        Delegation::new("alice", 341667, "uxyz"),
+        Delegation::new("bob", 341667, "uxyz"),
+        Delegation::new("charlie", 341666, "uxyz"),
     ]);
 
     let err = execute(
@@ -1048,7 +1154,10 @@ fn removing_validator() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+    assert_eq!(
+        err,
+        StdError::generic_err("unauthorized: sender is not owner")
+    );
 
     let err = execute(
         deps.as_mut(),
@@ -1060,7 +1169,10 @@ fn removing_validator() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("validator is not already whitelisted"));
+    assert_eq!(
+        err,
+        StdError::generic_err("validator is not already whitelisted")
+    );
 
     // Target: (341667 + 341667 + 341666) / 2 = 512500
     // Remainder: 0
@@ -1079,11 +1191,17 @@ fn removing_validator() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Redelegation::new("charlie", "alice", 170833).to_cosmos_msg(), 2),
+        SubMsg::reply_on_success(
+            Redelegation::new("charlie", "alice", 170833, "uxyz").to_cosmos_msg(),
+            2
+        ),
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Redelegation::new("charlie", "bob", 170833).to_cosmos_msg(), 2),
+        SubMsg::reply_on_success(
+            Redelegation::new("charlie", "bob", 170833, "uxyz").to_cosmos_msg(),
+            2
+        ),
     );
 
     let validators = state.validators.load(deps.as_ref().storage).unwrap();
@@ -1105,7 +1223,10 @@ fn transferring_ownership() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("unauthorized: sender is not owner"));
+    assert_eq!(
+        err,
+        StdError::generic_err("unauthorized: sender is not owner")
+    );
 
     let res = execute(
         deps.as_mut(),
@@ -1130,13 +1251,16 @@ fn transferring_ownership() {
     )
     .unwrap_err();
 
-    assert_eq!(err, StdError::generic_err("unauthorized: sender is not new owner"));
+    assert_eq!(
+        err,
+        StdError::generic_err("unauthorized: sender is not new owner")
+    );
 
     let res = execute(
         deps.as_mut(),
         mock_env(),
         mock_info("jake", &[]),
-        ExecuteMsg::AcceptOwnership {}
+        ExecuteMsg::AcceptOwnership {},
     )
     .unwrap();
 
@@ -1159,35 +1283,38 @@ fn querying_previous_batches() {
             id: 1,
             reconciled: false,
             total_shares: Uint128::new(123),
-            uluna_unclaimed: Uint128::new(678),
+            amount_unclaimed: Uint128::new(678),
             est_unbond_end_time: 10000,
         },
         Batch {
             id: 2,
             reconciled: true,
             total_shares: Uint128::new(234),
-            uluna_unclaimed: Uint128::new(789),
+            amount_unclaimed: Uint128::new(789),
             est_unbond_end_time: 15000,
         },
         Batch {
             id: 3,
             reconciled: false,
             total_shares: Uint128::new(345),
-            uluna_unclaimed: Uint128::new(890),
+            amount_unclaimed: Uint128::new(890),
             est_unbond_end_time: 20000,
         },
         Batch {
             id: 4,
             reconciled: true,
             total_shares: Uint128::new(456),
-            uluna_unclaimed: Uint128::new(999),
+            amount_unclaimed: Uint128::new(999),
             est_unbond_end_time: 25000,
         },
     ];
 
     let state = State::default();
     for batch in &batches {
-        state.previous_batches.save(deps.as_mut().storage, batch.id.into(), batch).unwrap();
+        state
+            .previous_batches
+            .save(deps.as_mut().storage, batch.id.into(), batch)
+            .unwrap();
     }
 
     // Querying a single batch
@@ -1214,7 +1341,10 @@ fn querying_previous_batches() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![batches[1].clone(), batches[2].clone(), batches[3].clone()]);
+    assert_eq!(
+        res,
+        vec![batches[1].clone(), batches[2].clone(), batches[3].clone()]
+    );
 
     let res: Vec<Batch> = query_helper(
         deps.as_ref(),
@@ -1288,7 +1418,10 @@ fn querying_unbond_requests() {
             .unbond_requests
             .save(
                 deps.as_mut().storage,
-                (unbond_request.id.into(), &Addr::unchecked(unbond_request.user.clone())),
+                (
+                    unbond_request.id.into(),
+                    &Addr::unchecked(unbond_request.user.clone()),
+                ),
                 unbond_request,
             )
             .unwrap();
@@ -1329,7 +1462,13 @@ fn querying_unbond_requests() {
             limit: None,
         },
     );
-    assert_eq!(res, vec![unbond_requests[0].clone().into(), unbond_requests[3].clone().into()]);
+    assert_eq!(
+        res,
+        vec![
+            unbond_requests[0].clone().into(),
+            unbond_requests[3].clone().into()
+        ]
+    );
 
     let res: Vec<UnbondRequestsByUserResponseItem> = query_helper(
         deps.as_ref(),
@@ -1349,9 +1488,9 @@ fn querying_unbond_requests() {
 #[test]
 fn computing_undelegations() {
     let current_delegations = vec![
-        Delegation::new("alice", 400),
-        Delegation::new("bob", 300),
-        Delegation::new("charlie", 200),
+        Delegation::new("alice", 400, "uxyz"),
+        Delegation::new("bob", 300, "uxyz"),
+        Delegation::new("charlie", 200, "uxyz"),
     ];
 
     // Target: (400 + 300 + 200 - 451) / 3 = 149
@@ -1359,11 +1498,11 @@ fn computing_undelegations() {
     // Alice:   400 - (149 + 1) = 250
     // Bob:     300 - (149 + 1) = 150
     // Charlie: 200 - (149 + 0) = 51
-    let new_undelegations = compute_undelegations(Uint128::new(451), &current_delegations);
+    let new_undelegations = compute_undelegations(Uint128::new(451), &current_delegations, "uxyz");
     let expected = vec![
-        Undelegation::new("alice", 250),
-        Undelegation::new("bob", 150),
-        Undelegation::new("charlie", 51),
+        Undelegation::new("alice", 250, "uxyz"),
+        Undelegation::new("bob", 150, "uxyz"),
+        Undelegation::new("charlie", 51, "uxyz"),
     ];
     assert_eq!(new_undelegations, expected);
 }
@@ -1371,10 +1510,10 @@ fn computing_undelegations() {
 #[test]
 fn computing_redelegations_for_removal() {
     let current_delegations = vec![
-        Delegation::new("alice", 13000),
-        Delegation::new("bob", 12000),
-        Delegation::new("charlie", 11000),
-        Delegation::new("dave", 10000),
+        Delegation::new("alice", 13000, "uxyz"),
+        Delegation::new("bob", 12000, "uxyz"),
+        Delegation::new("charlie", 11000, "uxyz"),
+        Delegation::new("dave", 10000, "uxyz"),
     ];
 
     // Suppose Dave will be removed
@@ -1384,13 +1523,17 @@ fn computing_redelegations_for_removal() {
     // to Bob:     15333 + 0 - 12000 = 3333
     // to Charlie: 15333 + 0 - 11000 = 4333
     let expected = vec![
-        Redelegation::new("dave", "alice", 2334),
-        Redelegation::new("dave", "bob", 3333),
-        Redelegation::new("dave", "charlie", 4333),
+        Redelegation::new("dave", "alice", 2334, "uxyz"),
+        Redelegation::new("dave", "bob", 3333, "uxyz"),
+        Redelegation::new("dave", "charlie", 4333, "uxyz"),
     ];
 
     assert_eq!(
-        compute_redelegations_for_removal(&current_delegations[3], &current_delegations[..3]),
+        compute_redelegations_for_removal(
+            &current_delegations[3],
+            &current_delegations[..3],
+            "uxyz"
+        ),
         expected,
     );
 }
@@ -1398,13 +1541,15 @@ fn computing_redelegations_for_removal() {
 #[test]
 fn computing_redelegations_for_rebalancing() {
     let current_delegations = vec![
-        Delegation::new("alice", 69420),
-        Delegation::new("bob", 1234),
-        Delegation::new("charlie", 88888),
-        Delegation::new("dave", 40471),
-        Delegation::new("evan", 2345),
+        Delegation::new("alice", 69420, "uxyz"),
+        Delegation::new("bob", 1234, "uxyz"),
+        Delegation::new("charlie", 88888, "uxyz"),
+        Delegation::new("dave", 40471, "uxyz"),
+        Delegation::new("evan", 2345, "uxyz"),
     ];
-
+    let active_validators:Vec<String> = vec!["alice".to_string(),"bob".to_string(),
+                                             "charlie".to_string(), "dave".to_string(),
+                                             "evan".to_string()];
     // uluna_per_validator = (69420 + 88888 + 1234 + 40471 + 2345) / 4 = 40471
     // remainer = 3
     // src_delegations:
@@ -1430,12 +1575,40 @@ fn computing_redelegations_for_rebalancing() {
     // Round 3: charlie --(38126)--> evan
     // Queues are emptied
     let expected = vec![
-        Redelegation::new("alice", "bob", 28948),
-        Redelegation::new("charlie", "bob", 10290),
-        Redelegation::new("charlie", "evan", 38126),
+        Redelegation::new("alice", "bob", 28948, "uxyz"),
+        Redelegation::new("charlie", "bob", 10290, "uxyz"),
+        Redelegation::new("charlie", "evan", 38126, "uxyz"),
     ];
 
-    assert_eq!(compute_redelegations_for_rebalancing(&current_delegations), expected,);
+    assert_eq!(
+        compute_redelegations_for_rebalancing(active_validators,&current_delegations,Uint128::from(10 as u64)),
+        expected,
+    );
+
+
+    let partially_active =  vec![ "alice".to_string(),
+                                             "charlie".to_string(),
+                                             "dave".to_string(),
+                                             "evan".to_string()];
+
+    let partially_expected = vec![
+        Redelegation::new("alice", "dave", 10118, "uxyz"),
+        Redelegation::new("alice", "evan", 8712, "uxyz"),
+        Redelegation::new("charlie", "evan", 38299, "uxyz"),
+    ];
+    assert_eq!(
+        compute_redelegations_for_rebalancing(partially_active.clone(),&current_delegations,Uint128::from(10 as u64)),
+        partially_expected,
+    );
+
+    let partially_expected_minimums = vec![
+        Redelegation::new("alice", "evan", 18830, "uxyz"),
+        Redelegation::new("charlie", "evan", 29414, "uxyz"),
+    ];
+    assert_eq!(
+        compute_redelegations_for_rebalancing(partially_active,&current_delegations,Uint128::from(15_000 as u64)),
+        partially_expected_minimums,
+    );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1447,14 +1620,25 @@ fn parsing_coin() {
     let coin = parse_coin("12345uatom").unwrap();
     assert_eq!(coin, Coin::new(12345, "uatom"));
 
-    let coin = parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B").unwrap();
-    assert_eq!(coin, Coin::new(23456, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"));
+    let coin =
+        parse_coin("23456ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B")
+            .unwrap();
+    assert_eq!(
+        coin,
+        Coin::new(
+            23456,
+            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+        )
+    );
 
     let err = parse_coin("69420").unwrap_err();
     assert_eq!(err, StdError::generic_err("failed to parse coin: 69420"));
 
     let err = parse_coin("ngmi").unwrap_err();
-    assert_eq!(err, StdError::generic_err("Parsing u128: cannot parse integer from empty string"));
+    assert_eq!(
+        err,
+        StdError::generic_err("Parsing u128: cannot parse integer from empty string")
+    );
 }
 
 #[test]
@@ -1465,8 +1649,11 @@ fn parsing_coins() {
     let coins = Coins::from_str("12345uatom").unwrap();
     assert_eq!(coins.0, vec![Coin::new(12345, "uatom")]);
 
-    let coins = Coins::from_str("12345uatom,23456uluna").unwrap();
-    assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
+    let coins = Coins::from_str("12345uatom,23456uxyz").unwrap();
+    assert_eq!(
+        coins.0,
+        vec![Coin::new(12345, "uatom"), Coin::new(23456, "uxyz")]
+    );
 }
 
 #[test]
@@ -1476,27 +1663,55 @@ fn adding_coins() {
     coins.add(&Coin::new(12345, "uatom")).unwrap();
     assert_eq!(coins.0, vec![Coin::new(12345, "uatom")]);
 
-    coins.add(&Coin::new(23456, "uluna")).unwrap();
-    assert_eq!(coins.0, vec![Coin::new(12345, "uatom"), Coin::new(23456, "uluna")]);
+    coins.add(&Coin::new(23456, "uxyz")).unwrap();
+    assert_eq!(
+        coins.0,
+        vec![Coin::new(12345, "uatom"), Coin::new(23456, "uxyz")]
+    );
 
-    coins.add_many(&Coins::from_str("76543uatom,69420uusd").unwrap()).unwrap();
-    assert_eq!(coins.0, vec![Coin::new(88888, "uatom"), Coin::new(23456, "uluna"), Coin::new(69420, "uusd")]);
+    coins
+        .add_many(&Coins::from_str("76543uatom,69420uusd").unwrap())
+        .unwrap();
+    assert_eq!(
+        coins.0,
+        vec![
+            Coin::new(88888, "uatom"),
+            Coin::new(23456, "uxyz"),
+            Coin::new(69420, "uusd")
+        ]
+    );
 }
 
 #[test]
 fn receiving_funds() {
-    let err = parse_received_fund(&[], "uluna").unwrap_err();
-    assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 0"));
+    let err = parse_received_fund(&[], "uxyz").unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("must deposit exactly one coin; received 0")
+    );
 
-    let err = parse_received_fund(&[Coin::new(12345, "uatom"), Coin::new(23456, "uluna")], "uluna").unwrap_err();
-    assert_eq!(err, StdError::generic_err("must deposit exactly one coin; received 2"));
+    let err = parse_received_fund(
+        &[Coin::new(12345, "uatom"), Coin::new(23456, "uxyz")],
+        "uxyz",
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("must deposit exactly one coin; received 2")
+    );
 
-    let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uluna").unwrap_err();
-    assert_eq!(err, StdError::generic_err("expected uluna deposit, received uatom"));
+    let err = parse_received_fund(&[Coin::new(12345, "uatom")], "uxyz").unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("expected uxyz deposit, received uatom")
+    );
 
-    let err = parse_received_fund(&[Coin::new(0, "uluna")], "uluna").unwrap_err();
-    assert_eq!(err, StdError::generic_err("deposit amount must be non-zero"));
+    let err = parse_received_fund(&[Coin::new(0, "uxyz")], "uxyz").unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("deposit amount must be non-zero")
+    );
 
-    let amount = parse_received_fund(&[Coin::new(69420, "uluna")], "uluna").unwrap();
+    let amount = parse_received_fund(&[Coin::new(69420, "uxyz")], "uxyz").unwrap();
     assert_eq!(amount, Uint128::new(69420));
 }
