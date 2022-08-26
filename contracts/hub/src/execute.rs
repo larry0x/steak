@@ -207,6 +207,9 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     let validators = state.validators_active.load(deps.storage)?;
     let mut unlocked_coins = state.unlocked_coins.load(deps.storage)?;
 
+    if unlocked_coins.is_empty() {
+        return  Err( StdError::generic_err("no rewards"))
+    }
     let amount_to_bond = unlocked_coins
         .iter()
         .find(|coin| coin.denom == denom)
