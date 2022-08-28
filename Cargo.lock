@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "steak-hub"
-version = "2.1.7"
+version = "2.1.8"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",

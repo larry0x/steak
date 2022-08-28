@@ -14,7 +14,7 @@ use steak::hub::{
     UnbondRequestsByUserResponseItem,
 };
 
-use crate::contract::{execute, instantiate, reply};
+use crate::contract::{execute, instantiate, reply, REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
 use crate::helpers::{parse_coin, parse_received_fund};
 use crate::math::{
     compute_redelegations_for_rebalancing, compute_redelegations_for_removal, compute_undelegations,
@@ -80,7 +80,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 funds: vec![],
                 label: "steak_token".to_string(),
             }),
-            1
+            REPLY_INSTANTIATE_TOKEN
         )
     );
 
@@ -92,7 +92,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
         deps.as_mut(),
         mock_env_at_timestamp(10000),
         Reply {
-            id: 1,
+            id: REPLY_INSTANTIATE_TOKEN,
             result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![event],
                 data: None,
@@ -175,7 +175,7 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 1000000, "uxyz").to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("alice", 1000000, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
     );
     assert_eq!(
         res.messages[1],
@@ -218,7 +218,7 @@ fn bonding() {
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("charlie", 12345, "uxyz").to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Delegation::new("charlie", 12345, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
     );
     assert_eq!(
         res.messages[1],
@@ -285,7 +285,7 @@ fn harvesting() {
             CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                 validator: "alice".to_string(),
             }),
-            2,
+            REPLY_REGISTER_RECEIVED_COINS,
         )
     );
     assert_eq!(
@@ -294,7 +294,7 @@ fn harvesting() {
             CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                 validator: "bob".to_string(),
             }),
-            2,
+            REPLY_REGISTER_RECEIVED_COINS,
         )
     );
     assert_eq!(
@@ -303,7 +303,7 @@ fn harvesting() {
             CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
                 validator: "charlie".to_string(),
             }),
-            2,
+            REPLY_REGISTER_RECEIVED_COINS,
         )
     );
     assert_eq!(
@@ -370,8 +370,10 @@ fn reinvesting() {
         Delegation::new("bob", 333333, "uxyz"),
         Delegation::new("charlie", 333333, "uxyz"),
     ]);
+    state.prev_denom.save(deps.as_mut().storage,&Uint128::from(0 as u32)).unwrap();
+    deps.querier.set_bank_balances(&[Coin::new(234u128,"uxyz")]);
 
-    // After the swaps, `unlocked_coins` should contain only uluna and unknown denoms
+    // After the swaps, `unlocked_coins` should contain only uxyz and unknown denoms
     state
         .unlocked_coins
         .save(
@@ -623,17 +625,17 @@ fn submitting_batch() {
     assert_eq!(res.messages.len(), 4);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Undelegation::new("alice", 31732, "uxyz").to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("alice", 31732, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
     );
     assert_eq!(
         res.messages[1],
-        SubMsg::reply_on_success(Undelegation::new("bob", 31733, "uxyz").to_cosmos_msg(), 2)
+        SubMsg::reply_on_success(Undelegation::new("bob", 31733, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
     );
     assert_eq!(
         res.messages[2],
         SubMsg::reply_on_success(
             Undelegation::new("charlie", 31732, "uxyz").to_cosmos_msg(),
-            2
+            REPLY_REGISTER_RECEIVED_COINS
         )
     );
     assert_eq!(
@@ -1193,14 +1195,14 @@ fn removing_validator() {
         res.messages[0],
         SubMsg::reply_on_success(
             Redelegation::new("charlie", "alice", 170833, "uxyz").to_cosmos_msg(),
-            2
+            REPLY_REGISTER_RECEIVED_COINS
         ),
     );
     assert_eq!(
         res.messages[1],
         SubMsg::reply_on_success(
             Redelegation::new("charlie", "bob", 170833, "uxyz").to_cosmos_msg(),
-            2
+            REPLY_REGISTER_RECEIVED_COINS
         ),
     );
 

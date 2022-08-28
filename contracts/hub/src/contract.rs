@@ -6,16 +6,18 @@ use cw20::Cw20ReceiveMsg;
 
 use steak::hub::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
-use crate::helpers::unwrap_reply;
+use crate::helpers::{get_denom_balance, unwrap_reply};
+use crate::migrations::ConfigV100;
 use crate::state::State;
 use crate::{execute, queries};
 use cw2::{get_contract_version, set_contract_version, ContractVersion};
-use crate::migrations::ConfigV100;
 
 /// Contract name that is used for migration.
 pub const CONTRACT_NAME: &str = "steak-hub";
 /// Contract version that is used for migration.
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const REPLY_INSTANTIATE_TOKEN: u64 = 1;
+pub const REPLY_REGISTER_RECEIVED_COINS: u64 = 2;
 
 #[entry_point]
 pub fn instantiate(
@@ -51,12 +53,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 .transpose()?
                 .unwrap_or(info.sender),
         ),
-        ExecuteMsg::WithdrawUnbondedAdmin { address } => execute::withdraw_unbonded_admin(
-            deps,
-            env,
-            info.sender,
-            api.addr_validate(&address)?,
-        ),
+        ExecuteMsg::WithdrawUnbondedAdmin { address } => {
+            execute::withdraw_unbonded_admin(deps, env, info.sender, api.addr_validate(&address)?)
+        }
         ExecuteMsg::AddValidator { validator } => {
             execute::add_validator(deps, info.sender, validator)
         }
@@ -71,7 +70,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         }
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
-        ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env,minimum),
+        ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env, minimum),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::TransferFeeAccount { new_fee_account } => {
@@ -79,8 +78,12 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         }
         ExecuteMsg::UpdateFee { new_fee } => execute::update_fee(deps, info.sender, new_fee),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
-        ExecuteMsg::PauseValidator { validator } => execute::pause_validator(deps,env, info.sender, validator),
-        ExecuteMsg::UnPauseValidator { validator } =>  execute::unpause_validator(deps, env,info.sender, validator),
+        ExecuteMsg::PauseValidator { validator } => {
+            execute::pause_validator(deps, env, info.sender, validator)
+        }
+        ExecuteMsg::UnPauseValidator { validator } => {
+            execute::unpause_validator(deps, env, info.sender, validator)
+        }
     }
 }
 
@@ -134,7 +137,9 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
-        2 => execute::register_received_coins(deps, env, unwrap_reply(reply)?.events),
+        REPLY_REGISTER_RECEIVED_COINS => {
+            execute::register_received_coins(deps, env, unwrap_reply(reply)?.events)
+        }
         id => Err(StdError::generic_err(format!(
             "invalid reply id: {}; must be 1-2",
             id
@@ -176,7 +181,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[entry_point]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     let contract_version = match get_contract_version(deps.storage) {
         Ok(version) => version,
         Err(_) => ContractVersion {
@@ -195,13 +200,22 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
                 state.fee_account.save(deps.storage, &owner)?;
                 state.max_fee_rate.save(deps.storage, &Decimal::zero())?;
                 state.fee_rate.save(deps.storage, &Decimal::zero())?;
-                ConfigV100::upgrade_stores(deps.storage)?;
-            },
-            "2.1.4"  => {
-                 ConfigV100::upgrade_stores(deps.storage)?;
+                ConfigV100::upgrade_stores(deps.storage,&deps.querier, env.contract.address)?;
             }
-            "2.1.5"  => {
-                 ConfigV100::upgrade_stores(deps.storage)?;
+            "2.1.4" => {
+                ConfigV100::upgrade_stores(deps.storage, &deps.querier,env.contract.address)?;
+            }
+            "2.1.5" => {
+                ConfigV100::upgrade_stores(deps.storage, &deps.querier,env.contract.address)?;
+            }
+            "2.1.6" | "2.1.7" => {
+                let state = State::default();
+                // note: this is also done in ConfigV100::upgrade
+                let denom = state.denom.load(deps.storage)?;
+                state.prev_denom.save(
+                    deps.storage,
+                    &get_denom_balance(&deps.querier, env.contract.address, denom)?,
+                )?;
             }
             _ => {}
         },

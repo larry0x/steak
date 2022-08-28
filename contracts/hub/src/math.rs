@@ -174,14 +174,14 @@ pub(crate) fn compute_redelegations_for_rebalancing(
                     }
                 }
                 Ordering::Less => {
-                    if validators_active.contains(&d.validator) {
-                        if native_for_validator - d.amount > min_difference.u128() {
+                    if validators_active.contains(&d.validator) &&
+                         native_for_validator - d.amount > min_difference.u128() {
                             dst_delegations.push(Delegation::new(
                                 &d.validator,
                                 native_for_validator - d.amount,
                                 &d.denom,
                             ));
-                        }
+
                     }
                 }
                 Ordering::Equal => (),

@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Coin, Decimal, StdError, StdResult, Storage};
+use cosmwasm_std::{Addr, Coin, Decimal, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 
 use steak::hub::{Batch, PendingBatch, UnbondRequest};
@@ -39,6 +39,8 @@ pub(crate) struct State<'a> {
     /// Users' shares in unbonding batches
     pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
     pub validators_active: Item<'a, Vec<String>>,
+    /// coins in 'denom' held before reinvest was called.
+    pub prev_denom: Item<'a, Uint128>,
 }
 
 impl Default for State<'static> {
@@ -73,6 +75,7 @@ impl Default for State<'static> {
             previous_batches: IndexedMap::new(BATCH_KEY_V101, pb_indexes),
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
             validators_active: Item::new("validators_active"),
+            prev_denom: Item::new("prev_denom"),
         }
     }
 }

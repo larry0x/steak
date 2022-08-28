@@ -1,10 +1,11 @@
 use crate::state::{State, BATCH_KEY_V101};
 use crate::types::BooleanKey;
-use cosmwasm_std::{Order, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Order, QuerierWrapper, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, MultiIndex};
 use steak::hub::Batch;
 
 use serde::{Deserialize, Serialize};
+use crate::helpers::get_denom_balance;
 
 const BATCH_KEY_V100: &str = "previous_batches";
 const BATCH_KEY_RECONCILED_V100: &str = "previous_batches__reconciled";
@@ -27,7 +28,7 @@ pub struct BatchV100 {
 pub struct ConfigV100 {}
 
 impl ConfigV100 {
-    pub fn upgrade_stores(storage: &mut dyn Storage) -> StdResult<Self> {
+    pub fn upgrade_stores(storage: &mut dyn Storage, querier: &QuerierWrapper, contract_addr: Addr,) -> StdResult<Self> {
         if BATCH_KEY_V101 == BATCH_KEY_V100 {
             Err(StdError::generic_err(
                 "STEAK: Migration Failed. Config keys are the same",
@@ -44,6 +45,10 @@ impl ConfigV100 {
             let old: IndexedMap<'_, u64, BatchV100, PreviousBatchesIndexesV100<'_>> =
                 IndexedMap::new(BATCH_KEY_V100, pb_indexes_v100);
             let state = State::default();
+            let denom = state.denom.load(storage)?;
+            state.prev_denom.save(storage, &get_denom_balance(querier,contract_addr, denom)?)?;
+
+
 
             let old_batches = old
                 .range(storage, None, None, Order::Ascending)
