@@ -1,53 +1,55 @@
 # Steak 🥩
 
-Terra liquid staking derivative. Of the community, by the community, for the community.
+Steak Hub contract manages the bonding/unbonding of Luna, minting/burning of Steak, and reinvestment of staking rewards.
 
-A previous version ([v1.0.0-rc0](https://github.com/st4k3h0us3/steak-contracts/releases/tag/v1.0.0-rc0)) of Steak was audited by [SCV Security](https://twitter.com/TerraSCV) ([link](https://github.com/SCV-Security/PublicReports/blob/main/CW/St4k3h0us3/St4k3h0us3%20-%20Steak%20Contracts%20Audit%20Review%20-%20%20v1.0.pdf)).
+## Overview
 
-## Contracts
+### Exchange rate
 
-| Contract                           | Description                                            |
-| ---------------------------------- | ------------------------------------------------------ |
-| [`steak-hub`](./contracts/hub)     | Manages minting/burning of Steak token and bonded Luna |
-| [`steak-token`](./contracts/token) | Modified CW20 token contract                           |
+Unlike [Lido's stETH](https://github.com/lidofinance/lido-dao/tree/master/contracts/0.4.24), the Steak token does not rebase; instead, the exchange rate between Luna and Steak increases (i.e. each Steak becomes worth more Luna) as staking rewards are harvested, and reduces if validators are slashed.
+
+The exchange rate, as defined by the amount of `uluna` redeemable per `usteak`, is calculated as
+
+```plain
+exchange_rate = total_uluna_staked / total_usteak_supply
+```
+
+### Unlocked coins
+
+Unlocked coin refers to coins held by the Steak Hub contract (referred to as "the contract" hereafter) that can be reinvested. The contract tracks the amounts of unlocked coins using a `Vec<cosmwasm_std::Coin>` variable stored under the `unlocked_coins` key.
+
+Each time the Hub contract delegates to or undelegates from a validator, the claimable staking rewards are automatically transferred to the contract. The amounts of coins transferred are recorded in the `coin_received` event. When handling the response, the contract parses this event and updates the `unlocked_coins` variable accordingly.
+
+When harvesting, the contract needs to swap Terra stablecoins into Luna. the contract offers all unlocked coins that have exchange rates defined against Luna to be swapped, and deduct them from `unlocked_coins` accordingly. When handling the response, the contract parses the `swap` event and increments the unlocked Luna amount.
+
+### Unbonding
+
+Cosmos chains, by default, has a limit of 7 undelegations at a time per validator-delegator pair. In order to support unbonding requests from many users, the contract needs to bundle unbonding requests together and submit them in batches.
+
+![illustration-of-unbonding-queue](./unbonding-queue.png)
+
+For mainnet, the contract will submit a batch every 3 days, such that there are at most 7 undelegations at a time with each validator. This 3 day interval is defined by the `epoch_period` parameter.
+
+During the 3 day period, the contract accepts unbonding requests from users and store them in an `IndexedMap` data structure under the `unbond_requests` key, and the aggregated properties of the pending batch under the `pending_batch` key. Each user's share in the batch is proportional to the amount of Steak tokens the user requests to burn.
+
+At the end of the 3 day period, anyone can invoke the `ExecuteMsg::SubmitUnbond` function to submit the pending batch to be unbonded. The contract calculates the amount of Luna to unbond based on the Luna/Steak exchange rate at the time, burns the Steak tokens, and initiates undelegations with the validators.
+
+At the end of the following 21 day unbonding period, the user can invoke the `ExecuteMsg::WithdrawUnbonded` function. The contract pulls all of the user's unclaimed unbonding requests, and refunds appropriate amounts of Luna based on the each request's share in that batch, to the user.
 
 ## Deployment
 
-### Mainnet (phoenix-1)
+| Network     | Address   |
+| ----------- | --------- |
+| osmosis-1   | [`tbd`]() |
+| osmo-test-4 | [`tbd`]() |
 
-| Contract            | Address   |
-| ------------------- | --------- |
-| Steak Hub           | [`tbd`]() |
-| Steak Token         | [`tbd`]() |
-| STEAK-LUNA Pair     | [`tbd`]() |
-| STEAK-LUNA LP Token | [`tbd`]() |
+## Reference
 
-### Testnet (pisco-1)
+Similar projects:
 
-| Contract            | Address                                                                                                                                                                           |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Steak Hub           | [`terra1lm7d4zr97rzp3a22szdv6ucpeyckyl2l2wh6jc9qrga78eyrvamsjgs5q6`](https://finder.terra.money/testnet/address/terra1lm7d4zr97rzp3a22szdv6ucpeyckyl2l2wh6jc9qrga78eyrvamsjgs5q6) |
-| Steak Token         | [`terra1q02glqy2gcl9kavshhh9tzr3l7cjwjwk7mhatd9h9nc243gq73esdat6wj`](https://finder.terra.money/testnet/address/terra1q02glqy2gcl9kavshhh9tzr3l7cjwjwk7mhatd9h9nc243gq73esdat6wj) |
-| STEAK-LUNA Pair     | [`tbd`]()                                                                                                                                                                         |
-| STEAK-LUNA LP Token | [`tbd`]()                                                                                                                                                                         |
-
-### Classic mainnet (columbus-5)
-
-| Contract            | Address                                                                                                                                   |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Steak Hub           | [`terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg`](https://finder.terra.money/classic/address/terra15qr8ev2c0a0jswjtfrhfaj5ucgkhjd7la2shlg) |
-| Steak Token         | [`terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv`](https://finder.terra.money/classic/address/terra1rl4zyexjphwgx6v3ytyljkkc4mrje2pyznaclv) |
-| STEAK-LUNA Pair     | [`terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e`](https://finder.terra.money/classic/address/terra14q0cgunptuym048a4y2awt8a7fl9acudmfzk5e) |
-| STEAK-LUNA LP Token | [`terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62`](https://finder.terra.money/classic/address/terra1pwc77c6a588cualln2uypyyvg5r76tfaazgk62) |
-
-### Classic testnet (bombay-12)
-
-| Contract            | Address                                        |
-| ------------------- | ---------------------------------------------- |
-| Steak Hub           | `terra1xshrfs3lp7nwkdfh3067vfsf3kmweygfsc3hzy` |
-| Steak Token         | `terra1awhvtkm553rszxtvnuda4fe2r6rjjj7hjwzv0w` |
-| STEAK-LUNA Pair     | `terra1x3tyfme7y84mv3y6ftugllrln5y7ewhf36davz` |
-| STEAK-LUNA LP Token | `terra1exla7lyc8g85szpntmcs5f2rvvg5gwwn7jekje` |
+- [Lido - stLUNA](https://github.com/lidofinance/lido-terra-contracts)
+- [Stader - LunaX](https://github.com/stader-labs/stader-liquid-token)
+- [Staking derivatives (dSCRT)](https://github.com/Cashmaney/SecretStaking)
 
 ## License
 

@@ -1,14 +1,31 @@
-[workspace]
-members = ["contracts/*", "packages/*"]
+[package]
+name        = "steak"
+version     = "3.0.0-rc0"
+authors     = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
+edition     = "2021"
+description = "Liquid staking protocol for the cosmos"
+readme      = "README.md"
+homepage    = "https://steak.club"
+repository  = "https://github.com/st4k3h0us3/steak"
+license     = "GPL-3.0-or-later"
+keywords    = ["cosmos", "cosmwasm", "staking"]
 
-[profile.release.package.steak]
-opt-level = 3
-debug = false
-debug-assertions = false
-codegen-units = 1
-incremental = false
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [profile.release]
+codegen-units = 1
+incremental = false
 rpath = false
 lto = true
 overflow-checks = true
+opt-level = 3
+debug = false
+debug-assertions = false
+
+[dependencies]
+cosmwasm-std = "1.0"
+cw-storage-plus = "0.13"
+osmosis-std = { git = "https://github.com/osmosis-labs/osmosis-rust", rev = "4da9313" }
+schemars = "0.8"
+serde = { version = "1.0", default-features = false, features = ["derive"] }

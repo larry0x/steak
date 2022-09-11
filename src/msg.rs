@@ -1,35 +1,31 @@
+use std::collections::BTreeSet;
+
 use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, Uint128, WasmMsg};
-use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// Code ID of the CW20 token contract
-    pub cw20_code_id: u64,
     /// Account who can call certain privileged functions
     pub owner: String,
-    /// Name of the liquid staking token
-    pub name: String,
-    /// Symbol of the liquid staking token
-    pub symbol: String,
-    /// Number of decimals of the liquid staking token
-    pub decimals: u8,
     /// How often the unbonding queue is to be executed, in seconds
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
-    pub validators: Vec<String>,
+    pub validators: BTreeSet<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    /// Implements the Cw20 receiver interface
-    Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
     Bond {
+        receiver: Option<String>,
+    },
+    /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
+    /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
+    QueueUnbond {
         receiver: Option<String>,
     },
     /// Withdraw Luna that have finished unbonding in previous batches
@@ -48,8 +44,6 @@ pub enum ExecuteMsg {
     TransferOwnership {
         new_owner: String,
     },
-    /// Accept an ownership transfer
-    AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
     /// Use redelegations to balance the amounts of Luna delegated to validators
@@ -58,35 +52,6 @@ pub enum ExecuteMsg {
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
-    /// Callbacks; can only be invoked by the contract itself
-    Callback(CallbackMsg),
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ReceiveMsg {
-    /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
-    /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond {
-        receiver: Option<String>,
-    },
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum CallbackMsg {
-    /// Following the swaps, stake the Luna acquired to the whitelisted validators
-    Reinvest {},
-}
-
-impl CallbackMsg {
-    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg> {
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: contract_addr.to_string(),
-            msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
-            funds: vec![],
-        }))
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -125,10 +90,6 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     /// Account who can call certain privileged functions
     pub owner: String,
-    /// Pending ownership transfer, awaiting acceptance by the new owner
-    pub new_owner: Option<String>,
-    /// Address of the Steak token
-    pub steak_token: String,
     /// How often the unbonding queue is to be executed, in seconds
     pub epoch_period: u64,
     /// The staking module's unbonding time, in seconds
