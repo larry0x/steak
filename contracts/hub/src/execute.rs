@@ -292,7 +292,7 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
             FeeType::FeeSplit => {
                 let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit{ flush:false};
 
-               vec![msg .into_cosmos_msg(fee_account)? ]
+               vec![msg .into_cosmos_msg(fee_account, vec![Coin::new(fee_amount.into(), &denom)])? ]
             }
         };
         Ok(Response::new()

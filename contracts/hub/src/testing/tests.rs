@@ -590,7 +590,7 @@ fn reinvesting_fee_split() {
         res.messages[1],
         SubMsg {
             id: 0,
-            msg: send_msg.into_cosmos_msg("fee_split_contract").unwrap(),
+            msg: send_msg.into_cosmos_msg("fee_split_contract", vec![Coin::new(23u128,"uxyz")]).unwrap(),
             gas_limit: None,
             reply_on: ReplyOn::Never
         }

@@ -240,6 +240,13 @@ pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response>
             ))
         }
     }
+    /*
+    let state = State::default();
+
+    state.max_fee_rate.save(deps.storage,&Decimal::from_ratio(10u32,100u32))?;
+    state.fee_rate.save(deps.storage,&Decimal::from_ratio(10u32,100u32))?;
+
+     */
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     Ok(Response::new()

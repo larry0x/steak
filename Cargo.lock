@@ -486,9 +486,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "pfc-fee-split"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "320b2bc8ca3b95a29a2aa7c9805efaaae5faedb8bb5bff384f8a659416d45515"
+checksum = "e202f9af6235723bfdecb0682a4c95143f8a9842de7cf831a2c27f85733ed019"
 dependencies = [
  "cosmwasm-std",
  "cw20 0.15.1",
