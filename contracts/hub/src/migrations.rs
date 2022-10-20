@@ -10,7 +10,7 @@ use crate::helpers::get_denom_balance;
 const BATCH_KEY_V100: &str = "previous_batches";
 const BATCH_KEY_RECONCILED_V100: &str = "previous_batches__reconciled";
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct BatchV100 {
     /// ID of this batch
     pub id: u64,
@@ -24,7 +24,7 @@ pub struct BatchV100 {
     pub est_unbond_end_time: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ConfigV100 {}
 
 impl ConfigV100 {

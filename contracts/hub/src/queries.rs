@@ -24,6 +24,7 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
         denom: state.denom.load(deps.storage)?,
+        fee_type: state.fee_account_type.load(deps.storage)?.to_string(),
         fee_account: state.fee_account.load(deps.storage)?.to_string(),
         fee_rate: state.fee_rate.load(deps.storage)?,
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,

@@ -1,6 +1,6 @@
 [package]
 name = "steak-hub"
-version = "2.1.8"
+version = "2.1.10"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
@@ -20,6 +20,6 @@ cw20-base = { version = "0.13", features = ["library"] }
 cw-storage-plus = "0.13"
 steak = { path = "../../packages/steak" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-
+pfc-fee-split = "0.1.1"
 #[dev-dependencies]
 #serde = { version = "1.0.103", default-features = false, features = ["derive"] }

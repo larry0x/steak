@@ -8,10 +8,15 @@ use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
 use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
-use steak::hub::{Batch, CallbackMsg, ExecuteMsg, InstantiateMsg, PendingBatch, UnbondRequest};
+use steak::hub::{
+    Batch, CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch, UnbondRequest,
+};
 use steak::DecimalCheckedOps;
 
-use crate::helpers::{get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation, query_delegations};
+use crate::helpers::{
+    get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
+    query_delegations,
+};
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
@@ -33,6 +38,8 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     if msg.fee_amount > msg.max_fee_amount {
         return Err(StdError::generic_err("fee can not exceed max fee"));
     }
+    let fee_type = FeeType::from_str(&msg.fee_account_type)
+        .map_err(|_| StdError::generic_err("Invalid Fee type: Wallet or FeeSplit only"))?;
 
     state
         .owner
@@ -45,6 +52,8 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     state.denom.save(deps.storage, &msg.denom)?;
     state.max_fee_rate.save(deps.storage, &msg.max_fee_amount)?;
     state.fee_rate.save(deps.storage, &msg.fee_amount)?;
+    state.fee_account_type.save(deps.storage, &fee_type)?;
+
     state
         .fee_account
         .save(deps.storage, &deps.api.addr_validate(&msg.fee_account)?)?;
@@ -145,7 +154,10 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     // Query the current supply of Steak and compute the amount to mint
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
     let usteak_to_mint = compute_mint_amount(usteak_supply, amount_to_bond, &delegations);
-    state.prev_denom.save(deps.storage, &get_denom_balance(&deps.querier,env.contract.address, denom.clone())?)?;
+    state.prev_denom.save(
+        deps.storage,
+        &get_denom_balance(&deps.querier, env.contract.address, denom.clone())?,
+    )?;
 
     let delegate_submsg = SubMsg::reply_on_success(
         new_delegation.to_cosmos_msg(),
@@ -179,7 +191,10 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
 pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
-    state.prev_denom.save(deps.storage, &get_denom_balance(&deps.querier,env.contract.address.clone(), denom)?)?;
+    state.prev_denom.save(
+        deps.storage,
+        &get_denom_balance(&deps.querier, env.contract.address.clone(), denom)?,
+    )?;
 
     let withdraw_submsgs = deps
         .querier
@@ -216,7 +231,8 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let validators = state.validators_active.load(deps.storage)?;
     let prev_coin = state.prev_denom.load(deps.storage)?;
-    let current_coin = get_denom_balance(&deps.querier,env.contract.address.clone(), denom.clone())?;
+    let current_coin =
+        get_denom_balance(&deps.querier, env.contract.address.clone(), denom.clone())?;
 
     if current_coin <= prev_coin {
         return Err(StdError::generic_err("no rewards"));
@@ -226,15 +242,15 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     /*
 
-    if unlocked_coins.is_empty() {
-        return Err(StdError::generic_err("no rewards"));
-    }
-    let amount_to_bond = unlocked_coins
-        .iter()
-        .find(|coin| coin.denom == denom)
-        .ok_or_else(|| StdError::generic_err("no native amount available to be bonded"))?
-        .amount;
-*/
+        if unlocked_coins.is_empty() {
+            return Err(StdError::generic_err("no rewards"));
+        }
+        let amount_to_bond = unlocked_coins
+            .iter()
+            .find(|coin| coin.denom == denom)
+            .ok_or_else(|| StdError::generic_err("no native amount available to be bonded"))?
+            .amount;
+    */
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
     let mut validator = &delegations[0].validator;
     let mut amount = delegations[0].amount;
@@ -265,14 +281,23 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     if fee_amount > Uint128::zero() {
         let fee_account = state.fee_account.load(deps.storage)?;
+        let fee_type = state.fee_account_type.load(deps.storage)?;
 
-        let send_msg = BankMsg::Send {
-            to_address: fee_account.to_string(),
-            amount: vec![Coin::new(fee_amount.into(), &denom)],
+        let send_msgs = match fee_type {
+            FeeType::Wallet =>
+                vec![CosmosMsg::Bank(BankMsg::Send {
+                to_address: fee_account.to_string(),
+                amount: vec![Coin::new(fee_amount.into(), &denom)],
+            })],
+            FeeType::FeeSplit => {
+                let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit{ flush:false};
+
+               vec![msg .into_cosmos_msg(fee_account, vec![Coin::new(fee_amount.into(), &denom)])? ]
+            }
         };
         Ok(Response::new()
             .add_message(new_delegation.to_cosmos_msg())
-            .add_message(CosmosMsg::Bank(send_msg))
+            .add_messages(send_msgs)
             .add_event(event)
             .add_attribute("action", "steakhub/reinvest"))
     } else {
@@ -440,7 +465,10 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
             est_unbond_start_time: current_time + epoch_period,
         },
     )?;
-    state.prev_denom.save(deps.storage, &get_denom_balance(&deps.querier,env.contract.address, denom)?)?;
+    state.prev_denom.save(
+        deps.storage,
+        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
+    )?;
 
     let undelegate_submsgs = new_undelegations
         .iter()
@@ -641,7 +669,10 @@ pub fn rebalance(deps: DepsMut, env: Env, minimum: Uint128) -> StdResult<Respons
     let new_redelegations =
         compute_redelegations_for_rebalancing(validators_active, &delegations, minimum);
 
-    state.prev_denom.save(deps.storage, &get_denom_balance(&deps.querier,env.contract.address, denom)?)?;
+    state.prev_denom.save(
+        deps.storage,
+        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
+    )?;
 
     let redelegate_submsgs = new_redelegations
         .iter()
@@ -719,7 +750,10 @@ pub fn remove_validator(
     let new_redelegations =
         compute_redelegations_for_removal(&delegation_to_remove, &delegations, &denom);
 
-    state.prev_denom.save(deps.storage, &get_denom_balance(&deps.querier,env.contract.address, denom)?)?;
+    state.prev_denom.save(
+        deps.storage,
+        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
+    )?;
 
     let redelegate_submsgs = new_redelegations
         .iter()
@@ -760,6 +794,7 @@ pub fn remove_validator_ex(
         .add_event(event)
         .add_attribute("action", "steakhub/remove_validator_ex"))
 }
+
 pub fn pause_validator(
     deps: DepsMut,
     _env: Env,
@@ -812,6 +847,23 @@ pub fn unpause_validator(
         .add_event(event)
         .add_attribute("action", "steakhub/unpause_validator"))
 }
+pub fn set_unbond_period(
+    deps: DepsMut,
+    _env: Env,
+    sender: Addr,
+    unbond_period: u64,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+    state.unbond_period.save(deps.storage, &unbond_period)?;
+    let event = Event::new("steak/set_unbond_period")
+        .add_attribute("unbond_period", format!("{}", unbond_period));
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/set_unbond_period"))
+}
 
 pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {
     let state = State::default();
@@ -851,11 +903,17 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
 pub fn transfer_fee_account(
     deps: DepsMut,
     sender: Addr,
+    fee_account_type: String,
     new_fee_account: String,
 ) -> StdResult<Response> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
+    let fee_type = FeeType::from_str(&fee_account_type)
+        .map_err(|_| StdError::generic_err("Invalid Fee type: Wallet or FeeSplit only"))?;
+
+    state.fee_account_type.save(deps.storage, &fee_type)?;
+
     state
         .fee_account
         .save(deps.storage, &deps.api.addr_validate(&new_fee_account)?)?;

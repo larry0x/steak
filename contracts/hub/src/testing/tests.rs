@@ -42,7 +42,87 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
             name: "Steak Token".to_string(),
             symbol: "STEAK".to_string(),
             denom: "uxyz".to_string(),
+            fee_account_type: "Wallet".to_string(),
             fee_account: "the_fee_man".to_string(),
+            fee_amount: Decimal::from_ratio(10_u128, 100_u128), //10%
+            max_fee_amount: Decimal::from_ratio(20_u128, 100_u128), //20%
+            decimals: 6,
+            epoch_period: 259200,   // 3 * 24 * 60 * 60 = 3 days
+            unbond_period: 1814400, // 21 * 24 * 60 * 60 = 21 days
+            validators: vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "charlie".to_string(),
+            ],
+
+        },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 1);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(
+            CosmosMsg::Wasm(WasmMsg::Instantiate {
+                admin: Some("larry".to_string()),
+                code_id: 69420,
+                msg: to_binary(&Cw20InstantiateMsg {
+                    name: "Steak Token".to_string(),
+                    symbol: "STEAK".to_string(),
+                    decimals: 6,
+                    initial_balances: vec![],
+                    mint: Some(MinterResponse {
+                        minter: MOCK_CONTRACT_ADDR.to_string(),
+                        cap: None
+                    }),
+                    marketing: None,
+                })
+                .unwrap(),
+                funds: vec![],
+                label: "steak_token".to_string(),
+            }),
+            REPLY_INSTANTIATE_TOKEN
+        )
+    );
+
+    let event = Event::new("instantiate")
+        .add_attribute("code_id", "69420")
+        .add_attribute("_contract_address", "steak_token");
+
+    let res = reply(
+        deps.as_mut(),
+        mock_env_at_timestamp(10000),
+        Reply {
+            id: REPLY_INSTANTIATE_TOKEN,
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
+                events: vec![event],
+                data: None,
+            }),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 0);
+
+    deps.querier.set_cw20_total_supply("steak_token", 0);
+    deps
+}
+
+fn setup_test_fee_split() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
+    let mut deps = mock_dependencies();
+
+    let res = instantiate(
+        deps.as_mut(),
+        mock_env_at_timestamp(10000),
+        mock_info("deployer", &[]),
+        InstantiateMsg {
+            cw20_code_id: 69420,
+            owner: "larry".to_string(),
+            name: "Steak Token".to_string(),
+            symbol: "STEAK".to_string(),
+            denom: "uxyz".to_string(),
+            fee_account_type: "FeeSplit".to_string(),
+            fee_account: "fee_split_contract".to_string(),
             fee_amount: Decimal::from_ratio(10_u128, 100_u128), //10%
             max_fee_amount: Decimal::from_ratio(20_u128, 100_u128), //20%
             decimals: 6,
@@ -125,6 +205,7 @@ fn proper_instantiation() {
             epoch_period: 259200,
             unbond_period: 1814400,
             denom: "uxyz".to_string(),
+            fee_type:"Wallet".to_string(),
             fee_account: "the_fee_man".to_string(),
             fee_rate: Decimal::from_ratio(10_u128, 100_u128),
             max_fee_rate: Decimal::from_ratio(20_u128, 100_u128),
@@ -155,6 +236,29 @@ fn proper_instantiation() {
             usteak_to_burn: Uint128::zero(),
             est_unbond_start_time: 269200, // 10,000 + 259,200
         },
+    );
+    let deps_fee_split = setup_test_fee_split();
+
+    let res_fee_split: ConfigResponse = query_helper(deps_fee_split.as_ref(), QueryMsg::Config {});
+    assert_eq!(
+        res_fee_split,
+        ConfigResponse {
+            owner: "larry".to_string(),
+            new_owner: None,
+            steak_token: "steak_token".to_string(),
+            epoch_period: 259200,
+            unbond_period: 1814400,
+            denom: "uxyz".to_string(),
+            fee_type:"FeeSplit".to_string(),
+            fee_account: "fee_split_contract".to_string(),
+            fee_rate: Decimal::from_ratio(10_u128, 100_u128),
+            max_fee_rate: Decimal::from_ratio(20_u128, 100_u128),
+            validators: vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "charlie".to_string()
+            ]
+        }
     );
 }
 
@@ -430,6 +534,78 @@ fn reinvesting() {
             "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
         )],
     );
+
+}
+
+#[test]
+fn reinvesting_fee_split() {
+    let mut deps = setup_test_fee_split();
+    let state = State::default();
+
+    deps.querier.set_staking_delegations(&[
+        Delegation::new("alice", 333334, "uxyz"),
+        Delegation::new("bob", 333333, "uxyz"),
+        Delegation::new("charlie", 333333, "uxyz"),
+    ]);
+    state.prev_denom.save(deps.as_mut().storage,&Uint128::from(0 as u32)).unwrap();
+    deps.querier.set_bank_balances(&[Coin::new(234u128,"uxyz")]);
+
+    // After the swaps, `unlocked_coins` should contain only uxyz and unknown denoms
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(234, "uxyz"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
+            ],
+        )
+        .unwrap();
+
+    // Bob has the smallest amount of delegations, so all proceeds go to him
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info(MOCK_CONTRACT_ADDR, &[]),
+        ExecuteMsg::Callback(CallbackMsg::Reinvest {}),
+    )
+    .unwrap();
+
+    assert_eq!(res.messages.len(), 2);
+    assert_eq!(
+        res.messages[0],
+        SubMsg {
+            id: 0,
+            msg: Delegation::new("bob", 234 - 23, "uxyz").to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+    let send_msg =    pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit{ flush:false};
+
+    assert_eq!(
+        res.messages[1],
+        SubMsg {
+            id: 0,
+            msg: send_msg.into_cosmos_msg("fee_split_contract", vec![Coin::new(23u128,"uxyz")]).unwrap(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    );
+
+    // Storage should have been updated
+    let unlocked_coins = state.unlocked_coins.load(deps.as_ref().storage).unwrap();
+    assert_eq!(
+        unlocked_coins,
+        vec![Coin::new(
+            69420,
+            "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"
+        )],
+    );
+
 }
 
 #[test]
@@ -1271,7 +1447,108 @@ fn transferring_ownership() {
     let owner = state.owner.load(deps.as_ref().storage).unwrap();
     assert_eq!(owner, Addr::unchecked("jake"));
 }
+#[test]
+fn splitting_fees() {
+    let mut deps = setup_test();
 
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("jake", &[]),
+        ExecuteMsg::TransferFeeAccount {
+            fee_account_type: "Wallet".to_string(),
+            new_fee_account: "charlie".to_string()
+        },
+    )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        StdError::generic_err("unauthorized: sender is not owner")
+    );
+
+    let err = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::TransferFeeAccount {
+            fee_account_type: "xxxx".to_string(),
+            new_fee_account: "charlie".to_string()
+        },
+    )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        StdError::generic_err("Invalid Fee type: Wallet or FeeSplit only")
+    );
+
+     execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::TransferFeeAccount {
+            fee_account_type: "Wallet".to_string(),
+            new_fee_account: "charlie".to_string()
+        },
+    )
+        .unwrap();
+    let res: ConfigResponse = query_helper(deps.as_ref(), QueryMsg::Config {});
+    assert_eq!(
+        res,
+        ConfigResponse {
+            owner: "larry".to_string(),
+            new_owner: None,
+            steak_token: "steak_token".to_string(),
+            epoch_period: 259200,
+            unbond_period: 1814400,
+            denom: "uxyz".to_string(),
+            fee_type:"Wallet".to_string(),
+            fee_account: "charlie".to_string(),
+            fee_rate: Decimal::from_ratio(10_u128, 100_u128),
+            max_fee_rate: Decimal::from_ratio(20_u128, 100_u128),
+            validators: vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "charlie".to_string()
+            ]
+        }
+    );
+
+
+    execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("larry", &[]),
+        ExecuteMsg::TransferFeeAccount {
+            fee_account_type: "FeeSplit".to_string(),
+            new_fee_account: "contract".to_string()
+        },
+    )
+        .unwrap();
+    let res: ConfigResponse = query_helper(deps.as_ref(), QueryMsg::Config {});
+    assert_eq!(
+        res,
+        ConfigResponse {
+            owner: "larry".to_string(),
+            new_owner: None,
+            steak_token: "steak_token".to_string(),
+            epoch_period: 259200,
+            unbond_period: 1814400,
+            denom: "uxyz".to_string(),
+            fee_type:"FeeSplit".to_string(),
+            fee_account: "contract".to_string(),
+            fee_rate: Decimal::from_ratio(10_u128, 100_u128),
+            max_fee_rate: Decimal::from_ratio(20_u128, 100_u128),
+            validators: vec![
+                "alice".to_string(),
+                "bob".to_string(),
+                "charlie".to_string()
+            ]
+        }
+    );
+}
 //--------------------------------------------------------------------------------------------------
 // Queries
 //--------------------------------------------------------------------------------------------------
