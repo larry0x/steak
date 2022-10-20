@@ -2,8 +2,9 @@ use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, 
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug,Eq, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     /// Code ID of the CW20 token contract
     pub cw20_code_id: u64,
@@ -23,6 +24,8 @@ pub struct InstantiateMsg {
     pub validators: Vec<String>,
     /// denomination of coins to steak (uXXXX)
     pub denom: String,
+    /// type of fee account
+    pub fee_account_type: String,
     /// Fee Account to send fees too
     pub fee_account: String,
     /// Fee "1.00 = 100%"
@@ -48,6 +51,7 @@ pub enum ExecuteMsg {
     RemoveValidator { validator: String },
     /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for typos
     RemoveValidatorEx { validator: String },
+
     /// Pause a validator from accepting new delegations
     PauseValidator { validator: String },
     /// Unpause a validator from accepting new delegations
@@ -65,16 +69,21 @@ pub enum ExecuteMsg {
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
+    /// Set unbond period
+    SetUnbondPeriod { unbond_period: u64 },
 
     /// Transfer Fee collection account to another account
-    TransferFeeAccount { new_fee_account: String },
+    TransferFeeAccount {
+        fee_account_type: String,
+        new_fee_account: String,
+    },
     /// Update fee collection amount
     UpdateFee { new_fee: Decimal },
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ReceiveMsg {
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
@@ -82,7 +91,7 @@ pub enum ReceiveMsg {
     QueueUnbond { receiver: Option<String> },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug,Eq, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
     /// Following the swaps, stake the Luna acquired to the whitelisted validators
@@ -99,7 +108,7 @@ impl CallbackMsg {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     /// The contract's configurations. Response: `ConfigResponse`
@@ -131,7 +140,7 @@ pub enum QueryMsg {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     /// Account who can call certain privileged functions
     pub owner: String,
@@ -145,6 +154,8 @@ pub struct ConfigResponse {
     pub unbond_period: u64,
     /// denomination of coins to steak (uXXXX)
     pub denom: String,
+    /// type of account to send the fees too
+    pub fee_type:String,
     /// Fee Account to send fees too
     pub fee_account: String,
     /// Fee "1.00 = 100%"
@@ -155,7 +166,7 @@ pub struct ConfigResponse {
     pub validators: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug,Eq, PartialEq, JsonSchema)]
 pub struct StateResponse {
     /// Total supply to the Steak token
     pub total_usteak: Uint128,
@@ -167,7 +178,7 @@ pub struct StateResponse {
     pub unlocked_coins: Vec<Coin>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 pub struct PendingBatch {
     /// ID of this batch
     pub id: u64,
@@ -177,7 +188,7 @@ pub struct PendingBatch {
     pub est_unbond_start_time: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 pub struct Batch {
     /// ID of this batch
     pub id: u64,
@@ -191,7 +202,7 @@ pub struct Batch {
     pub est_unbond_end_time: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 pub struct UnbondRequest {
     /// ID of the batch
     pub id: u64,
@@ -201,7 +212,7 @@ pub struct UnbondRequest {
     pub shares: Uint128,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq, JsonSchema)]
 pub struct UnbondRequestsByBatchResponseItem {
     /// The user's address
     pub user: String,
@@ -218,7 +229,7 @@ impl From<UnbondRequest> for UnbondRequestsByBatchResponseItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]
 pub struct UnbondRequestsByUserResponseItem {
     /// ID of the batch
     pub id: u64,
@@ -236,3 +247,27 @@ impl From<UnbondRequest> for UnbondRequestsByUserResponseItem {
 }
 
 pub type MigrateMsg = Empty;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Copy, JsonSchema)]
+pub enum FeeType {
+    Wallet,
+    FeeSplit,
+}
+impl FromStr for FeeType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Wallet" => Ok(FeeType::Wallet),
+            "FeeSplit" => Ok(FeeType::FeeSplit),
+            _ => Err(()),
+        }
+    }
+}
+impl ToString for FeeType {
+    fn to_string(&self) -> String {
+        match &self {
+            FeeType::Wallet => String::from("Wallet"),
+            FeeType::FeeSplit => String::from("FeeSplit"),
+        }
+    }
+}
