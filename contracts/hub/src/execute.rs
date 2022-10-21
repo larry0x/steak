@@ -83,10 +83,10 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
                     minter: env.contract.address.into(),
                     cap: None,
                 }),
-                marketing: None,
+                marketing: msg.marketing,
             })?,
             funds: vec![],
-            label: "steak_token".to_string(),
+            label: msg.label.unwrap_or("steak_token".to_string()),
         }),
         REPLY_INSTANTIATE_TOKEN,
     )))

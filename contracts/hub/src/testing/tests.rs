@@ -54,6 +54,8 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 "bob".to_string(),
                 "charlie".to_string(),
             ],
+            label: None,
+            marketing:None
 
         },
     )
@@ -133,6 +135,8 @@ fn setup_test_fee_split() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 "bob".to_string(),
                 "charlie".to_string(),
             ],
+            label: None,
+            marketing:None
 
         },
     )

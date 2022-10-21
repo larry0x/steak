@@ -1,5 +1,6 @@
 use cosmwasm_std::{to_binary, Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
+use cw20_base::msg::InstantiateMarketingInfo as Cw20InstantiateMarketingInfo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -32,6 +33,10 @@ pub struct InstantiateMsg {
     pub fee_amount: Decimal,
     /// Max Fee "1.00 = 100%"
     pub max_fee_amount: Decimal,
+    /// label for the CW20 token we create
+    pub label: Option<String>,
+    /// Marketing info for the CW20 we create
+    pub marketing: Option<Cw20InstantiateMarketingInfo>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
