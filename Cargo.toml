@@ -1,7 +1,7 @@
 [workspace]
 members = ["contracts/*", "packages/*"]
 
-[profile.release.package.steak]
+[profile.release.package.pfc-steak]
 opt-level = 3
 debug = false
 debug-assertions = false

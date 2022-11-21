@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Serialize, Deserialize, Clone, Debug,Eq, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     /// Code ID of the CW20 token contract
     pub cw20_code_id: u64,

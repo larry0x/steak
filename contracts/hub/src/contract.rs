@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ReceiveMsg;
 
-use steak::hub::{CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
+use pfc_steak::hub::{CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
 use crate::helpers::{get_denom_balance, unwrap_reply};
 use crate::migrations::ConfigV100;

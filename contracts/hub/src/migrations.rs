@@ -2,7 +2,7 @@ use crate::state::{State, BATCH_KEY_V101};
 use crate::types::BooleanKey;
 use cosmwasm_std::{Addr, Order, QuerierWrapper, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, MultiIndex};
-use steak::hub::Batch;
+use pfc_steak::hub::Batch;
 
 use serde::{Deserialize, Serialize};
 use crate::helpers::get_denom_balance;

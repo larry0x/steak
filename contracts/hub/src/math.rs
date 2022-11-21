@@ -2,7 +2,7 @@ use std::{cmp, cmp::Ordering};
 
 use cosmwasm_std::Uint128;
 
-use steak::hub::Batch;
+use pfc_steak::hub::Batch;
 
 use crate::types::{Delegation, Redelegation, Undelegation};
 
@@ -64,7 +64,7 @@ pub(crate) fn compute_undelegations(
     let mut new_undelegations: Vec<Undelegation> = vec![];
     let mut native_available = native_to_unbond.u128();
     for (i, d) in current_delegations.iter().enumerate() {
-        let remainder_for_validator: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
+        let remainder_for_validator: u128 = u128::from( (i+1) as u128 <=remainder) as u128 ;
         let native_for_validator = native_per_validator + remainder_for_validator;
 
         let mut native_to_undelegate = if d.amount < native_for_validator {
@@ -109,7 +109,7 @@ pub(crate) fn compute_redelegations_for_removal(
     let mut new_redelegations: Vec<Redelegation> = vec![];
     let mut native_available = delegation_to_remove.amount;
     for (i, d) in current_delegations.iter().enumerate() {
-        let remainder_for_validator: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
+        let remainder_for_validator: u128 =  u128::from( (i+1) as u128 <=remainder) as u128 ;
         let native_for_validator = native_per_validator + remainder_for_validator;
 
         let mut native_to_redelegate = if d.amount > native_for_validator {
@@ -160,7 +160,7 @@ pub(crate) fn compute_redelegations_for_rebalancing(
     let mut src_delegations: Vec<Delegation> = vec![];
     let mut dst_delegations: Vec<Delegation> = vec![];
     for (i, d) in current_delegations.iter().enumerate() {
-        let remainder_for_validator: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
+        let remainder_for_validator: u128 =  u128::from( (i+1) as u128 <=remainder) as u128 ;
         let native_for_validator = native_per_validator + remainder_for_validator;
             // eprintln!("{} amount ={} native={} min={}", d.validator, d.amount, native_for_validator, min_difference);
             match d.amount.cmp(&native_for_validator) {
@@ -235,7 +235,7 @@ pub(crate) fn reconcile_batches(batches: &mut [Batch], native_to_deduct: Uint128
     let remainder = native_to_deduct.u128() % batch_count;
 
     for (i, batch) in batches.iter_mut().enumerate() {
-        let remainder_for_batch: u128 = if (i + 1) as u128 <= remainder { 1 } else { 0 };
+        let remainder_for_batch: u128 =  u128::from( (i+1) as u128 <=remainder) as u128 ;
         let native_for_batch = native_per_batch + remainder_for_batch;
 
         batch.amount_unclaimed -= Uint128::new(native_for_batch);

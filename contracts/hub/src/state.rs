@@ -1,7 +1,7 @@
 use cosmwasm_std::{Addr, Coin, Decimal, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 
-use steak::hub::{Batch, FeeType, PendingBatch, UnbondRequest};
+use pfc_steak::hub::{Batch, FeeType, PendingBatch, UnbondRequest};
 
 use crate::types::BooleanKey;
 pub(crate) const BATCH_KEY_V101: &str = "previous_batches_101";

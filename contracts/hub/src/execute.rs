@@ -8,10 +8,10 @@ use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
 use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
-use steak::hub::{
+use pfc_steak::hub::{
     Batch, CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch, UnbondRequest,
 };
-use steak::DecimalCheckedOps;
+use pfc_steak::DecimalCheckedOps;
 
 use crate::helpers::{
     get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
@@ -86,7 +86,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
                 marketing: msg.marketing,
             })?,
             funds: vec![],
-            label: msg.label.unwrap_or("steak_token".to_string()),
+            label: msg.label.unwrap_or_else(||"steak_token".to_string()),
         }),
         REPLY_INSTANTIATE_TOKEN,
     )))
