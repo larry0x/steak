@@ -1,6 +1,6 @@
 [package]
 name = "pfc-steak"
-version = "2.1.8"
+version = "2.1.14"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 description = "Liquid steaking protocol for the cosmos"
@@ -10,8 +10,8 @@ repository = "https://github.com/PFC-developer/steak-contracts"
 
 [dependencies]
 cosmwasm-std = "1.0"
-cw20 = "0.13"
-cw20-base = { version = "0.13", features = ["library"] }
+cw20 = "1.0.0"
+cw20-base = { version = "1.0.0", features = ["library"] }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 

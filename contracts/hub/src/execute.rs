@@ -156,7 +156,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     let usteak_to_mint = compute_mint_amount(usteak_supply, amount_to_bond, &delegations);
     state.prev_denom.save(
         deps.storage,
-        &get_denom_balance(&deps.querier, env.contract.address, denom.clone())?,
+        &get_denom_balance(&deps.querier, env.contract.address.clone(), denom.clone())?,
     )?;
 
     let delegate_submsg = SubMsg::reply_on_success(
@@ -164,11 +164,21 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
         REPLY_REGISTER_RECEIVED_COINS,
     );
 
+    // mint doesn't notify.. so split a single mint into a mint&send
     let mint_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: steak_token.into(),
+        contract_addr: steak_token.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: receiver.to_string(),
+            recipient: env.contract.address.to_string(),
             amount: usteak_to_mint,
+        })?,
+        funds: vec![],
+    });
+    let send_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: steak_token.to_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Send {
+            contract: receiver.to_string(),
+            amount: usteak_to_mint,
+            msg: Default::default(),
         })?,
         funds: vec![],
     });
@@ -184,6 +194,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     Ok(Response::new()
         .add_submessage(delegate_submsg)
         .add_message(mint_msg)
+        .add_message(send_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))
 }

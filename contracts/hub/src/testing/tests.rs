@@ -275,15 +275,15 @@ fn bonding() {
     let res = execute(
         deps.as_mut(),
         mock_env(),
-        mock_info("user_1", &[Coin::new(1000000, "uxyz")]),
+        mock_info("user_1", &[Coin::new(1_000_000, "uxyz")]),
         ExecuteMsg::Bond { receiver: None },
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 2);
+    assert_eq!(res.messages.len(), 3);
     assert_eq!(
         res.messages[0],
-        SubMsg::reply_on_success(Delegation::new("alice", 1000000, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
+        SubMsg::reply_on_success(Delegation::new("alice", 1_000_000, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
     );
     assert_eq!(
         res.messages[1],
@@ -292,8 +292,25 @@ fn bonding() {
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "steak_token".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
-                    recipient: "user_1".to_string(),
-                    amount: Uint128::new(1000000)
+                    recipient: mock_env().contract.address.to_string(),
+                    amount: Uint128::new(1_000_000)
+                })
+                .unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never,
+        }
+    );    assert_eq!(
+        res.messages[2],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "steak_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: "user_1".to_string(),
+                    amount: Uint128::new(1000000),
+                    msg: Default::default()
                 })
                 .unwrap(),
                 funds: vec![]
@@ -323,7 +340,7 @@ fn bonding() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 2);
+    assert_eq!(res.messages.len(), 3);
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(Delegation::new("charlie", 12345, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
@@ -335,8 +352,25 @@ fn bonding() {
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "steak_token".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
-                    recipient: "user_3".to_string(),
+                    recipient: mock_env().contract.address.to_string(),
                     amount: Uint128::new(12043)
+                })
+                .unwrap(),
+                funds: vec![]
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never
+        }
+    ); assert_eq!(
+        res.messages[2],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "steak_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: "user_3".to_string(),
+                    amount: Uint128::new(12043),
+                    msg: Default::default(),
                 })
                 .unwrap(),
                 funds: vec![]

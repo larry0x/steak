@@ -58,9 +58,9 @@ checksum = "722e23542a15cea1f65d4a1419c4cfd7a26706c70871a13a04238ca3f40f1661"
 
 [[package]]
 name = "cosmwasm-crypto"
-version = "1.1.5"
+version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28376836c7677e1ea6d6656a754582e88b91e544ce22fae42956d5fe5549a958"
+checksum = "227315dc11f0bb22a273d0c43d3ba8ef52041c42cf959f09045388a89c57e661"
 dependencies = [
  "digest 0.10.5",
  "ed25519-zebra",
@@ -71,9 +71,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-derive"
-version = "1.1.5"
+version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb69f4f7a8a4bce68c8fbd3646238fede1e77056e4ea31c5b6bfc37b709eec3"
+checksum = "6fca30d51f7e5fbfa6440d8b10d7df0231bdf77e97fd3fe5d0cb79cc4822e50c"
 dependencies = [
  "syn",
 ]
@@ -104,9 +104,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-std"
-version = "1.1.5"
+version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46bf9157d060abbc55152aeadcace799d03dc630575daa66604079a1206cb060"
+checksum = "b13d5a84d15cf7be17dc249a21588cdb0f7ef308907c50ce2723316a7d79c3dc"
 dependencies = [
  "base64",
  "cosmwasm-crypto",
@@ -194,6 +194,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cw-storage-plus"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9b6f91c0b94481a3e9ef1ceb183c37d00764f8751e39b45fc09f4d9b970d469"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "cw-utils"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -214,6 +225,21 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw2 0.15.1",
+ "schemars",
+ "semver",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "cw-utils"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6a84c6c1c0acc3616398eba50783934bd6c964bad6974241eaee3460c8f5b26"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw2 0.16.0",
  "schemars",
  "semver",
  "serde",
@@ -246,6 +272,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "cw2"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91398113b806f4d2a8d5f8d05684704a20ffd5968bf87e3473e1973710b884ad"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus 0.16.0",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "cw2"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03bdf3747540b47bc1bdaf50ba3aa5e4276ab0c2ce73e8b367ebe260cc37ff9c"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus 0.16.0",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "cw20"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -271,6 +323,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cw20"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a4d69a9980e2295077c08fd3f797149658f357167f5898e27c00b9465fcbde"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-utils 0.16.0",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "cw20-base"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -282,6 +347,24 @@ dependencies = [
  "cw2 0.13.4",
  "cw20 0.13.4",
  "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "cw20-base"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f79314264ffc46b7658ee30caccc1540f14b9119568264bc02817f79c6f989a9"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus 0.16.0",
+ "cw-utils 0.16.0",
+ "cw2 1.0.0",
+ "cw20 1.0.0",
+ "schemars",
+ "semver",
  "serde",
  "thiserror",
 ]
@@ -486,9 +569,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "pfc-fee-split"
-version = "0.1.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e202f9af6235723bfdecb0682a4c95143f8a9842de7cf831a2c27f85733ed019"
+checksum = "e5e71d09b61b7c6babdf97bcc98cfef4f60d5e8f662b28d8a5ab42fde1b5c6db"
 dependencies = [
  "cosmwasm-std",
  "cw20 0.15.1",
@@ -498,24 +581,24 @@ dependencies = [
 
 [[package]]
 name = "pfc-steak"
-version = "2.1.8"
+version = "2.1.14"
 dependencies = [
  "cosmwasm-std",
- "cw20 0.13.4",
- "cw20-base",
+ "cw20 1.0.0",
+ "cw20-base 1.0.0",
  "schemars",
  "serde",
 ]
 
 [[package]]
 name = "pfc-steak-hub"
-version = "2.1.12"
+version = "2.1.14"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus 0.13.4",
- "cw2 0.13.4",
- "cw20 0.13.4",
- "cw20-base",
+ "cw2 1.0.0",
+ "cw20 1.0.0",
+ "cw20-base 1.0.0",
  "pfc-fee-split",
  "pfc-steak",
  "serde",
@@ -527,7 +610,7 @@ version = "2.0.1"
 dependencies = [
  "cosmwasm-std",
  "cw20 0.13.4",
- "cw20-base",
+ "cw20-base 0.13.4",
 ]
 
 [[package]]
