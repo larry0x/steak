@@ -1,18 +1,18 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event,
-    Order, Response, StdError, StdResult, SubMsg, SubMsgResponse, Uint128, WasmMsg,
+    Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, Order,
+    Response, StdError, StdResult, SubMsg, SubMsgResponse, to_binary, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
-use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
+use pfc_steak::DecimalCheckedOps;
 use pfc_steak::hub::{
     Batch, CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch, UnbondRequest,
 };
-use pfc_steak::DecimalCheckedOps;
 
+use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
 use crate::helpers::{
     get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
     query_delegations,
@@ -86,7 +86,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
                 marketing: msg.marketing,
             })?,
             funds: vec![],
-            label: msg.label.unwrap_or_else(||"steak_token".to_string()),
+            label: msg.label.unwrap_or_else(|| "steak_token".to_string()),
         }),
         REPLY_INSTANTIATE_TOKEN,
     )))
@@ -168,34 +168,51 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     let mint_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: receiver.to_string(),
+            recipient: env.contract.address.to_string(),//receiver.to_string(),
             amount: usteak_to_mint,
         })?,
         funds: vec![],
     });
-  /*
-    let send_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: steak_token.to_string(),
-        msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: receiver.to_string(),
-            amount: usteak_to_mint,
-            msg: Default::default(),
-        })?,
-        funds: vec![],
-    });
-*/
+
+    let contract_info = deps.querier.query_wasm_contract_info(receiver.to_string());
+
+    let send_transfer_msg: CosmosMsg = match contract_info {
+        Ok(_) => {
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: steak_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: receiver.to_string(),
+                    amount: usteak_to_mint,
+                    msg: Default::default(),
+                })?,
+                funds: vec![],
+            })
+        }
+        Err(_) => {
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: steak_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: receiver.to_string(),
+                    amount: usteak_to_mint,
+                    //  msg: Default::default(),
+                })?,
+                funds: vec![],
+            })
+        }
+    };
+
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
-        .add_attribute("receiver", receiver)
+        .add_attribute("steak_receiver", receiver)
         .add_attribute("denom_bonded", denom)
         .add_attribute("denom_amount", amount_to_bond)
         .add_attribute("usteak_minted", usteak_to_mint);
 
     Ok(Response::new()
         .add_submessage(delegate_submsg)
-        .add_message(mint_msg)
-     //   .add_message(send_msg)
+        .add_messages(vec![mint_msg, send_transfer_msg])
+        //   .add_message(send_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))
 }
@@ -298,13 +315,13 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         let send_msgs = match fee_type {
             FeeType::Wallet =>
                 vec![CosmosMsg::Bank(BankMsg::Send {
-                to_address: fee_account.to_string(),
-                amount: vec![Coin::new(fee_amount.into(), &denom)],
-            })],
+                    to_address: fee_account.to_string(),
+                    amount: vec![Coin::new(fee_amount.into(), &denom)],
+                })],
             FeeType::FeeSplit => {
-                let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit{ flush:false};
+                let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit { flush: false };
 
-               vec![msg .into_cosmos_msg(fee_account, vec![Coin::new(fee_amount.into(), &denom)])? ]
+                vec![msg.into_cosmos_msg(fee_account, vec![Coin::new(fee_amount.into(), &denom)])?]
             }
         };
         Ok(Response::new()
@@ -569,6 +586,7 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         .add_event(event)
         .add_attribute("action", "steakhub/reconcile"))
 }
+
 pub fn withdraw_unbonded_admin(
     deps: DepsMut,
     env: Env,
@@ -859,6 +877,7 @@ pub fn unpause_validator(
         .add_event(event)
         .add_attribute("action", "steakhub/unpause_validator"))
 }
+
 pub fn set_unbond_period(
     deps: DepsMut,
     _env: Env,
