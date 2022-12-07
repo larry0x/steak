@@ -280,7 +280,7 @@ fn bonding() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 3);
+    assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(Delegation::new("alice", 1_000_000, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
@@ -292,7 +292,7 @@ fn bonding() {
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "steak_token".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
-                    recipient: mock_env().contract.address.to_string(),
+                    recipient: "user_1".to_string(),
                     amount: Uint128::new(1_000_000)
                 })
                 .unwrap(),
@@ -301,7 +301,9 @@ fn bonding() {
             gas_limit: None,
             reply_on: ReplyOn::Never,
         }
-    );    assert_eq!(
+    );
+    /*
+    assert_eq!(
         res.messages[2],
         SubMsg {
             id: 0,
@@ -319,6 +321,8 @@ fn bonding() {
             reply_on: ReplyOn::Never,
         }
     );
+
+     */
 
     // Bond when there are existing delegations, and Luna:Steak exchange rate is >1
     // Previously user 1 delegated 1,000,000 uluna. We assume we have accumulated 2.5% yield at 1025000 staked
@@ -340,7 +344,7 @@ fn bonding() {
     )
     .unwrap();
 
-    assert_eq!(res.messages.len(), 3);
+    assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages[0],
         SubMsg::reply_on_success(Delegation::new("charlie", 12345, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
@@ -352,7 +356,7 @@ fn bonding() {
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "steak_token".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
-                    recipient: mock_env().contract.address.to_string(),
+                    recipient: "user_3".to_string(),
                     amount: Uint128::new(12043)
                 })
                 .unwrap(),
@@ -361,7 +365,9 @@ fn bonding() {
             gas_limit: None,
             reply_on: ReplyOn::Never
         }
-    ); assert_eq!(
+    );
+    /*
+    assert_eq!(
         res.messages[2],
         SubMsg {
             id: 0,
@@ -379,7 +385,7 @@ fn bonding() {
             reply_on: ReplyOn::Never
         }
     );
-
+*/
     // Check the state after bonding
     deps.querier.set_staking_delegations(&[
         Delegation::new("alice", 341667, "uxyz"),

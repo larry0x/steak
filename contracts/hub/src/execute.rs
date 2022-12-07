@@ -164,15 +164,16 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
         REPLY_REGISTER_RECEIVED_COINS,
     );
 
-    // mint doesn't notify.. so split a single mint into a mint&send
+
     let mint_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: env.contract.address.to_string(),
+            recipient: receiver.to_string(),
             amount: usteak_to_mint,
         })?,
         funds: vec![],
     });
+  /*
     let send_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Send {
@@ -182,7 +183,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
         })?,
         funds: vec![],
     });
-
+*/
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
@@ -194,7 +195,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
     Ok(Response::new()
         .add_submessage(delegate_submsg)
         .add_message(mint_msg)
-        .add_message(send_msg)
+     //   .add_message(send_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))
 }
