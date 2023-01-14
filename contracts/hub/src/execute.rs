@@ -667,7 +667,7 @@ pub fn withdraw_unbonded(
 
     let refund_msg = CosmosMsg::Bank(BankMsg::Send {
         to_address: receiver.clone().into(),
-        amount: vec![Coin::new(total_native_to_refund.u128(), &denom)],
+        amount: vec![Coin::new(total_native_to_refund.u128(), denom)],
     });
 
     let event = Event::new("steakhub/unbonded_withdrawn")
