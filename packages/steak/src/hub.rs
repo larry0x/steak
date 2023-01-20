@@ -167,8 +167,9 @@ pub struct ConfigResponse {
     pub fee_rate: Decimal,
     /// Max Fee "1.00 = 100%"
     pub max_fee_rate: Decimal,
-    /// Initial set of validators who will receive the delegations
+    /// Set of validators who will receive the delegations
     pub validators: Vec<String>,
+    pub paused_validators: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug,Eq, PartialEq, JsonSchema)]

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 
 use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdResult, Uint128};
@@ -17,6 +17,15 @@ const DEFAULT_LIMIT: u32 = 10;
 
 pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
+    let mut validators: BTreeSet<String> = BTreeSet::from_iter(state.validators.load(deps.storage)?);
+    let validators_active: BTreeSet<String> = BTreeSet::from_iter(state.validators_active.load(deps.storage)?);
+
+    for v in validators_active.iter() {
+        validators.remove(v);
+    }
+    let validator_active_vec: Vec<String> = Vec::from_iter(validators_active.into_iter());
+    let paused_validators: Vec<String> = Vec::from_iter(validators.into_iter());
+
     Ok(ConfigResponse {
         owner: state.owner.load(deps.storage)?.into(),
         new_owner: state
@@ -31,7 +40,8 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         fee_account: state.fee_account.load(deps.storage)?.to_string(),
         fee_rate: state.fee_rate.load(deps.storage)?,
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,
-        validators: state.validators.load(deps.storage)?,
+        validators: validator_active_vec,
+        paused_validators,
     })
 }
 
@@ -42,8 +52,8 @@ pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let steak_token = state.steak_token.load(deps.storage)?;
     let total_usteak = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    let mut validators:HashSet<String> = HashSet::from_iter(state.validators.load(deps.storage)?);
-    let validators_active:HashSet<String> = HashSet::from_iter(state.validators_active.load(deps.storage)?);
+    let mut validators: HashSet<String> = HashSet::from_iter(state.validators.load(deps.storage)?);
+    let validators_active: HashSet<String> = HashSet::from_iter(state.validators_active.load(deps.storage)?);
     validators.extend(validators_active);
     let validator_vec: Vec<String> = Vec::from_iter(validators.into_iter());
 

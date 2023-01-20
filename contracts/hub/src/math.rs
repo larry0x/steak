@@ -17,8 +17,11 @@ pub(crate) fn compute_mint_amount(
     usteak_supply: Uint128,
     native_to_bond: Uint128,
     current_delegations: &[Delegation],
+    inactive_delegations: &[Delegation],
 ) -> Uint128 {
-    let native_bonded: u128 = current_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded_c: u128 = current_delegations.iter().map(|d| d.amount).sum() ;
+    let native_bonded_inactive: u128 =  inactive_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded = native_bonded_c+ native_bonded_inactive;
     if native_bonded == 0 {
         native_to_bond
     } else {
@@ -34,8 +37,12 @@ pub(crate) fn compute_unbond_amount(
     usteak_supply: Uint128,
     usteak_to_burn: Uint128,
     current_delegations: &[Delegation],
+    active_delegations: &[Delegation],
+
 ) -> Uint128 {
-    let native_bonded: u128 = current_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded_c: u128 = current_delegations.iter().map(|d| d.amount).sum() ;
+    let native_bonded_a: u128 = active_delegations.iter().map(|d| d.amount).sum() ;
+    let native_bonded = native_bonded_c+ native_bonded_a;
     Uint128::new(native_bonded).multiply_ratio(usteak_to_burn, usteak_supply)
 }
 

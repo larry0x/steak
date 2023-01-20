@@ -217,7 +217,8 @@ fn proper_instantiation() {
                 "alice".to_string(),
                 "bob".to_string(),
                 "charlie".to_string()
-            ]
+            ],
+            paused_validators: vec![]
         }
     );
 
@@ -261,7 +262,8 @@ fn proper_instantiation() {
                 "alice".to_string(),
                 "bob".to_string(),
                 "charlie".to_string()
-            ]
+            ],
+            paused_validators: vec![]
         }
     );
 }
@@ -1558,7 +1560,8 @@ fn splitting_fees() {
                 "alice".to_string(),
                 "bob".to_string(),
                 "charlie".to_string()
-            ]
+            ],
+            paused_validators: vec![]
         }
     );
 
@@ -1591,7 +1594,8 @@ fn splitting_fees() {
                 "alice".to_string(),
                 "bob".to_string(),
                 "charlie".to_string()
-            ]
+            ],
+            paused_validators: vec![]
         }
     );
 }
