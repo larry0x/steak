@@ -19,9 +19,9 @@ pub(crate) fn compute_mint_amount(
     current_delegations: &[Delegation],
     inactive_delegations: &[Delegation],
 ) -> Uint128 {
-    let native_bonded_c: u128 = current_delegations.iter().map(|d| d.amount).sum() ;
-    let native_bonded_inactive: u128 =  inactive_delegations.iter().map(|d| d.amount).sum();
-    let native_bonded = native_bonded_c+ native_bonded_inactive;
+    let native_bonded_c: u128 = current_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded_inactive: u128 = inactive_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded = native_bonded_c + native_bonded_inactive;
     if native_bonded == 0 {
         native_to_bond
     } else {
@@ -38,11 +38,10 @@ pub(crate) fn compute_unbond_amount(
     usteak_to_burn: Uint128,
     current_delegations: &[Delegation],
     active_delegations: &[Delegation],
-
 ) -> Uint128 {
-    let native_bonded_c: u128 = current_delegations.iter().map(|d| d.amount).sum() ;
-    let native_bonded_a: u128 = active_delegations.iter().map(|d| d.amount).sum() ;
-    let native_bonded = native_bonded_c+ native_bonded_a;
+    let native_bonded_c: u128 = current_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded_a: u128 = active_delegations.iter().map(|d| d.amount).sum();
+    let native_bonded = native_bonded_c + native_bonded_a;
     Uint128::new(native_bonded).multiply_ratio(usteak_to_burn, usteak_supply)
 }
 
@@ -237,12 +236,33 @@ pub(crate) fn reconcile_batches(batches: &mut [Batch], native_to_deduct: Uint128
     let batch_count = batches.len() as u128;
     let native_per_batch = native_to_deduct.u128() / batch_count;
     let remainder = native_to_deduct.u128() % batch_count;
-
+    let mut remaining_underflow = Uint128::zero();
+    // distribute the underflows uniformly accross non-underflowing batches
     for (i, batch) in batches.iter_mut().enumerate() {
         let remainder_for_batch: u128 = u128::from((i + 1) as u128 <= remainder);
-        let native_for_batch = native_per_batch + remainder_for_batch;
+        let native_for_batch = Uint128::new(native_per_batch + remainder_for_batch);
 
-        batch.amount_unclaimed -= Uint128::new(native_for_batch);
+        if batch.amount_unclaimed < native_for_batch && batch_count > 1 {
+            remaining_underflow += native_for_batch - batch.amount_unclaimed;
+        }
+        batch.amount_unclaimed.saturating_sub(native_for_batch);
         batch.reconciled = true;
+    }
+    if !remaining_underflow.is_zero() {
+        // the remaining underflow will be applied by oldest batch first.
+        for (_, batch) in batches.iter_mut().enumerate() {
+            if !batch.amount_unclaimed.is_zero() && !remaining_underflow.is_zero() {
+                if batch.amount_unclaimed >= remaining_underflow {
+                    batch.amount_unclaimed -= remaining_underflow;
+                    remaining_underflow = Uint128::zero()
+                } else {
+                    remaining_underflow -= batch.amount_unclaimed;
+                    batch.amount_unclaimed = Uint128::zero();
+                }
+            }
+        }
+    }
+    if !remaining_underflow.is_zero() {
+        // no way to reconcile right now, need to top up some funds.
     }
 }

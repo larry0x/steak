@@ -1,8 +1,8 @@
 {
   "cw20_code_id": 801,
   "owner": "stars1kdtdg0lvy8asxn8clnjfpusuvf93zuknxrad8g",
-  "name": "bStars Token",
-  "symbol": "bStars",
+  "name": "bSTARS Token",
+  "symbol": "bSTARS",
   "decimals": 6,
   "epoch_period": 259200,
   "unbond_period": 1209600,
@@ -16,10 +16,10 @@
   "fee_amount": "0.10",
   "max_fee_amount": "0.10",
   "fee_account_type": "FeeSplit",
-  "label": "boneStars",
+  "label": "boneSTARS",
   "marketing": {
     "project": "https://backbonelabs.io",
-    "description": "The GraveDigger is the Liquid Staking Product of BackBone Labs. It's liquid staking derivative (LSD) is boneStars.",
+    "description": "The GraveDigger is the Liquid Staking Product of BackBone Labs. It's liquid staking derivative (LSD) is boneSTARS.",
     "marketing": "stars1kdtdg0lvy8asxn8clnjfpusuvf93zuknxrad8g"
   }
 }

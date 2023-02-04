@@ -2044,3 +2044,144 @@ fn receiving_funds() {
     let amount = parse_received_fund(&[Coin::new(69420, "uxyz")], "uxyz").unwrap();
     assert_eq!(amount, Uint128::new(69420));
 }
+
+
+#[test]
+fn reconciling_underflow() {
+    let mut deps = setup_test();
+    let state = State::default();
+    let previous_batches = vec![
+        Batch {
+            id: 1,
+            reconciled: true,
+            total_shares: Uint128::new(92876),
+            amount_unclaimed: Uint128::new(95197), // 1.025 Token per Stake
+            est_unbond_end_time: 10000,
+        },
+        Batch {
+            id: 2,
+            reconciled: false,
+            total_shares: Uint128::new(1345),
+            amount_unclaimed: Uint128::new(1385), // 1.030 Token per Stake
+            est_unbond_end_time: 20000,
+        },
+        Batch {
+            id: 3,
+            reconciled: false,
+            total_shares: Uint128::new(1456),
+            amount_unclaimed: Uint128::new(1506), // 1.035 Token per Stake
+            est_unbond_end_time: 30000,
+        },
+        Batch {
+            id: 4,
+            reconciled: false,
+            total_shares: Uint128::new(1),
+            amount_unclaimed: Uint128::new(1),
+            est_unbond_end_time: 30001,
+        },
+    ];
+    for previous_batch in &previous_batches {
+        state
+            .previous_batches
+            .save(deps.as_mut().storage, previous_batch.id, previous_batch)
+            .unwrap();
+    }
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(10000, "uatom"),
+                Coin::new(234, "ukrw"),
+                Coin::new(345, "uusd"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
+            ],
+        )
+        .unwrap();
+    deps.querier.set_bank_balances(&[
+        Coin::new(12345, "uatom"),
+        Coin::new(234, "ukrw"),
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ]);
+    execute(
+        deps.as_mut(),
+        mock_env_at_timestamp(35000),
+        mock_info("worker", &[]),
+        ExecuteMsg::Reconcile {},
+    )
+        .unwrap();
+}
+
+#[test]
+fn reconciling_underflow_second() {
+    let mut deps = setup_test();
+    let state = State::default();
+    let previous_batches = vec![
+        Batch {
+            id: 1,
+            reconciled: true,
+            total_shares: Uint128::new(92876),
+            amount_unclaimed: Uint128::new(95197), // 1.025 Token per Stake
+            est_unbond_end_time: 10000,
+        },
+        Batch {
+            id: 2,
+            reconciled: false,
+            total_shares: Uint128::new(1345),
+            amount_unclaimed: Uint128::new(1385), // 1.030 Token per Stake
+            est_unbond_end_time: 20000,
+        },
+        Batch {
+            id: 3,
+            reconciled: false,
+            total_shares: Uint128::new(176),
+            amount_unclaimed: Uint128::new(183), // 1.035 Token per Stake
+            est_unbond_end_time: 30000,
+        },
+        Batch {
+            id: 4,
+            reconciled: false,
+            total_shares: Uint128::new(1),
+            amount_unclaimed: Uint128::new(1),
+            est_unbond_end_time: 30001,
+        },
+    ];
+    for previous_batch in &previous_batches {
+        state
+            .previous_batches
+            .save(deps.as_mut().storage, previous_batch.id, previous_batch)
+            .unwrap();
+    }
+    state
+        .unlocked_coins
+        .save(
+            deps.as_mut().storage,
+            &vec![
+                Coin::new(10000, "uatom"),
+                Coin::new(234, "ukrw"),
+                Coin::new(345, "uusd"),
+                Coin::new(
+                    69420,
+                    "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B",
+                ),
+            ],
+        )
+        .unwrap();
+    deps.querier.set_bank_balances(&[
+        Coin::new(12345 - 1323, "uatom"),
+        Coin::new(234, "ukrw"),
+        Coin::new(345, "uusd"),
+        Coin::new(69420, "ibc/0471F1C4E7AFD3F07702BEF6DC365268D64570F7C1FDC98EA6098DD6DE59817B"),
+    ]);
+    execute(
+        deps.as_mut(),
+        mock_env_at_timestamp(35000),
+        mock_info("worker", &[]),
+        ExecuteMsg::Reconcile {},
+    )
+        .unwrap();
+}
