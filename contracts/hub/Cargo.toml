@@ -1,6 +1,6 @@
 [package]
-name = "steak-hub"
-version = "2.0.0"
+name = "pfc-steak-hub"
+version = "2.1.17"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
@@ -14,10 +14,12 @@ backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
 cosmwasm-std = { version = "1.0", features = ["staking"] }
-cw20 = "0.13"
-cw20-base = { version = "0.13", features = ["library"] }
+cw2= "1.0.0"
+cw20 = "1.0.0"
+cw20-base = { version = "1.0.0", features = ["library"] }
 cw-storage-plus = "0.13"
-steak = { path = "../../packages/steak" }
-
-[dev-dependencies]
+pfc-steak = { path = "../../packages/steak" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+pfc-fee-split = "0.2.3"
+#[dev-dependencies]
+#serde = { version = "1.0.103", default-features = false, features = ["derive"] }

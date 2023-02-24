@@ -35,4 +35,5 @@ scripts/data/
 scripts/keys/
 
 # Misc notes
-notes.txt
+/notes*.txt
+/notes

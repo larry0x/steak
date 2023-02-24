@@ -1,0 +1,25 @@
+{
+  "cw20_code_id": 801,
+  "owner": "stars1kdtdg0lvy8asxn8clnjfpusuvf93zuknxrad8g",
+  "name": "bSTARS Token",
+  "symbol": "bSTARS",
+  "decimals": 6,
+  "epoch_period": 259200,
+  "unbond_period": 1209600,
+  "validators": [
+    "starsvaloper1jt9w26mpxxjsk63mvd4m2ynj0af09cslura0ec",
+    "starsvaloper12xlxetf292m9llh5y9gwv92wkqwwagxulwl5l0",
+    "starsvaloper1ck4n6fq2er7g7380pdzqhxjlk6tevyzp7389vm"
+  ],
+  "denom": "ustars",
+  "fee_account": "stars1xek55lr3hzchhdp5z0t0xgzhcf0362vz54teqgne50f0ysgn9yrshdhd0z",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "FeeSplit",
+  "label": "boneSTARS",
+  "marketing": {
+    "project": "https://backbonelabs.io",
+    "description": "The GraveDigger is the Liquid Staking Product of BackBone Labs. It's liquid staking derivative (LSD) is boneSTARS.",
+    "marketing": "stars1kdtdg0lvy8asxn8clnjfpusuvf93zuknxrad8g"
+  }
+}

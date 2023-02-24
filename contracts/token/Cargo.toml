@@ -1,6 +1,6 @@
 [package]
-name = "steak-token"
-version = "2.0.0"
+name = "pfc-steak-token"
+version = "2.0.1"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"

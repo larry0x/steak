@@ -15,12 +15,12 @@ A previous version ([v1.0.0-rc0](https://github.com/st4k3h0us3/steak-contracts/r
 
 ### Mainnet (phoenix-1)
 
-| Contract            | Address   |
-| ------------------- | --------- |
-| Steak Hub           | [`tbd`]() |
-| Steak Token         | [`tbd`]() |
-| STEAK-LUNA Pair     | [`tbd`]() |
-| STEAK-LUNA LP Token | [`tbd`]() |
+| Contract            | Address                                                                                                                                                                           |
+| ------------------- |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Steak Hub           | [`terra12e4v50xl33fnwkzltz9vu565snlmx65vdrk8e2644km09myewr8q538psc`](https://finder.terra.money/mainnet/address/terra12e4v50xl33fnwkzltz9vu565snlmx65vdrk8e2644km09myewr8q538psc) |
+| Steak Token         | [`terra1xumzh893lfa7ak5qvpwmnle5m5xp47t3suwwa9s0ydqa8d8s5faqn6x7al`](https://finder.terra.money/mainnet/address/terra1xumzh893lfa7ak5qvpwmnle5m5xp47t3suwwa9s0ydqa8d8s5faqn6x7al) |
+| STEAK-LUNA Pair     | [`terra1jynmf6gteg4rd03ztldan5j2dp78su4tc3hfvkve8dl068c2yppsk5uszc`](https://finder.terra.money/mainnet/address/terra1jynmf6gteg4rd03ztldan5j2dp78su4tc3hfvkve8dl068c2yppsk5uszc)                                                                                                           |
+| STEAK-LUNA LP Token | [`tbd`]()                                                                                                                                                                         |
 
 ### Testnet (pisco-1)
 
