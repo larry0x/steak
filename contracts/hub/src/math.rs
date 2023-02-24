@@ -1,4 +1,5 @@
 use std::{cmp, cmp::Ordering};
+use std::collections::HashMap;
 
 use cosmwasm_std::Uint128;
 
@@ -236,33 +237,57 @@ pub(crate) fn reconcile_batches(batches: &mut [Batch], native_to_deduct: Uint128
     let batch_count = batches.len() as u128;
     let native_per_batch = native_to_deduct.u128() / batch_count;
     let remainder = native_to_deduct.u128() % batch_count;
-    let mut remaining_underflow = Uint128::zero();
+    //let mut remaining_underflow = Uint128::zero();
+    let mut underflows: HashMap<usize, Uint128> = HashMap::default();
+
     // distribute the underflows uniformly accross non-underflowing batches
     for (i, batch) in batches.iter_mut().enumerate() {
         let remainder_for_batch: u128 = u128::from((i + 1) as u128 <= remainder);
         let native_for_batch = Uint128::new(native_per_batch + remainder_for_batch);
 
         if batch.amount_unclaimed < native_for_batch && batch_count > 1 {
-            remaining_underflow += native_for_batch - batch.amount_unclaimed;
+            //    remaining_underflow += native_for_batch - batch.amount_unclaimed;
+            underflows.insert(i, native_for_batch - batch.amount_unclaimed);
         }
-        batch.amount_unclaimed.saturating_sub(native_for_batch);
+        batch.amount_unclaimed = batch.amount_unclaimed.saturating_sub(native_for_batch);
+
         batch.reconciled = true;
     }
-    if !remaining_underflow.is_zero() {
+    if !underflows.is_empty() {
+        let batch_count: u128 = batch_count - (underflows.len() as u128);
+        let to_deduct: Uint128 = underflows.iter().map(|v| v.1).sum();
+        let native_per_batch = to_deduct.u128() / batch_count;
+        let remainder = to_deduct.u128() % batch_count;
+        let mut remaining_underflow = Uint128::zero();
         // the remaining underflow will be applied by oldest batch first.
-        for (_, batch) in batches.iter_mut().enumerate() {
-            if !batch.amount_unclaimed.is_zero() && !remaining_underflow.is_zero() {
-                if batch.amount_unclaimed >= remaining_underflow {
-                    batch.amount_unclaimed -= remaining_underflow;
-                    remaining_underflow = Uint128::zero()
-                } else {
-                    remaining_underflow -= batch.amount_unclaimed;
-                    batch.amount_unclaimed = Uint128::zero();
+        for (i, batch) in batches.iter_mut().enumerate() {
+            if !batch.amount_unclaimed.is_zero() {
+                let remainder_for_batch: u128 = u128::from((i + 1) as u128 <= remainder);
+                let native_for_batch = Uint128::new(native_per_batch + remainder_for_batch);
+                if batch.amount_unclaimed < native_for_batch && batch_count > 1 {
+                    remaining_underflow += native_for_batch - batch.amount_unclaimed;
                 }
+                batch.amount_unclaimed = batch.amount_unclaimed.saturating_sub(native_for_batch);
             }
         }
-    }
-    if !remaining_underflow.is_zero() {
-        // no way to reconcile right now, need to top up some funds.
+
+        if !remaining_underflow.is_zero() {
+            // the remaining underflow will be applied by oldest batch first.
+            for (_, batch) in batches.iter_mut().enumerate() {
+                if !batch.amount_unclaimed.is_zero() && !remaining_underflow.is_zero() {
+                    if batch.amount_unclaimed >= remaining_underflow {
+                        batch.amount_unclaimed -= remaining_underflow;
+                        remaining_underflow = Uint128::zero()
+                    } else {
+                        remaining_underflow -= batch.amount_unclaimed;
+                        batch.amount_unclaimed = Uint128::zero();
+                    }
+                }
+            }
+
+            if !remaining_underflow.is_zero() {
+                // no way to reconcile right now, need to top up some funds.
+            }
+        }
     }
 }
