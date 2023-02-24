@@ -1,28 +1,36 @@
 use std::collections::{BTreeSet, HashSet};
 use std::iter::FromIterator;
 
-use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdResult, Uint128};
-use cw_storage_plus::{Bound, CwIntKey};
+use cosmwasm_std::{ Decimal, Deps, Env, Order, StdResult, Uint128};
+use cw_storage_plus::Bound;
 
 use pfc_steak::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem,
 };
 
-use crate::helpers::{query_cw20_total_supply, query_delegations};
-use crate::state::State;
+use crate::helpers::query_delegations;
+use crate::state;
+use crate::state::{State, VALIDATORS, VALIDATORS_ACTIVE};
 
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 
 pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
-    let mut validators: BTreeSet<String> = BTreeSet::from_iter(state.validators.load(deps.storage)?);
-    let validators_active: BTreeSet<String> = BTreeSet::from_iter(state.validators_active.load(deps.storage)?);
-
-    for v in validators_active.iter() {
-        validators.remove(v);
+    let mut validators: BTreeSet<String> = BTreeSet::new();
+    for res in VALIDATORS.items(deps.storage, None, None, Order::Ascending) {
+        validators.insert(res?);
     }
+
+    let mut validators_active: BTreeSet<String> = BTreeSet::new();
+    for res in VALIDATORS_ACTIVE.items(deps.storage, None, None, Order::Ascending) {
+        let validator = res?;
+        validators.remove(&validator);
+        validators_active.insert(validator);
+    }
+
+
     let validator_active_vec: Vec<String> = Vec::from_iter(validators_active.into_iter());
     let paused_validators: Vec<String> = Vec::from_iter(validators.into_iter());
 
@@ -32,7 +40,7 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
             .new_owner
             .may_load(deps.storage)?
             .map(|addr| addr.into()),
-        steak_token: state.steak_token.load(deps.storage)?.into(),
+        steak_token: state.steak_denom.load(deps.storage)?,
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
         denom: state.denom.load(deps.storage)?,
@@ -42,22 +50,24 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,
         validators: validator_active_vec,
         paused_validators,
-        dust_collector:None
+        dust_collector: state.dust_collector.load(deps.storage)?.map( |a| a.to_string())
     })
 }
 
 pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
-
     let denom = state.denom.load(deps.storage)?;
-    let steak_token = state.steak_token.load(deps.storage)?;
-    let total_usteak = query_cw20_total_supply(&deps.querier, &steak_token)?;
-
-    let mut validators: HashSet<String> = HashSet::from_iter(state.validators.load(deps.storage)?);
-    let validators_active: HashSet<String> = HashSet::from_iter(state.validators_active.load(deps.storage)?);
+    let total_usteak = state.steak_minted.load(deps.storage)?;// query_cw20_total_supply(&deps.querier, &steak_token)?;
+    let mut validators: HashSet<String> = Default::default();
+    for res in VALIDATORS.items(deps.storage, None, None, Order::Ascending) {
+        validators.insert(res?);
+    }
+    let mut validators_active: HashSet<String> = Default::default();
+    for res in VALIDATORS_ACTIVE.items(deps.storage, None, None, Order::Ascending) {
+        validators_active.insert(res?);
+    }
     validators.extend(validators_active);
     let validator_vec: Vec<String> = Vec::from_iter(validators.into_iter());
-
     let delegations = query_delegations(&deps.querier, &validator_vec, &env.contract.address, &denom)?;
     let total_native: u128 = delegations.iter().map(|d| d.amount).sum();
 
@@ -77,12 +87,12 @@ pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
 
 pub fn pending_batch(deps: Deps) -> StdResult<PendingBatch> {
     let state = State::default();
+
     state.pending_batch.load(deps.storage)
 }
 
 pub fn previous_batch(deps: Deps, id: u64) -> StdResult<Batch> {
-    let state = State::default();
-    state.previous_batches.load(deps.storage, id)
+    state::previous_batches().load(deps.storage, id)
 }
 
 pub fn previous_batches(
@@ -90,13 +100,10 @@ pub fn previous_batches(
     start_after: Option<u64>,
     limit: Option<u32>,
 ) -> StdResult<Vec<Batch>> {
-    let state = State::default();
-
     let start = start_after.map(Bound::exclusive);
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
-    state
-        .previous_batches
+    state::previous_batches()
         .range(deps.storage, start, None, Order::Ascending)
         .take(limit)
         .map(|item| {
@@ -112,20 +119,19 @@ pub fn unbond_requests_by_batch(
     start_after: Option<String>,
     limit: Option<u32>,
 ) -> StdResult<Vec<UnbondRequestsByBatchResponseItem>> {
-    let state = State::default();
-
-    let addr: Addr;
+    //let addr: Addr;
+    let addr_clone;
     let start = match start_after {
         None => None,
         Some(addr_str) => {
-            addr = deps.api.addr_validate(&addr_str)?;
-            Some(Bound::exclusive(&addr))
+            deps.api.addr_validate(&addr_str)?;
+            addr_clone = addr_str;
+            Some(Bound::exclusive(addr_clone.as_str()))
         }
     };
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
-    state
-        .unbond_requests
+    state::unbond_requests()
         .prefix(id)
         .range(deps.storage, start, None, Order::Ascending)
         .take(limit)
@@ -142,25 +148,37 @@ pub fn unbond_requests_by_user(
     start_after: Option<u64>,
     limit: Option<u32>,
 ) -> StdResult<Vec<UnbondRequestsByUserResponseItem>> {
-    let state = State::default();
+    let user_addr = deps.api.addr_validate(&user)?;
 
-    let start = start_after.map(|id| {
-        let mut key = vec![0u8, 8u8]; // when `u64` are used as keys, they are prefixed with the length, which is [0, 8]
-        key.extend(id.to_cw_bytes());
-        Bound::exclusive(key)
-    });
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    if let Some(start_id) = start_after {
+        state::unbond_requests()
+            .idx
+            .user
+            .prefix(user_addr.to_string())
+            .range(deps.storage, None, None, Order::Ascending)
+            .filter(|r| {
+                let x = r.as_ref().unwrap();
 
-    state
-        .unbond_requests
-        .idx
-        .user
-        .prefix(user)
-        .range(deps.storage, start, None, Order::Ascending)
-        .take(limit)
-        .map(|item| {
-            let (_, v) = item?;
-            Ok(v.into())
-        })
-        .collect()
+                x.1.id > start_id
+            })
+            .take(limit)
+            .map(|item| {
+                let (_, v) = item?;
+                Ok(v.into())
+            })
+            .collect()
+    } else {
+        state::unbond_requests()
+            .idx
+            .user
+            .prefix(user_addr.to_string())
+            .range(deps.storage, None, None, Order::Ascending)
+            .take(limit)
+            .map(|item| {
+                let (_, v) = item?;
+                Ok(v.into())
+            })
+            .collect()
+    }
 }

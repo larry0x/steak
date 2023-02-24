@@ -1,0 +1,33 @@
+[package]
+name = "pfc-steak-hub-tf"
+version = "3.0.1"
+authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
+edition = "2018"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/pfc-developer/steak-contracts"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+backtraces = ["cosmwasm-std/backtraces"]
+
+[dependencies]
+cosmwasm-std = { version = "1.2.1", features=["iterator","stargate","cosmwasm_1_1","staking"]}
+
+cw2= "1.0.1"
+#cw20 = "1.0.0"
+#cw20-base = { version = "1.0.0", features = ["library"] }
+cw-storage-plus = "1.0.1"
+cw-ownable = "0.5.0"
+cw-item-set = "0.7.0"
+prost = {version = "0.11.0", default-features = false, features = ["prost-derive"]}
+prost-types = {version = "0.11.1", default-features = false}
+schemars = "0.8.11"
+pfc-steak = { path = "../../packages/steak" }
+pfc-dust-collector = { path = "../../packages/dust_collector" }
+serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+pfc-fee-split = "0.2.3"
+kujira = "0.7.25"
+osmosis-std-derive="0.13.2"
+protobuf = { version = "3.1.0", features = ["with-bytes"] }

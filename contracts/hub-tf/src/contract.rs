@@ -1,19 +1,18 @@
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply,
+    entry_point,  to_binary, Binary,  Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult,
 };
-use cw20::Cw20ReceiveMsg;
 
-use pfc_steak::hub::{CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
+use pfc_steak::hub::{CallbackMsg,  MigrateMsg, QueryMsg};
 
-use crate::helpers::{get_denom_balance, unwrap_reply};
-use crate::migrations::ConfigV100;
-use crate::state::State;
+//use crate::helpers::{ unwrap_reply};
+
 use crate::{execute, queries};
 use cw2::{get_contract_version, set_contract_version, ContractVersion};
+use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg};
 
 /// Contract name that is used for migration.
-pub const CONTRACT_NAME: &str = "steak-hub";
+pub const CONTRACT_NAME: &str = "steak-hub-tf";
 /// Contract version that is used for migration.
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPLY_INSTANTIATE_TOKEN: u64 = 1;
@@ -25,7 +24,7 @@ pub fn instantiate(
     env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
-) -> StdResult<Response> {
+) -> Result<Response, StdError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     execute::instantiate(deps, env, msg)
 }
@@ -34,8 +33,8 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let api = deps.api;
     match msg {
-        ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
-        ExecuteMsg::Bond { receiver } => execute::bond(
+
+        ExecuteMsg::Bond { receiver,exec_msg } => execute::bond(
             deps,
             env,
             receiver
@@ -43,6 +42,15 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 .transpose()?
                 .unwrap_or(info.sender),
             info.funds,
+            exec_msg
+        ),  ExecuteMsg::Unbond { receiver} => execute::queue_unbond(
+            deps,
+            env,
+            receiver
+                .map(|s| api.addr_validate(&s))
+                .transpose()?
+                .unwrap_or(info.sender),info.funds
+
         ),
         ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
             deps,
@@ -86,40 +94,13 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             execute::unpause_validator(deps, env, info.sender, validator)
         }
         ExecuteMsg::SetUnbondPeriod { unbond_period } =>  execute::set_unbond_period(deps, env, info.sender, unbond_period),
+
         ExecuteMsg::SetDustCollector { dust_collector } => {execute::set_dust_collector(deps,env,info.sender,dust_collector)}
         ExecuteMsg::CollectDust {  } => { execute::collect_dust(deps,env)}
         ExecuteMsg::ReturnDenom {  } => {execute::return_denom(deps,env,info.funds)}
     }
 }
 
-fn receive(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    cw20_msg: Cw20ReceiveMsg,
-) -> StdResult<Response> {
-    let api = deps.api;
-    match from_binary(&cw20_msg.msg)? {
-        ReceiveMsg::QueueUnbond { receiver } => {
-            let state = State::default();
-
-            let steak_token = state.steak_token.load(deps.storage)?;
-            if info.sender != steak_token {
-                return Err(StdError::generic_err(format!(
-                    "expecting Steak token, received {}",
-                    info.sender
-                )));
-            }
-
-            execute::queue_unbond(
-                deps,
-                env,
-                api.addr_validate(&receiver.unwrap_or(cw20_msg.sender))?,
-                cw20_msg.amount,
-            )
-        }
-    }
-}
 
 fn callback(
     deps: DepsMut,
@@ -137,7 +118,7 @@ fn callback(
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
 }
-
+/*
 #[entry_point]
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
@@ -151,7 +132,7 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
         ))),
     }
 }
-
+*/
 #[entry_point]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -186,59 +167,22 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[entry_point]
-pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     let contract_version = match get_contract_version(deps.storage) {
         Ok(version) => version,
         Err(_) => ContractVersion {
-            contract: "steak-hub".to_string(),
+            contract: "steak-hub-tf".to_string(),
             version: "0".to_string(),
         },
     };
     match contract_version.contract.as_ref() {
         #[allow(clippy::single_match)]
-        "steak-hub" => match contract_version.version.as_ref() {
+        "steak-hub-tf" => match contract_version.version.as_ref() {
             #[allow(clippy::single_match)]
             "0" => {
-                let state = State::default();
-                let owner = state.owner.load(deps.storage)?;
-                state.denom.save(deps.storage, &"uluna".to_string())?;
-                state.fee_account.save(deps.storage, &owner)?;
-                state.max_fee_rate.save(deps.storage, &Decimal::zero())?;
-                state.fee_rate.save(deps.storage, &Decimal::zero())?;
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                ConfigV100::upgrade_stores(deps.storage,&deps.querier, env.contract.address)?;
-                state.dust_collector.save(deps.storage,&None)?;
-            }
-            "2.1.4" => {
-                let state = State::default();
-                ConfigV100::upgrade_stores(deps.storage, &deps.querier,env.contract.address)?;
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
-            }
-            "2.1.5" => {
-                ConfigV100::upgrade_stores(deps.storage, &deps.querier,env.contract.address)?;
-                let state = State::default();
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
-            }
-            "2.1.6" | "2.1.7" => {
-                let state = State::default();
-                // note: this is also done in ConfigV100::upgrade
-                let denom = state.denom.load(deps.storage)?;
-                state.prev_denom.save(
-                    deps.storage,
-                    &get_denom_balance(&deps.querier, env.contract.address, denom)?,
-                )?;
 
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
-
-            },
-            "2.1.8" => {
-                let state = State::default();
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
             }
+
             _ => {}
         },
         _ => {

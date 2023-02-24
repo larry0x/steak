@@ -42,6 +42,8 @@ pub(crate) struct State<'a> {
     pub validators_active: Item<'a, Vec<String>>,
     /// coins in 'denom' held before reinvest was called.
     pub prev_denom: Item<'a, Uint128>,
+    /// Dust Collector contract
+    pub dust_collector: Item<'a, Option<Addr>>,
 }
 
 impl Default for State<'static> {
@@ -77,7 +79,8 @@ impl Default for State<'static> {
             unbond_requests: IndexedMap::new("unbond_requests", ubr_indexes),
             validators_active: Item::new("validators_active"),
             prev_denom: Item::new("prev_denom"),
-            fee_account_type: Item::new("fee_account_type")
+            fee_account_type: Item::new("fee_account_type"),
+            dust_collector: Item::new("dust_collector")
         }
     }
 }
