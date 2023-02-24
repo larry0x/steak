@@ -1,0 +1,17 @@
+{
+  "owner": "migaloo1lu92zj8q6cmrptu09rp3343x9969r9qrsplfat",
+  "epoch_period": 259200,
+  "unbond_period": 1814400,
+  "validators": [
+    "migaloovaloper1670dvuv348eynr9lsmdrhqu3g7vpmzx94s460k",
+    "migaloovaloper1m9s6jkkt3fnt3qzx5htrsaxd6xhufyvtq4l7ps",
+    "migaloovaloper14ts0j42qkpr43a3tgxr7zz6l6zdf7hdeaayydd"
+  ],
+  "denom": "uwhale",
+  "steak_denom": "boneWhale",
+  "fee_account": "migaloo1wug8sewp6cedgkmrmvhl3lf3tulagm9hnvy8p0rppz9yjw0g4wtqvk723g",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "FeeSplit",
+  "kuji_token_factory": false
+}

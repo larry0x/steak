@@ -1040,7 +1040,7 @@ pub fn collect_dust(deps: DepsMut, _env: Env) -> StdResult<Response> {
     if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {
         Ok(Response::new().add_attribute("dust", "tbd"))
     } else {
-        Err(StdError::generic_err("No Dust collector set"))
+        Ok(Response::new().add_attribute("dust", "dust-collector-called"))
     }
 }
 

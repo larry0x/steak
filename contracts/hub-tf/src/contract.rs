@@ -1,15 +1,12 @@
-use cosmwasm_std::{
-    entry_point,  to_binary, Binary,  Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult,
-};
+use cosmwasm_std::{Binary, Deps, DepsMut, entry_point, Env, MessageInfo, Reply, Response, StdError, StdResult, to_binary};
+use cw2::{ContractVersion, get_contract_version, set_contract_version};
 
-use pfc_steak::hub::{CallbackMsg,  MigrateMsg, QueryMsg};
-
-//use crate::helpers::{ unwrap_reply};
+use pfc_steak::hub::{CallbackMsg, MigrateMsg, QueryMsg};
+use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg};
 
 use crate::{execute, queries};
-use cw2::{get_contract_version, set_contract_version, ContractVersion};
-use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg};
+
+//use crate::helpers::{ unwrap_reply};
 
 /// Contract name that is used for migration.
 pub const CONTRACT_NAME: &str = "steak-hub-tf";
@@ -33,8 +30,7 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let api = deps.api;
     match msg {
-
-        ExecuteMsg::Bond { receiver,exec_msg } => execute::bond(
+        ExecuteMsg::Bond { receiver, exec_msg } => execute::bond(
             deps,
             env,
             receiver
@@ -42,15 +38,15 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 .transpose()?
                 .unwrap_or(info.sender),
             info.funds,
-            exec_msg
-        ),  ExecuteMsg::Unbond { receiver} => execute::queue_unbond(
+            exec_msg,
+        ),
+        ExecuteMsg::Unbond { receiver } => execute::queue_unbond(
             deps,
             env,
             receiver
                 .map(|s| api.addr_validate(&s))
                 .transpose()?
-                .unwrap_or(info.sender),info.funds
-
+                .unwrap_or(info.sender), info.funds,
         ),
         ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
             deps,
@@ -82,7 +78,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env, minimum),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
-        ExecuteMsg::TransferFeeAccount { fee_account_type,new_fee_account } => {
+        ExecuteMsg::TransferFeeAccount { fee_account_type, new_fee_account } => {
             execute::transfer_fee_account(deps, info.sender, fee_account_type, new_fee_account)
         }
         ExecuteMsg::UpdateFee { new_fee } => execute::update_fee(deps, info.sender, new_fee),
@@ -93,11 +89,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::UnPauseValidator { validator } => {
             execute::unpause_validator(deps, env, info.sender, validator)
         }
-        ExecuteMsg::SetUnbondPeriod { unbond_period } =>  execute::set_unbond_period(deps, env, info.sender, unbond_period),
+        ExecuteMsg::SetUnbondPeriod { unbond_period } => execute::set_unbond_period(deps, env, info.sender, unbond_period),
 
-        ExecuteMsg::SetDustCollector { dust_collector } => {execute::set_dust_collector(deps,env,info.sender,dust_collector)}
-        ExecuteMsg::CollectDust {  } => { execute::collect_dust(deps,env)}
-        ExecuteMsg::ReturnDenom {  } => {execute::return_denom(deps,env,info.funds)}
+        ExecuteMsg::SetDustCollector { dust_collector } => { execute::set_dust_collector(deps, env, info.sender, dust_collector) }
+        ExecuteMsg::CollectDust {} => { execute::collect_dust(deps, env) }
+        ExecuteMsg::ReturnDenom {} => { execute::return_denom(deps, env, info.funds) }
     }
 }
 
@@ -118,21 +114,25 @@ fn callback(
         CallbackMsg::Reinvest {} => execute::reinvest(deps, env),
     }
 }
-/*
+
 #[entry_point]
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
-        1 => execute::register_steak_token(deps, unwrap_reply(reply)?),
         REPLY_REGISTER_RECEIVED_COINS => {
-            execute::register_received_coins(deps, env, unwrap_reply(reply)?.events)
+            execute::collect_dust(deps, env)
         }
-        id => Err(StdError::generic_err(format!(
-            "invalid reply id: {}; must be 1-2",
-            id
-        ))),
+        _ => {
+            Err(StdError::generic_err(format!(
+                "invalid reply id: {}  {:?}",
+                reply.id,
+                reply.result
+            ))
+            )
+        }
     }
+
 }
-*/
+
 #[entry_point]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -179,16 +179,14 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
         #[allow(clippy::single_match)]
         "steak-hub-tf" => match contract_version.version.as_ref() {
             #[allow(clippy::single_match)]
-            "0" => {
-
-            }
+            "0" => {}
 
             _ => {}
         },
         _ => {
             return Err(StdError::generic_err(
                 "contract name is not the same. aborting {}",
-            ))
+            ));
         }
     }
     /*
