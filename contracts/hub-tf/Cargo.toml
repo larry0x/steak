@@ -1,6 +1,6 @@
 [package]
 name = "pfc-steak-hub-tf"
-version = "3.0.1"
+version = "3.0.2"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
@@ -13,7 +13,8 @@ crate-type = ["cdylib", "rlib"]
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-cosmwasm-std = { version = "1.2.1", features=["iterator","stargate","cosmwasm_1_1","staking"]}
+#cosmwasm-std = { version = "1.2.1", features=["iterator","stargate","cosmwasm_1_1","staking"]}
+cosmwasm-std = { version = "1.2.1", features=["iterator","stargate","staking"]}
 
 cw2= "1.0.1"
 #cw20 = "1.0.0"
@@ -28,6 +29,6 @@ pfc-steak = { path = "../../packages/steak" }
 pfc-dust-collector = { path = "../../packages/dust_collector" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 pfc-fee-split = "0.2.3"
-kujira = "0.7.25"
+#kujira = "0.7.25"
 osmosis-std-derive="0.13.2"
 protobuf = { version = "3.1.0", features = ["with-bytes"] }

@@ -655,22 +655,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kujira"
-version = "0.7.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b69b49819362f0ab701d4c322e86a0b2735b6129ca857b3b982b2a6ec5431b22"
-dependencies = [
- "anyhow",
- "cosmwasm-std",
- "cw20 1.0.0",
- "hex",
- "schemars",
- "serde",
- "sha2 0.10.6",
- "thiserror",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.124"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -751,14 +735,13 @@ dependencies = [
 
 [[package]]
 name = "pfc-steak-hub-tf"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "cosmwasm-std",
  "cw-item-set",
  "cw-ownable",
  "cw-storage-plus 1.0.1",
  "cw2 1.0.1",
- "kujira",
  "osmosis-std-derive",
  "pfc-dust-collector",
  "pfc-fee-split",

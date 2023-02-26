@@ -3,8 +3,6 @@ use std::iter::FromIterator;
 use std::str::FromStr;
 
 use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, Order, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
-use kujira::denom::Denom;
-use kujira::msg::DenomMsg;
 
 use pfc_steak::DecimalCheckedOps;
 use pfc_steak::hub::{
@@ -20,7 +18,8 @@ use crate::math::{
 };
 use crate::state::{previous_batches, State, unbond_requests, VALIDATORS, VALIDATORS_ACTIVE};
 use crate::token_factory;
-use crate::token_factory::denom::{MsgBurn, MsgCreateDenom, MsgMint};
+use crate::kujira;
+//use crate::token_factory::denom::{MsgBurn, MsgCreateDenom, MsgMint};
 use crate::types::{Coins, Delegation};
 
 //--------------------------------------------------------------------------------------------------
@@ -81,20 +80,18 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     } else {
         state.dust_collector.save(deps.storage, &None)?
     }
-    if msg.kuji_token_factory {
-        todo!()
-        /*
-        Ok(Response::new().add_submessage(SubMsg::new(DenomMsg::Create {
-            subdenom:  Denom::from(steak_denom_msg)
-        })))
+   let c = if msg.kuji_token_factory {
 
-         */
+       <kujira::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+           kujira::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
+
     } else {
-        let c = <MsgCreateDenom as Into<CosmosMsg>>::into(
-            MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg });
+       <token_factory::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+            token_factory::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
 
-        Ok(Response::new().add_message(c))
-    }
+
+    };
+    Ok(Response::new().add_message(c))
 }
 
 
@@ -167,15 +164,16 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
     );
 
     let mint_msg = if kuji_version {
-        let _k = DenomMsg::Mint {
-            denom: Denom::from(steak_denom),
-            amount: usteak_to_mint,
-            recipient: env.contract.address,
-        };
-        // CosmosMsg::from(k);
-        todo!()
-    } else {
-        <MsgMint as Into<CosmosMsg>>::into(MsgMint {
+        <kujira::denom::MsgMint as Into<CosmosMsg>>::into(kujira::denom::MsgMint {
+            sender: env.contract.address.to_string(),
+            recipient: env.contract.address.to_string(),
+            amount: Some(kujira::denom::Coin {
+                denom: steak_denom.clone(),
+                amount: usteak_to_mint.to_string(),
+            }),
+        })
+     } else {
+        <token_factory::denom::MsgMint as Into<CosmosMsg>>::into(token_factory::denom::MsgMint {
             sender: env.contract.address.to_string(),
             amount: Some(token_factory::denom::Coin {
                 denom: steak_denom.clone(),
@@ -556,13 +554,15 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
 
 
     let burn_msg = if kuji_version {
-        let _foo = DenomMsg::Burn {
-            denom: Denom::from(steak_denom),
-            amount: pending_batch.usteak_to_burn,
-        };
-        todo!()
+        <kujira::denom::MsgBurn as Into<CosmosMsg>>::into(kujira::denom::MsgBurn {
+            sender: env.contract.address.to_string(),
+            amount: Some(kujira::denom::Coin {
+                denom: steak_denom,
+                amount: pending_batch.usteak_to_burn.to_string(),
+            }),
+        })
     } else {
-        <MsgBurn as Into<CosmosMsg>>::into(MsgBurn {
+        <token_factory::denom::MsgBurn as Into<CosmosMsg>>::into(token_factory::denom::MsgBurn {
             sender: env.contract.address.to_string(),
             amount: Some(token_factory::denom::Coin {
                 denom: steak_denom,

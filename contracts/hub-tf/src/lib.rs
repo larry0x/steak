@@ -8,6 +8,7 @@ pub mod queries;
 pub mod state;
 pub mod types;
 pub mod token_factory;
+pub mod kujira;
 #[cfg(test)]
 mod testing;
 mod migrations;
