@@ -280,7 +280,7 @@ fn bonding() {
         deps.as_mut(),
         mock_env(),
         mock_info("user_1", &[Coin::new(1_000_000, "uxyz")]),
-        ExecuteMsg::Bond { receiver: None },
+        ExecuteMsg::Bond { receiver: None,exec_msg:None },
     )
         .unwrap();
 
@@ -346,6 +346,7 @@ fn bonding() {
         mock_info("user_2", &[Coin::new(12345, "uxyz")]),
         ExecuteMsg::Bond {
             receiver: Some("user_3".to_string()),
+            exec_msg:None
         },
     )
         .unwrap();

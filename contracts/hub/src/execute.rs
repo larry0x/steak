@@ -128,7 +128,7 @@ pub fn register_steak_token(deps: DepsMut, response: SubMsgResponse) -> StdResul
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdResult<Response> {
+pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: Option<String>) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
@@ -188,15 +188,27 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>) -> StdRes
 
     let send_transfer_msg: CosmosMsg = match contract_info {
         Ok(_) => {
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: steak_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: receiver.to_string(),
-                    amount: usteak_to_mint,
-                    msg: Default::default(),
-                })?,
-                funds: vec![],
-            })
+            if let Some(exec_msg) = bond_msg {
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: steak_token.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Send {
+                        contract: receiver.to_string(),
+                        amount: usteak_to_mint,
+                        msg: to_binary(&exec_msg)?,
+                    })?,
+                    funds: vec![],
+                })
+            } else {
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: steak_token.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Send {
+                        contract: receiver.to_string(),
+                        amount: usteak_to_mint,
+                        msg: Default::default(),
+                    })?,
+                    funds: vec![],
+                })
+            }
         }
         Err(_) => {
             CosmosMsg::Wasm(WasmMsg::Execute {

@@ -1,16 +1,16 @@
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply,
-    Response, StdError, StdResult,
+    Binary, Decimal, Deps, DepsMut, entry_point, Env, from_binary, MessageInfo, Reply, Response,
+    StdError, StdResult, to_binary,
 };
+use cw2::{ContractVersion, get_contract_version, set_contract_version};
 use cw20::Cw20ReceiveMsg;
 
 use pfc_steak::hub::{CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, MigrateMsg, QueryMsg, ReceiveMsg};
 
+use crate::{execute, queries};
 use crate::helpers::{get_denom_balance, unwrap_reply};
 use crate::migrations::ConfigV100;
 use crate::state::State;
-use crate::{execute, queries};
-use cw2::{get_contract_version, set_contract_version, ContractVersion};
 
 /// Contract name that is used for migration.
 pub const CONTRACT_NAME: &str = "steak-hub";
@@ -35,7 +35,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     let api = deps.api;
     match msg {
         ExecuteMsg::Receive(cw20_msg) => receive(deps, env, info, cw20_msg),
-        ExecuteMsg::Bond { receiver } => execute::bond(
+        ExecuteMsg::Bond { receiver, exec_msg } => execute::bond(
             deps,
             env,
             receiver
@@ -43,6 +43,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 .transpose()?
                 .unwrap_or(info.sender),
             info.funds,
+            exec_msg,
         ),
         ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
             deps,
@@ -74,7 +75,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env, minimum),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
-        ExecuteMsg::TransferFeeAccount { fee_account_type,new_fee_account } => {
+        ExecuteMsg::TransferFeeAccount { fee_account_type, new_fee_account } => {
             execute::transfer_fee_account(deps, info.sender, fee_account_type, new_fee_account)
         }
         ExecuteMsg::UpdateFee { new_fee } => execute::update_fee(deps, info.sender, new_fee),
@@ -85,10 +86,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::UnPauseValidator { validator } => {
             execute::unpause_validator(deps, env, info.sender, validator)
         }
-        ExecuteMsg::SetUnbondPeriod { unbond_period } =>  execute::set_unbond_period(deps, env, info.sender, unbond_period),
-        ExecuteMsg::SetDustCollector { dust_collector } => {execute::set_dust_collector(deps,env,info.sender,dust_collector)}
-        ExecuteMsg::CollectDust {  } => { execute::collect_dust(deps,env)}
-        ExecuteMsg::ReturnDenom {  } => {execute::return_denom(deps,env,info.funds)}
+        ExecuteMsg::SetUnbondPeriod { unbond_period } => execute::set_unbond_period(deps, env, info.sender, unbond_period),
+        ExecuteMsg::SetDustCollector { dust_collector } => { execute::set_dust_collector(deps, env, info.sender, dust_collector) }
+        ExecuteMsg::CollectDust {} => { execute::collect_dust(deps, env) }
+        ExecuteMsg::ReturnDenom {} => { execute::return_denom(deps, env, info.funds) }
     }
 }
 
@@ -205,21 +206,21 @@ pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response>
                 state.fee_account.save(deps.storage, &owner)?;
                 state.max_fee_rate.save(deps.storage, &Decimal::zero())?;
                 state.fee_rate.save(deps.storage, &Decimal::zero())?;
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                ConfigV100::upgrade_stores(deps.storage,&deps.querier, env.contract.address)?;
-                state.dust_collector.save(deps.storage,&None)?;
+                state.fee_account_type.save(deps.storage, &FeeType::Wallet)?;
+                ConfigV100::upgrade_stores(deps.storage, &deps.querier, env.contract.address)?;
+                state.dust_collector.save(deps.storage, &None)?;
             }
             "2.1.4" => {
                 let state = State::default();
-                ConfigV100::upgrade_stores(deps.storage, &deps.querier,env.contract.address)?;
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
+                ConfigV100::upgrade_stores(deps.storage, &deps.querier, env.contract.address)?;
+                state.fee_account_type.save(deps.storage, &FeeType::Wallet)?;
+                state.dust_collector.save(deps.storage, &None)?;
             }
             "2.1.5" => {
-                ConfigV100::upgrade_stores(deps.storage, &deps.querier,env.contract.address)?;
+                ConfigV100::upgrade_stores(deps.storage, &deps.querier, env.contract.address)?;
                 let state = State::default();
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
+                state.fee_account_type.save(deps.storage, &FeeType::Wallet)?;
+                state.dust_collector.save(deps.storage, &None)?;
             }
             "2.1.6" | "2.1.7" => {
                 let state = State::default();
@@ -230,21 +231,24 @@ pub fn migrate(deps: DepsMut, env: Env, _msg: MigrateMsg) -> StdResult<Response>
                     &get_denom_balance(&deps.querier, env.contract.address, denom)?,
                 )?;
 
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
-
-            },
-            "2.1.8" => {
+                state.fee_account_type.save(deps.storage, &FeeType::Wallet)?;
+                state.dust_collector.save(deps.storage, &None)?;
+            }
+            "2.1.8" |"2.1.16"=> {
                 let state = State::default();
-                state.fee_account_type.save(deps.storage,&FeeType::Wallet)?;
-                state.dust_collector.save(deps.storage,&None)?;
+                state.fee_account_type.save(deps.storage, &FeeType::Wallet)?;
+                state.dust_collector.save(deps.storage, &None)?;
+            }
+            "3.0.1" => {
+                let state = State::default();
+                state.dust_collector.save(deps.storage, &None)?;
             }
             _ => {}
         },
         _ => {
             return Err(StdError::generic_err(
                 "contract name is not the same. aborting {}",
-            ))
+            ));
         }
     }
     /*

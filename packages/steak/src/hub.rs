@@ -47,7 +47,7 @@ pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
-    Bond { receiver: Option<String> },
+    Bond { receiver: Option<String>, exec_msg: Option<String> },
     /// Withdraw Luna that have finished unbonding in previous batches
     WithdrawUnbonded { receiver: Option<String> },
     /// Withdraw Luna that has finished unbonding in previous batches, for given address
