@@ -1,0 +1,25 @@
+{
+  "cw20_code_id": 275,
+  "owner": "chihuahua1lu92zj8q6cmrptu09rp3343x9969r9qr7qmaf8",
+  "name": "bHUAHUA Token",
+  "symbol": "bHUAHUA",
+  "decimals": 6,
+  "epoch_period": 259200,
+  "unbond_period": 1814400,
+  "validators": [
+    "chihuahuavaloper15tnycxe9csn7mkul4vvlyxlkd9jyqlw4q80nmy",
+    "chihuahuavaloper1670dvuv348eynr9lsmdrhqu3g7vpmzx96h4l2d",
+    "chihuahuavaloper13x4kf2zcdtegl8tytg0j0tclgv9atvt443k8hg"
+  ],
+  "denom": "uhuahua",
+  "fee_account": "chihuahua1dhlrnqrpafcynx2w3mmveasv7rcmjhx0gsr7k740yx8x4q833vcq7tzlr4",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "FeeSplit",
+  "label": "boneHUAHUA",
+  "marketing": {
+    "project": "https://backbonelabs.io",
+    "description": "The GraveDigger is the Liquid Staking Product of BackBone Labs. It's liquid staking derivative (LSD) is bHUAHUA.",
+    "marketing": "chihuahua1lu92zj8q6cmrptu09rp3343x9969r9qr7qmaf8"
+  }
+}
