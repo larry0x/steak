@@ -220,6 +220,7 @@ fn proper_instantiation() {
             ],
             paused_validators: vec![],
             dust_collector: None,
+            token_factory:None
         }
     );
 
@@ -266,6 +267,7 @@ fn proper_instantiation() {
             ],
             paused_validators: vec![],
             dust_collector: None,
+            token_factory:None
         }
     );
 }
@@ -1564,6 +1566,7 @@ fn splitting_fees() {
             ],
             paused_validators: vec![],
             dust_collector: None,
+            token_factory:None
         }
     );
 
@@ -1598,7 +1601,8 @@ fn splitting_fees() {
                 "charlie".to_string(),
             ],
             paused_validators: vec![],
-            dust_collector:None
+            dust_collector:None,
+            token_factory:None
         }
     );
 }

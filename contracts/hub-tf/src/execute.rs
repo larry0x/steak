@@ -8,17 +8,17 @@ use pfc_steak::DecimalCheckedOps;
 use pfc_steak::hub::{
     Batch, CallbackMsg, FeeType, PendingBatch, UnbondRequest,
 };
-use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg};
+use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
 
+use crate::{injective, token_factory};
 use crate::contract::REPLY_REGISTER_RECEIVED_COINS;
 use crate::helpers::{get_denom_balance, parse_received_fund, query_all_delegations, query_delegation, query_delegations};
+use crate::kujira;
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
 use crate::state::{previous_batches, State, unbond_requests, VALIDATORS, VALIDATORS_ACTIVE};
-use crate::token_factory;
-use crate::kujira;
 //use crate::token_factory::denom::{MsgBurn, MsgCreateDenom, MsgMint};
 use crate::types::{Coins, Delegation};
 
@@ -69,7 +69,11 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
         VALIDATORS.insert(deps.storage, &v)?;
         VALIDATORS_ACTIVE.insert(deps.storage, &v)?;
     }
-    state.kuji_token_factory.save(deps.storage, &msg.kuji_token_factory)?;
+    let token_factory_type = TokenFactoryType::from_str(&msg.token_factory)
+        .map_err(|_| StdError::generic_err("Invalid Token Factory type: CosmWasm, Kujira, or Injective only"))?;
+
+    state.token_factory_type.save(deps.storage, &token_factory_type)?;
+
     let steak_denom = format!("factory/{0}/{1}", env.contract.address, msg.steak_denom);
     let steak_denom_msg = msg.steak_denom;
     state.steak_denom.save(deps.storage, &steak_denom)?;
@@ -80,17 +84,21 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     } else {
         state.dust_collector.save(deps.storage, &None)?
     }
-   let c = if msg.kuji_token_factory {
-
-       <kujira::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
-           kujira::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
-
-    } else {
-       <token_factory::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
-            token_factory::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
-
-
+    let c = match state.token_factory_type.load(deps.storage)? {
+        TokenFactoryType::CosmWasm => {
+            <token_factory::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                token_factory::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
+        }
+        TokenFactoryType::Kujira => {
+            <kujira::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                kujira::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
+        }
+        TokenFactoryType::Injective => {
+            <injective::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+                injective::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
+        }
     };
+
     Ok(Response::new().add_message(c))
 }
 
@@ -113,7 +121,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
     let steak_minted = state.steak_minted.load(deps.storage)?;
     let steak_denom = state.steak_denom.load(deps.storage)?;
-    let kuji_version = state.kuji_token_factory.load(deps.storage)?;
+    let token_factory_type = state.token_factory_type.load(deps.storage)?;
     let mut validators: Vec<String> = Default::default();
     for v in VALIDATORS_ACTIVE.items(deps.storage, None, None, Order::Ascending) {
         validators.push(v?);
@@ -163,25 +171,36 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
         REPLY_REGISTER_RECEIVED_COINS,
     );
 
-    let mint_msg = if kuji_version {
-        <kujira::denom::MsgMint as Into<CosmosMsg>>::into(kujira::denom::MsgMint {
-            sender: env.contract.address.to_string(),
-            recipient: env.contract.address.to_string(),
-            amount: Some(kujira::denom::Coin {
-                denom: steak_denom.clone(),
-                amount: usteak_to_mint.to_string(),
-            }),
-        })
-     } else {
-        <token_factory::denom::MsgMint as Into<CosmosMsg>>::into(token_factory::denom::MsgMint {
-            sender: env.contract.address.to_string(),
-            amount: Some(token_factory::denom::Coin {
-                denom: steak_denom.clone(),
-                amount: usteak_to_mint.to_string(),
-            }),
-        })
+    let mint_msg = match token_factory_type {
+        TokenFactoryType::CosmWasm => {
+            <token_factory::denom::MsgMint as Into<CosmosMsg>>::into(token_factory::denom::MsgMint {
+                sender: env.contract.address.to_string(),
+                amount: Some(token_factory::denom::Coin {
+                    denom: steak_denom.clone(),
+                    amount: usteak_to_mint.to_string(),
+                }),
+            })
+        }
+        TokenFactoryType::Kujira => {
+            <kujira::denom::MsgMint as Into<CosmosMsg>>::into(kujira::denom::MsgMint {
+                sender: env.contract.address.to_string(),
+                recipient: env.contract.address.to_string(),
+                amount: Some(kujira::denom::Coin {
+                    denom: steak_denom.clone(),
+                    amount: usteak_to_mint.to_string(),
+                }),
+            })
+        }
+        TokenFactoryType::Injective => {
+            <injective::denom::MsgMint as Into<CosmosMsg>>::into(injective::denom::MsgMint {
+                sender: env.contract.address.to_string(),
+                amount: Some(injective::denom::Coin {
+                    denom: steak_denom.clone(),
+                    amount: usteak_to_mint.to_string(),
+                }),
+            })
+        }
     };
-
 
     let contract_info = deps.querier.query_wasm_contract_info(receiver.to_string());
 
@@ -475,7 +494,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let steak_denom = state.steak_denom.load(deps.storage)?;
-    let kuji_version = state.kuji_token_factory.load(deps.storage)?;
+    let token_factory_type = state.token_factory_type.load(deps.storage)?;
     let usteak_supply = state.steak_minted.load(deps.storage)?;
     let mut validators: Vec<String> = Default::default();
     for v in VALIDATORS.items(deps.storage, None, None, Order::Ascending) {
@@ -553,22 +572,31 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
         .collect::<Vec<_>>();
 
 
-    let burn_msg = if kuji_version {
-        <kujira::denom::MsgBurn as Into<CosmosMsg>>::into(kujira::denom::MsgBurn {
-            sender: env.contract.address.to_string(),
-            amount: Some(kujira::denom::Coin {
-                denom: steak_denom,
-                amount: pending_batch.usteak_to_burn.to_string(),
+    let burn_msg = match token_factory_type {
+        TokenFactoryType::Kujira =>
+            <kujira::denom::MsgBurn as Into<CosmosMsg>>::into(kujira::denom::MsgBurn {
+                sender: env.contract.address.to_string(),
+                amount: Some(kujira::denom::Coin {
+                    denom: steak_denom,
+                    amount: pending_batch.usteak_to_burn.to_string(),
+                }),
             }),
-        })
-    } else {
-        <token_factory::denom::MsgBurn as Into<CosmosMsg>>::into(token_factory::denom::MsgBurn {
-            sender: env.contract.address.to_string(),
-            amount: Some(token_factory::denom::Coin {
-                denom: steak_denom,
-                amount: pending_batch.usteak_to_burn.to_string(),
+        TokenFactoryType::CosmWasm =>
+            <token_factory::denom::MsgBurn as Into<CosmosMsg>>::into(token_factory::denom::MsgBurn {
+                sender: env.contract.address.to_string(),
+                amount: Some(token_factory::denom::Coin {
+                    denom: steak_denom,
+                    amount: pending_batch.usteak_to_burn.to_string(),
+                }),
             }),
-        })
+        TokenFactoryType::Injective =>
+            <injective::denom::MsgBurn as Into<CosmosMsg>>::into(injective::denom::MsgBurn {
+                sender: env.contract.address.to_string(),
+                amount: Some(injective::denom::Coin {
+                    denom: steak_denom,
+                    amount: pending_batch.usteak_to_burn.to_string(),
+                }),
+            })
     };
     // yes.. this will fail if supply is less than the amount to burn. this is intentional.
     state.steak_minted.save(deps.storage, &(usteak_supply - pending_batch.usteak_to_burn))?;
@@ -1027,7 +1055,7 @@ pub fn set_dust_collector(
     };
 
     let event = Event::new("steak/set_dust_collector")
-        .add_attribute("dust_collector",  dust_collector.unwrap_or("-cleared-".into()));
+        .add_attribute("dust_collector", dust_collector.unwrap_or("-cleared-".into()));
 
     Ok(Response::new()
         .add_event(event)
@@ -1050,6 +1078,6 @@ pub fn return_denom(deps: DepsMut, _env: Env, _funds: Vec<Coin>) -> StdResult<Re
     if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {
         Ok(Response::new().add_attribute("dust", "returned"))
     } else {
-       Err(StdError::generic_err("No Dust collector set"))
+        Err(StdError::generic_err("No Dust collector set"))
     }
 }

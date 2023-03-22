@@ -3,6 +3,7 @@ use cw_item_set::Set;
 use cw_storage_plus::{Index, IndexedMap, IndexList, Item, MultiIndex};
 
 use pfc_steak::hub::{Batch, FeeType, PendingBatch, UnbondRequest};
+use pfc_steak::hub_tf::{ TokenFactoryType};
 
 pub(crate) const BATCH_KEY_V101: &str = "previous_batches_101";
 pub(crate) const BATCH_KEY_OWNER_V101: &str = "previous_batches_owner_101";
@@ -53,10 +54,14 @@ pub(crate) struct State<'a> {
     //  pub validators_active: Item<'a, Vec<String>>,
     /// coins in 'denom' held before reinvest was called.
     pub prev_denom: Item<'a, Uint128>,
+
     /// Kuji version of Token-factory
+    /// @deprecated
     pub kuji_token_factory: Item<'a, bool>,
     /// Dust Collector contract
     pub dust_collector: Item<'a, Option<Addr>>,
+    /// INJ version of Token-factory
+    pub token_factory_type: Item<'a, TokenFactoryType>,
 }
 
 
@@ -84,6 +89,7 @@ impl Default for State<'static> {
             fee_account_type: Item::new("fee_account_type"),
             kuji_token_factory: Item::new("kuji_token_factory"),
             dust_collector: Item::new("dust_collector"),
+            token_factory_type: Item::new("token_factory_type")
         }
     }
 }

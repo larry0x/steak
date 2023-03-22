@@ -50,7 +50,7 @@ fn setup_test() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 "bob".to_string(),
                 "charlie".to_string(),
             ],
-            kuji_token_factory: false,
+            token_factory: "CosmWasm".to_string(),
             dust_collector: Some("dusty_1".to_string())
         },
     )
@@ -88,7 +88,7 @@ fn setup_test_fee_split() -> OwnedDeps<MockStorage, MockApi, CustomQuerier> {
                 "charlie".to_string(),
             ],
 
-            kuji_token_factory: false,
+            token_factory: "CosmWasm".to_string(),
             dust_collector: Some("dusty_2".to_string())
         },
     )
@@ -130,7 +130,8 @@ fn proper_instantiation() {
                 "charlie".to_string(),
             ],
             paused_validators: vec![],
-            dust_collector:Some("dusty_1".to_string())
+            dust_collector:Some("dusty_1".to_string()),
+            token_factory: Some("CosmWasm".to_string())
         }
     );
 
@@ -176,7 +177,8 @@ fn proper_instantiation() {
                 "charlie".to_string(),
             ],
             paused_validators: vec![],
-            dust_collector: Some("dusty_2".to_string())
+            dust_collector: Some("dusty_2".to_string()),
+            token_factory: Some("CosmWasm".to_string())
         }
     );
 }
@@ -1392,7 +1394,8 @@ fn splitting_fees() {
                 "charlie".to_string(),
             ],
             paused_validators: vec![],
-            dust_collector:Some("dusty_1".to_string())
+            dust_collector:Some("dusty_1".to_string()),
+            token_factory: Some("CosmWasm".to_string())
         }
     );
 
@@ -1427,7 +1430,8 @@ fn splitting_fees() {
                 "charlie".to_string(),
             ],
             paused_validators: vec![],
-            dust_collector: Some("dusty_1".to_string())
+            dust_collector: Some("dusty_1".to_string()),
+            token_factory: Some("CosmWasm".to_string())
         }
     );
 }

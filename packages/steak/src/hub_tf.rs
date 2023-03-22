@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use cosmwasm_schema::cw_serde;
 //
 use cosmwasm_std::{Decimal, Uint128};
@@ -5,12 +6,39 @@ use cosmwasm_std::{Decimal, Uint128};
 use crate::hub::CallbackMsg;
 
 #[cw_serde]
+pub enum TokenFactoryType {
+    CosmWasm =1,
+    Kujira =2,
+    Injective =3
+}
+impl ToString for TokenFactoryType {
+    fn to_string(&self) -> String {
+        match &self {
+            TokenFactoryType::CosmWasm => String::from("CosmWasm"),
+            TokenFactoryType::Kujira => String::from("Kujira"),
+            TokenFactoryType::Injective => String::from("Injective"),
+        }
+    }
+}
+impl FromStr for TokenFactoryType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "CosmWasm" => Ok(TokenFactoryType::CosmWasm),
+            "Kujira" => Ok(TokenFactoryType::Kujira),
+            "Injective" => Ok(TokenFactoryType::Injective),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cw_serde]
 pub struct InstantiateMsg {
     /// Account who can call certain privileged functions
     pub owner: String,
-    /// Name of the liquid staking token
+    /// How often the un-bonding queue is to be executed, in seconds
     pub epoch_period: u64,
-    /// The staking module's unbonding time, in seconds
+    /// The staking module's un-bonding time, in seconds
     pub unbond_period: u64,
     /// Initial set of validators who will receive the delegations
     pub validators: Vec<String>,
@@ -26,8 +54,8 @@ pub struct InstantiateMsg {
     pub fee_amount: Decimal,
     /// Max Fee "1.00 = 100%"
     pub max_fee_amount: Decimal,
-    /// kuji_token_factory - uses token factory, but it's at a different module
-    pub kuji_token_factory: bool,
+    // different chains have different token factory implementations
+    pub token_factory: String,
     /// The Dust collector contract
     pub dust_collector: Option<String>,
 }

@@ -2,9 +2,10 @@ use cosmwasm_std::{Binary, Deps, DepsMut, entry_point, Env, MessageInfo, Reply, 
 use cw2::{ContractVersion, get_contract_version, set_contract_version};
 
 use pfc_steak::hub::{CallbackMsg, MigrateMsg, QueryMsg};
-use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg};
+use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
 
 use crate::{execute, queries};
+use crate::state::State;
 
 //use crate::helpers::{ unwrap_reply};
 
@@ -180,8 +181,17 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
         "steak-hub-tf" => match contract_version.version.as_ref() {
             #[allow(clippy::single_match)]
             "0" => {}
+            "3.0.1" | "3.0.2" => {
+                let  state = State::default();
+                let kuji = state.kuji_token_factory.load(deps.storage)?;
+                if kuji {
+                    state.token_factory_type.save(deps.storage,&TokenFactoryType::Kujira)?
+                } else {
+                    state.token_factory_type.save(deps.storage,&TokenFactoryType::CosmWasm)?
+                }
 
-            _ => {}
+            }
+                _ => {}
         },
         _ => {
             return Err(StdError::generic_err(

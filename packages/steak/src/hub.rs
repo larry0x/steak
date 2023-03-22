@@ -179,6 +179,7 @@ pub struct ConfigResponse {
     pub validators: Vec<String>,
     pub paused_validators: Vec<String>,
     pub dust_collector: Option<String>,
+    pub token_factory: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]

@@ -42,7 +42,8 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,
         validators: validator_active_vec,
         paused_validators,
-        dust_collector:None
+        dust_collector:None,
+        token_factory:None
     })
 }
 

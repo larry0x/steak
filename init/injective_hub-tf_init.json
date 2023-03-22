@@ -1,0 +1,17 @@
+{
+  "owner": "inj1d3yya2s4cejxfe5et9djq38qgtvlsmn9nqjeu9",
+  "epoch_period": 259200,
+  "unbond_period": 1814400,
+  "validators": [
+    "injvaloper1t0q28eyvuvdp6aw8rdgxewgw29qlaskm5dhaf2",
+    "injvaloper156t3yxd4udv0h9gwagfcmwnmm3quy0nph7tyh5",
+    "injvaloper1kk523rsm9pey740cx4plalp40009ncs0wrchfe"
+  ],
+  "denom": "inj",
+  "steak_denom": "bINJ",
+  "fee_account": "inj1z7s6eqeql5r23gptjrfhvks3z79vwweuezk77g",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "FeeSplit",
+  "token_factory": "Injective"
+}

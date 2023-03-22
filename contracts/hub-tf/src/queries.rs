@@ -50,7 +50,8 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,
         validators: validator_active_vec,
         paused_validators,
-        dust_collector: state.dust_collector.load(deps.storage)?.map( |a| a.to_string())
+        dust_collector: state.dust_collector.load(deps.storage)?.map( |a| a.to_string()),
+        token_factory: Some(state.token_factory_type.load(deps.storage)?.to_string())
     })
 }
 
