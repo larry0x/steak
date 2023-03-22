@@ -1,0 +1,31 @@
+{
+  "name": "steak-webapp",
+  "version": "0.1.0",
+  "author": "larry <gm@larry.engineer>",
+  "license": "GPL-v3-or-later",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^1.8.8",
+    "@terra-money/terra.js": "^3.0.4",
+    "@terra-money/wallet-provider": "^3.8.1",
+    "next": "^12.1.5",
+    "react": "^17.0.2",
+    "zustand": "^4.0.0-rc.0"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.25",
+    "@types/react": "^17.0.44",
+    "@typescript-eslint/eslint-plugin": "^5.19.0",
+    "@typescript-eslint/parser": "^5.19.0",
+    "eslint": "^8.13.0",
+    "eslint-config-next": "^12.1.5",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-react": "^7.29.4",
+    "prettier": "^2.6.2",
+    "typescript": "^4.6.3"
+  }
+}
