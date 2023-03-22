@@ -1,5 +1,5 @@
 [workspace]
-members = ["contracts/*", "packages/*"]
+members = ["crates/*"]
 
 [profile.release.package.steak]
 opt-level = 3
