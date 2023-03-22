@@ -1,4 +1,5 @@
 pub mod hub;
+pub mod hub_tf;
 
 // this was copied from eris-staking's branch of STEAK.
 //

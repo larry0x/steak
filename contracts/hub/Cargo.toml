@@ -1,6 +1,6 @@
 [package]
 name = "pfc-steak-hub"
-version = "2.1.17"
+version = "3.0.3"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
@@ -21,5 +21,6 @@ cw-storage-plus = "0.13"
 pfc-steak = { path = "../../packages/steak" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 pfc-fee-split = "0.2.3"
+pfc-dust-collector = { path = "../../packages/dust_collector" }
 #[dev-dependencies]
 #serde = { version = "1.0.103", default-features = false, features = ["derive"] }

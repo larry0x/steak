@@ -1,0 +1,28 @@
+{
+  "cw20_code_id": 2241,
+  "owner": "juno1lu92zj8q6cmrptu09rp3343x9969r9qrt84g0e",
+  "name": "bJuno Token",
+  "symbol": "bJuno",
+  "decimals": 6,
+  "epoch_period": 345600,
+  "unbond_period": 2419200,
+  "validators": [
+    "junovaloper1yy3tnegzmkdcm7czzcy3flw5z0zyr9vkkxrfse",
+    "junovaloper1083svrca4t350mphfv9x45wq9asrs60cpqzg0y",
+    "junovaloper1wd02ktcvpananlvd9u6jm3x3ap3vmw59jv9vez",
+    "junovaloper1dfeenydr9f2vggp8m7jpalvy8jv7fdndncedrm",
+    "junovaloper1wj4jhrll90knap3vt8z4qs5rrm9cla2kpc5944",
+    "junovaloper10wxn2lv29yqnw2uf4jf439kwy5ef00qdelfp7r"
+  ],
+  "denom": "ujuno",
+  "fee_account": "juno167yrnjppr034exsj940q39kfc3nmdg36jtfv63tymyzlyhxg4a3snesqhv",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "FeeSplit",
+  "label": "bJuno",
+  "marketing": {
+    "project": "https://backbonelabs.io",
+    "description": "The GraveDigger is the Liquid Staking Product of BackBone Labs. It's liquid staking derivative (LSD) is bJuno.",
+    "marketing": "juno1lu92zj8q6cmrptu09rp3343x9969r9qrt84g0e"
+  }
+}
