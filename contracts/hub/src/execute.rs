@@ -14,7 +14,7 @@ use pfc_steak::hub::{
     Batch, CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch, UnbondRequest,
 };
 
-use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
+use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS, SPECIAL_SEND_MESSAGE_TO_TRANSFER};
 use crate::helpers::{
     get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
     query_delegations,
@@ -189,15 +189,26 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: 
     let send_transfer_msg: CosmosMsg = match contract_info {
         Ok(_) => {
             if let Some(exec_msg) = bond_msg {
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: steak_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Send {
-                        contract: receiver.to_string(),
-                        amount: usteak_to_mint,
-                        msg: to_binary(&exec_msg)?,
-                    })?,
-                    funds: vec![],
-                })
+                if exec_msg == SPECIAL_SEND_MESSAGE_TO_TRANSFER {
+                    CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: steak_token.to_string(),
+                        msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                            recipient: receiver.to_string(),
+                            amount: usteak_to_mint,
+                        })?,
+                        funds: vec![],
+                    })
+                } else {
+                    CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: steak_token.to_string(),
+                        msg: to_binary(&Cw20ExecuteMsg::Send {
+                            contract: receiver.to_string(),
+                            amount: usteak_to_mint,
+                            msg: to_binary(&exec_msg)?,
+                        })?,
+                        funds: vec![],
+                    })
+                }
             } else {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: steak_token.to_string(),

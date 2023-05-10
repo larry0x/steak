@@ -11,7 +11,7 @@ use pfc_steak::hub::{
 use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
 
 use crate::{injective, token_factory};
-use crate::contract::REPLY_REGISTER_RECEIVED_COINS;
+use crate::contract::{REPLY_REGISTER_RECEIVED_COINS, SPECIAL_SEND_MESSAGE_TO_TRANSFER};
 use crate::helpers::{get_denom_balance, parse_received_fund, query_all_delegations, query_delegation, query_delegations};
 use crate::kujira;
 use crate::math::{
@@ -207,17 +207,25 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
     // send the uSteak, optionally calling a smart contract
     let send_transfer_msg: CosmosMsg = match contract_info {
         Ok(_) => {
-
-            //CosmosMsg::Bank(BankMsg::Send { to_address: "".to_string(), amount: vec![] })
             if let Some(exec_msg) = bond_msg {
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: receiver.to_string(),
-                    msg: to_binary(&exec_msg)?,
-                    funds: vec![Coin {
-                        denom: steak_denom,
-                        amount: usteak_to_mint,
-                    }],
-                })
+                if exec_msg == SPECIAL_SEND_MESSAGE_TO_TRANSFER { // this is for backwards compatibility only
+                    CosmosMsg::Bank(BankMsg::Send {
+                        to_address: receiver.to_string(),
+                        amount: vec![Coin {
+                            denom: steak_denom,
+                            amount: usteak_to_mint,
+                        }],
+                    })
+                } else {
+                    CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: receiver.to_string(),
+                        msg: to_binary(&exec_msg)?,
+                        funds: vec![Coin {
+                            denom: steak_denom,
+                            amount: usteak_to_mint,
+                        }],
+                    })
+                }
             } else {
                 CosmosMsg::Bank(BankMsg::Send {
                     to_address: receiver.to_string(),

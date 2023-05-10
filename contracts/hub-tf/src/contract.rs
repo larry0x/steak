@@ -15,6 +15,7 @@ pub const CONTRACT_NAME: &str = "steak-hub-tf";
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPLY_INSTANTIATE_TOKEN: u64 = 1;
 pub const REPLY_REGISTER_RECEIVED_COINS: u64 = 2;
+pub const SPECIAL_SEND_MESSAGE_TO_TRANSFER: &str = "PFC_TRANSFER_NOT_SEND";
 
 #[entry_point]
 pub fn instantiate(
