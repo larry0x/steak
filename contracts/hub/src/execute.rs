@@ -123,14 +123,14 @@ pub fn register_steak_token(deps: DepsMut, response: SubMsgResponse) -> StdResul
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: Option<Binary>) -> StdResult<Response> {
+pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg: Option<Binary>) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
     let steak_token = state.steak_token.load(deps.storage)?;
     let validators = state.validators_active.load(deps.storage)?;
 
-    let mut validators_wl:HashSet<String> = HashSet::from_iter(state.validators.load(deps.storage)?);
+    let mut validators_wl: HashSet<String> = HashSet::from_iter(state.validators.load(deps.storage)?);
     for v in validators.iter() {
         validators_wl.remove(v);
     }
@@ -183,32 +183,31 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: 
 
     let send_transfer_msg: CosmosMsg = match contract_info {
         Ok(_) => {
-
             if let Some(exec_msg) = bond_msg {
-                match  from_binary(&exec_msg)?
-                 {
-                     Cw20HookMsg::Transfer {} => {
-                         CosmosMsg::Wasm(WasmMsg::Execute {
-                             contract_addr: steak_token.to_string(),
-                             msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                                 recipient: receiver.to_string(),
-                                 amount: usteak_to_mint,
-                             })?,
-                             funds: vec![],
-                         })
-                     },
-                     _=>   CosmosMsg::Wasm(WasmMsg::Execute {
-                         contract_addr: steak_token.to_string(),
-                         msg: to_binary(&Cw20ExecuteMsg::Send {
-                             contract: receiver.to_string(),
-                             amount: usteak_to_mint,
-                             msg: to_binary(&exec_msg)?,
-                         })?,
-                         funds: vec![],
-                     })
-
+                match from_binary(&exec_msg)?
+                {
+                    Cw20HookMsg::Transfer {} => {
+                        CosmosMsg::Wasm(WasmMsg::Execute {
+                            contract_addr: steak_token.to_string(),
+                            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                                recipient: receiver.to_string(),
+                                amount: usteak_to_mint,
+                            })?,
+                            funds: vec![],
+                        })
+                    }
+                    Cw20HookMsg::Distribute {} => {
+                        CosmosMsg::Wasm(WasmMsg::Execute {
+                            contract_addr: steak_token.to_string(),
+                            msg: to_binary(&Cw20ExecuteMsg::Send {
+                                contract: receiver.to_string(),
+                                amount: usteak_to_mint,
+                                msg: to_binary(&funds_distributor_api::msg::Cw20HookMsg::Distribute {})?,
+                            })?,
+                            funds: vec![],
+                        })
+                    }
                 }
-
             } else {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: steak_token.to_string(),
@@ -490,7 +489,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
             pending_batch.est_unbond_start_time
         )));
     }
-    let mut validators_active:HashSet<String> = HashSet::from_iter(state.validators_active.load(deps.storage)?);
+    let mut validators_active: HashSet<String> = HashSet::from_iter(state.validators_active.load(deps.storage)?);
     for v in validators.iter() {
         validators_active.remove(v);
     }
@@ -1025,13 +1024,13 @@ pub fn set_dust_collector(
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
-    if let Some(ref dust_addr ) = dust_collector {
-        state.dust_collector.save(deps.storage, &Some(deps.api.addr_validate(dust_addr )? ))?;
+    if let Some(ref dust_addr) = dust_collector {
+        state.dust_collector.save(deps.storage, &Some(deps.api.addr_validate(dust_addr)?))?;
     } else {
         state.dust_collector.save(deps.storage, &None)?;
     };
     let event = Event::new("steak/set_dust_collector")
-        .add_attribute("dust_collector",  dust_collector.unwrap_or("-cleared-".into()));
+        .add_attribute("dust_collector", dust_collector.unwrap_or("-cleared-".into()));
 
     Ok(Response::new()
         .add_event(event)
@@ -1044,7 +1043,7 @@ pub fn collect_dust(deps: DepsMut, _env: Env) -> StdResult<Response> {
     if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {
         Ok(Response::new().add_attribute("dust", "tbd"))
     } else {
-         Err(StdError::generic_err("No dust collector set"))
+        Err(StdError::generic_err("No dust collector set"))
     }
 }
 
@@ -1054,6 +1053,6 @@ pub fn return_denom(deps: DepsMut, _env: Env, _funds: Vec<Coin>) -> StdResult<Re
     if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {
         Ok(Response::new().add_attribute("dust", "returned"))
     } else {
-         Err(StdError::generic_err("No dust collector set"))
+        Err(StdError::generic_err("No dust collector set"))
     }
 }

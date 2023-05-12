@@ -11,6 +11,10 @@ pub enum Cw20HookMsg {
     Distribute {},
     Transfer{}
 }
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
+pub enum EnterpriseCw20HookMsg {
+    Distribute {},
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {

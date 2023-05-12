@@ -659,13 +659,13 @@ dependencies = [
 
 [[package]]
 name = "cw20"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7a4d69a9980e2295077c08fd3f797149658f357167f5898e27c00b9465fcbde"
+checksum = "91666da6c7b40c8dd5ff94df655a28114efc10c79b70b4d06f13c31e37d60609"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw-utils 0.16.0",
+ "cw-utils 1.0.1",
  "schemars",
  "serde",
 ]
@@ -697,7 +697,7 @@ dependencies = [
  "cw-storage-plus 0.16.0",
  "cw-utils 0.16.0",
  "cw2 1.0.1",
- "cw20 1.0.0",
+ "cw20 1.0.1",
  "schemars",
  "semver",
  "serde",
@@ -962,6 +962,17 @@ name = "forward_ref"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8cbd1169bd7b4a0a20d92b9af7a7e0422888bd38a6f5ec29c1fd8c1558a272e"
+
+[[package]]
+name = "funds-distributor-api"
+version = "0.1.0"
+source = "git+https://github.com/terra-money/enterprise-contracts.git?branch=main#6028fa7bf7110df3a8e82cfd9cd67686401d0061"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw20 1.0.1",
+ "thiserror",
+]
 
 [[package]]
 name = "generic-array"
@@ -1378,7 +1389,7 @@ version = "3.0.2"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw20 1.0.0",
+ "cw20 1.0.1",
  "cw20-base 1.0.0",
  "schemars",
  "serde",
@@ -1391,8 +1402,9 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus 0.13.4",
  "cw2 1.0.1",
- "cw20 1.0.0",
+ "cw20 1.0.1",
  "cw20-base 1.0.0",
+ "funds-distributor-api",
  "pfc-dust-collector",
  "pfc-fee-split",
  "pfc-steak",
