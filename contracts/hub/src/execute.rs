@@ -2,16 +2,14 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, Order, Response, StdError, StdResult, SubMsg, SubMsgResponse, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, from_binary, Order, Response, StdError, StdResult, SubMsg, SubMsgResponse, to_binary, Uint128, WasmMsg};
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
 use pfc_steak::DecimalCheckedOps;
-use pfc_steak::hub::{
-    Batch, CallbackMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch, UnbondRequest,
-};
+use pfc_steak::hub::{Batch, CallbackMsg, Cw20HookMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch, UnbondRequest};
 
-use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS, SPECIAL_SEND_MESSAGE_TO_TRANSFER};
+use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
 use crate::helpers::{
     get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
     query_delegations,
@@ -185,27 +183,32 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: 
 
     let send_transfer_msg: CosmosMsg = match contract_info {
         Ok(_) => {
+
             if let Some(exec_msg) = bond_msg {
-                if exec_msg == to_binary(SPECIAL_SEND_MESSAGE_TO_TRANSFER)? {
-                    CosmosMsg::Wasm(WasmMsg::Execute {
-                        contract_addr: steak_token.to_string(),
-                        msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                            recipient: receiver.to_string(),
-                            amount: usteak_to_mint,
-                        })?,
-                        funds: vec![],
-                    })
-                } else {
-                    CosmosMsg::Wasm(WasmMsg::Execute {
-                        contract_addr: steak_token.to_string(),
-                        msg: to_binary(&Cw20ExecuteMsg::Send {
-                            contract: receiver.to_string(),
-                            amount: usteak_to_mint,
-                            msg: to_binary(&exec_msg)?,
-                        })?,
-                        funds: vec![],
-                    })
+                match  from_binary(&exec_msg)?
+                 {
+                     Cw20HookMsg::Transfer {} => {
+                         CosmosMsg::Wasm(WasmMsg::Execute {
+                             contract_addr: steak_token.to_string(),
+                             msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                                 recipient: receiver.to_string(),
+                                 amount: usteak_to_mint,
+                             })?,
+                             funds: vec![],
+                         })
+                     },
+                     _=>   CosmosMsg::Wasm(WasmMsg::Execute {
+                         contract_addr: steak_token.to_string(),
+                         msg: to_binary(&Cw20ExecuteMsg::Send {
+                             contract: receiver.to_string(),
+                             amount: usteak_to_mint,
+                             msg: to_binary(&exec_msg)?,
+                         })?,
+                         funds: vec![],
+                     })
+
                 }
+
             } else {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: steak_token.to_string(),

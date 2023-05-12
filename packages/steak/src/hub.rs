@@ -6,6 +6,12 @@ use cw20_base::msg::InstantiateMarketingInfo as Cw20InstantiateMarketingInfo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
+pub enum Cw20HookMsg {
+    Distribute {},
+    Transfer{}
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     /// Code ID of the CW20 token contract
