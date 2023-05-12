@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal, Empty, StdResult, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Binary, Coin, CosmosMsg, Decimal, Empty, StdResult, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use cw20_base::msg::InstantiateMarketingInfo as Cw20InstantiateMarketingInfo;
 use schemars::JsonSchema;
@@ -47,7 +47,7 @@ pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
-    Bond { receiver: Option<String>, exec_msg: Option<String> },
+    Bond { receiver: Option<String>, exec_msg: Option<Binary> },
     /// Withdraw Luna that have finished unbonding in previous batches
     WithdrawUnbonded { receiver: Option<String> },
     /// Withdraw Luna that has finished unbonding in previous batches, for given address

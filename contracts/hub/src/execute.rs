@@ -2,10 +2,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::str::FromStr;
 
-use cosmwasm_std::{
-    Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, Order,
-    Response, StdError, StdResult, SubMsg, SubMsgResponse, to_binary, Uint128, WasmMsg,
-};
+use cosmwasm_std::{Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, Order, Response, StdError, StdResult, SubMsg, SubMsgResponse, to_binary, Uint128, WasmMsg};
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
 
@@ -128,7 +125,7 @@ pub fn register_steak_token(deps: DepsMut, response: SubMsgResponse) -> StdResul
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: Option<String>) -> StdResult<Response> {
+pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: Option<Binary>) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
@@ -189,7 +186,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>,bond_msg: 
     let send_transfer_msg: CosmosMsg = match contract_info {
         Ok(_) => {
             if let Some(exec_msg) = bond_msg {
-                if exec_msg == SPECIAL_SEND_MESSAGE_TO_TRANSFER {
+                if exec_msg == to_binary(SPECIAL_SEND_MESSAGE_TO_TRANSFER)? {
                     CosmosMsg::Wasm(WasmMsg::Execute {
                         contract_addr: steak_token.to_string(),
                         msg: to_binary(&Cw20ExecuteMsg::Transfer {
