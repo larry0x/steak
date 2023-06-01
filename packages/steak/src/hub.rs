@@ -82,6 +82,8 @@ pub enum ExecuteMsg {
     Harvest {},
     /// Use redelegations to balance the amounts of Luna delegated to validators
     Rebalance { minimum: Uint128 },
+    /// redelegate stake from one validator to another
+    Redelegate { validator_from: String, validator_to: String },
     /// Update Luna amounts in unbonding batches to reflect any slashing or rounding errors
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded

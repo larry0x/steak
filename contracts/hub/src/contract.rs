@@ -67,7 +67,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::RemoveValidatorEx { validator } => {
             execute::remove_validator_ex(deps, env, info.sender, validator)
         }
-
+        ExecuteMsg::Redelegate { validator_from,validator_to } => {
+            execute::redelegate(deps, env, info.sender, validator_from,validator_to)
+        }
         ExecuteMsg::TransferOwnership { new_owner } => {
             execute::transfer_ownership(deps, info.sender, new_owner)
         }
