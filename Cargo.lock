@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "pfc-steak"
-version = "3.0.3"
+version = "3.0.8"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
