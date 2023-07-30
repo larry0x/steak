@@ -45,6 +45,18 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 .unwrap_or(info.sender),
             info.funds,
             exec_msg,
+            false
+        ),
+        ExecuteMsg::BondEx { receiver,  } => execute::bond(
+            deps,
+            env,
+            receiver
+                .map(|s| api.addr_validate(&s))
+                .transpose()?
+                .unwrap_or(info.sender),
+            info.funds,
+            None,
+            true
         ),
         ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
             deps,

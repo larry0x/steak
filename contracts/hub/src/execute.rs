@@ -123,7 +123,7 @@ pub fn register_steak_token(deps: DepsMut, response: SubMsgResponse) -> StdResul
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg: Option<Binary>) -> StdResult<Response> {
+pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg: Option<Binary>, mint_it: bool) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
@@ -169,69 +169,80 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
         REPLY_REGISTER_RECEIVED_COINS,
     );
 
+    let mint_msgs: Vec<CosmosMsg> = if mint_it {
+        vec!(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: steak_token.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Mint {
+                recipient: receiver.to_string(),
+                amount: usteak_to_mint,
+            })?,
+            funds: vec![],
+        }))
+    } else {
+        let contract_info = deps.querier.query_wasm_contract_info(receiver.to_string());
 
-    let mint_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: steak_token.to_string(),
-        msg: to_binary(&Cw20ExecuteMsg::Mint {
-            recipient: env.contract.address.to_string(),//receiver.to_string(),
-            amount: usteak_to_mint,
-        })?,
-        funds: vec![],
-    });
-
-    let contract_info = deps.querier.query_wasm_contract_info(receiver.to_string());
-
-    let send_transfer_msg: CosmosMsg = match contract_info {
-        Ok(_) => {
-            if let Some(exec_msg) = bond_msg {
-                match from_binary(&exec_msg)?
-                {
-                    Cw20HookMsg::Transfer {} => {
-                        CosmosMsg::Wasm(WasmMsg::Execute {
-                            contract_addr: steak_token.to_string(),
-                            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                                recipient: receiver.to_string(),
-                                amount: usteak_to_mint,
-                            })?,
-                            funds: vec![],
-                        })
+        let send_transfer_msg: CosmosMsg = match contract_info {
+            Ok(_) => {
+                if let Some(exec_msg) = bond_msg {
+                    match from_binary(&exec_msg)?
+                    {
+                        Cw20HookMsg::Transfer {} => {
+                            CosmosMsg::Wasm(WasmMsg::Execute {
+                                contract_addr: steak_token.to_string(),
+                                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                                    recipient: receiver.to_string(),
+                                    amount: usteak_to_mint,
+                                })?,
+                                funds: vec![],
+                            })
+                        }
+                        Cw20HookMsg::Distribute {} => {
+                            CosmosMsg::Wasm(WasmMsg::Execute {
+                                contract_addr: steak_token.to_string(),
+                                msg: to_binary(&Cw20ExecuteMsg::Send {
+                                    contract: receiver.to_string(),
+                                    amount: usteak_to_mint,
+                                    msg: to_binary(&funds_distributor_api::msg::Cw20HookMsg::Distribute {})?,
+                                })?,
+                                funds: vec![],
+                            })
+                        }
                     }
-                    Cw20HookMsg::Distribute {} => {
-                        CosmosMsg::Wasm(WasmMsg::Execute {
-                            contract_addr: steak_token.to_string(),
-                            msg: to_binary(&Cw20ExecuteMsg::Send {
-                                contract: receiver.to_string(),
-                                amount: usteak_to_mint,
-                                msg: to_binary(&funds_distributor_api::msg::Cw20HookMsg::Distribute {})?,
-                            })?,
-                            funds: vec![],
-                        })
-                    }
+                } else {
+                    CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: steak_token.to_string(),
+                        msg: to_binary(&Cw20ExecuteMsg::Send {
+                            contract: receiver.to_string(),
+                            amount: usteak_to_mint,
+                            msg: Default::default(),
+                        })?,
+                        funds: vec![],
+                    })
                 }
-            } else {
+            }
+            Err(_) => {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: steak_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Send {
-                        contract: receiver.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                        recipient: receiver.to_string(),
                         amount: usteak_to_mint,
-                        msg: Default::default(),
+                        //  msg: Default::default(),
                     })?,
                     funds: vec![],
                 })
             }
-        }
-        Err(_) => {
+        };
+        vec!(
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: steak_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: receiver.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: env.contract.address.to_string(),//receiver.to_string(),
                     amount: usteak_to_mint,
-                    //  msg: Default::default(),
                 })?,
                 funds: vec![],
-            })
-        }
+            }), send_transfer_msg)
     };
+
 
     let event = Event::new("steakhub/bonded")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -243,7 +254,7 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
 
     Ok(Response::new()
         .add_submessage(delegate_submsg)
-        .add_messages(vec![mint_msg, send_transfer_msg])
+        .add_messages(mint_msgs)
         //   .add_message(send_msg)
         .add_event(event)
         .add_attribute("action", "steakhub/bond"))

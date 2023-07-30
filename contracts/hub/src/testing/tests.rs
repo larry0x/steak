@@ -413,6 +413,48 @@ fn bonding() {
         }
     );
 }
+#[test]
+fn bond_ex() {
+    let mut deps = setup_test();
+
+    // Bond when no delegation has been made
+    // In this case, the full deposit simply goes to the first validator
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("user_1", &[Coin::new(1_000_000, "uxyz")]),
+        ExecuteMsg::BondEx { receiver: None},
+    )
+        .unwrap();
+
+    // 3 messages. (switched to 3 so we can 'send' instead of 'transfer' minted tokens, so contract will know about it
+    // 1 - delegate
+    // 2 - mint token (to ourselves)
+    // 3 - send/transfer it
+    assert_eq!(res.messages.len(), 2);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::reply_on_success(Delegation::new("alice", 1_000_000, "uxyz").to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS)
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg {
+            id: 0,
+            msg: CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "steak_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: "user_1".to_string(),
+                    amount: Uint128::new(1_000_000),
+                })
+                    .unwrap(),
+                funds: vec![],
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never,
+        }
+    );
+
+}
 
 #[test]
 fn harvesting() {
