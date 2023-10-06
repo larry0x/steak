@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "pfc-steak"
-version = "3.0.8"
+version = "3.0.9"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -1413,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "pfc-steak-hub-tf"
-version = "3.0.4"
+version = "3.0.9"
 dependencies = [
  "cosmwasm-std",
  "cw-item-set",

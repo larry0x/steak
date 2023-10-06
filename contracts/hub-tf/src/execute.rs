@@ -20,7 +20,7 @@ use crate::math::{
 };
 use crate::state::{previous_batches, State, unbond_requests, VALIDATORS, VALIDATORS_ACTIVE};
 //use crate::token_factory::denom::{MsgBurn, MsgCreateDenom, MsgMint};
-use crate::types::{Coins, Delegation};
+use crate::types::{Coins, Delegation, Redelegation};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -1088,4 +1088,42 @@ pub fn return_denom(deps: DepsMut, _env: Env, _funds: Vec<Coin>) -> StdResult<Re
     } else {
         Err(StdError::generic_err("No Dust collector set"))
     }
+}
+
+pub fn redelegate(
+    deps: DepsMut,
+    env: Env,
+    sender: Addr,
+    validator_from: String,
+    validator_to: String,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+    let denom = state.denom.load(deps.storage)?;
+
+    let delegation = query_delegation(&deps.querier, &validator_from, &env.contract.address, &denom)?;
+
+    let redelegation_msg = SubMsg::reply_on_success(Redelegation::new(
+        &validator_from,
+        &validator_to,
+        delegation.amount,
+        &denom,
+    ).to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS);
+
+    state.prev_denom.save(
+        deps.storage,
+        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
+    )?;
+
+
+    let event = Event::new("steak/redelegate")
+        .add_attribute("validator_from", validator_from)
+        .add_attribute("validator_to", validator_to)
+        .add_attribute("amount", delegation.amount.to_string());
+
+    Ok(Response::new()
+        .add_submessage(redelegation_msg)
+        .add_event(event)
+        .add_attribute("action", "steakhub/redelegate"))
 }
