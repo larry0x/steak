@@ -112,7 +112,7 @@ pub enum ExecuteMsg {
     /// Set Dust Collector Contract
     SetDustCollector { dust_collector: Option<String> },
     /// Collect the Dust
-    CollectDust {},
+    CollectDust { max_tokens: u64},
     /// Return the Dust in shiny 'base denom'
     ReturnDenom {},
 }

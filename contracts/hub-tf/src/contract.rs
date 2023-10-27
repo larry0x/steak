@@ -97,7 +97,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::SetUnbondPeriod { unbond_period } => execute::set_unbond_period(deps, env, info.sender, unbond_period),
 
         ExecuteMsg::SetDustCollector { dust_collector } => { execute::set_dust_collector(deps, env, info.sender, dust_collector) }
-        ExecuteMsg::CollectDust {} => { execute::collect_dust(deps, env) }
+        ExecuteMsg::CollectDust { max_tokens } => { execute::collect_dust(deps, env, max_tokens) }
         ExecuteMsg::ReturnDenom {} => { execute::return_denom(deps, env, info.funds) }
     }
 }
@@ -124,7 +124,7 @@ fn callback(
 pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
         REPLY_REGISTER_RECEIVED_COINS => {
-            execute::collect_dust(deps, env)
+            execute::collect_dust(deps, env,10)
         }
         _ => {
             Err(StdError::generic_err(format!(

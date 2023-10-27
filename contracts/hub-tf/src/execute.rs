@@ -1070,7 +1070,7 @@ pub fn set_dust_collector(
         .add_attribute("action", "steakhub/set_dust_collector"))
 }
 
-pub fn collect_dust(deps: DepsMut, _env: Env) -> StdResult<Response> {
+pub fn collect_dust(deps: DepsMut, _env: Env, max_tokens: u64) -> StdResult<Response> {
     let state = State::default();
 
     if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {

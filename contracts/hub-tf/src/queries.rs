@@ -31,8 +31,8 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     }
 
 
-    let validator_active_vec: Vec<String> = Vec::from_iter(validators_active.into_iter());
-    let paused_validators: Vec<String> = Vec::from_iter(validators.into_iter());
+    let validator_active_vec: Vec<String> = Vec::from_iter(validators_active);
+    let paused_validators: Vec<String> = Vec::from_iter(validators);
 
     Ok(ConfigResponse {
         owner: state.owner.load(deps.storage)?.into(),
@@ -68,7 +68,7 @@ pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
         validators_active.insert(res?);
     }
     validators.extend(validators_active);
-    let validator_vec: Vec<String> = Vec::from_iter(validators.into_iter());
+    let validator_vec: Vec<String> = Vec::from_iter(validators);
     let delegations = query_delegations(&deps.querier, &validator_vec, &env.contract.address, &denom)?;
     let total_native: u128 = delegations.iter().map(|d| d.amount).sum();
 
