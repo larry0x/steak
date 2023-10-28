@@ -14,7 +14,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
 #cosmwasm-std = { version = "1.2.1", features=["iterator","stargate","cosmwasm_1_1","staking"]}
-cosmwasm-std = { version = "1.2.1", features=["iterator","stargate","staking"]}
+cosmwasm-std = { version = "1.0.1", features=["iterator","stargate","staking"]}
 
 cw2= "1.0.1"
 #cw20 = "1.0.0"
@@ -29,6 +29,7 @@ pfc-steak = { path = "../../packages/steak" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 pfc-fee-split = "0.2.5"
 pfc-dust-collector="0.1.0"
-#kujira = "0.7.25"
+#{ path="../../packages/pfc-dust-collector" }
 osmosis-std-derive="0.13.2"
+[dev-dependencies]
 protobuf = { version = "3.1.0", features = ["with-bytes"] }

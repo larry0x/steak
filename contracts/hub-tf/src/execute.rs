@@ -2,23 +2,27 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, Order, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
-
-use pfc_steak::DecimalCheckedOps;
-use pfc_steak::hub::{
-    Batch, CallbackMsg, FeeType, PendingBatch, UnbondRequest,
+use cosmwasm_std::{
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event,
+    Order, ReplyOn, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
-use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
 
-use crate::{injective, token_factory};
+use pfc_steak::hub::{Batch, CallbackMsg, FeeType, PendingBatch, UnbondRequest};
+use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
+use pfc_steak::DecimalCheckedOps;
+
 use crate::contract::{REPLY_REGISTER_RECEIVED_COINS, SPECIAL_SEND_MESSAGE_TO_TRANSFER};
-use crate::helpers::{get_denom_balance, parse_received_fund, query_all_delegations, query_delegation, query_delegations};
+use crate::helpers::{
+    get_denom_balance, parse_received_fund, query_all_delegations, query_delegation,
+    query_delegations,
+};
 use crate::kujira;
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
-use crate::state::{previous_batches, State, unbond_requests, VALIDATORS, VALIDATORS_ACTIVE};
+use crate::state::{previous_batches, unbond_requests, State, VALIDATORS, VALIDATORS_ACTIVE};
+use crate::{injective, token_factory};
 //use crate::token_factory::denom::{MsgBurn, MsgCreateDenom, MsgMint};
 use crate::types::{Coins, Delegation, Redelegation};
 
@@ -64,15 +68,17 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
         },
     )?;
 
-
     for v in msg.validators {
         VALIDATORS.insert(deps.storage, &v)?;
         VALIDATORS_ACTIVE.insert(deps.storage, &v)?;
     }
-    let token_factory_type = TokenFactoryType::from_str(&msg.token_factory)
-        .map_err(|_| StdError::generic_err("Invalid Token Factory type: CosmWasm, Kujira, or Injective only"))?;
+    let token_factory_type = TokenFactoryType::from_str(&msg.token_factory).map_err(|_| {
+        StdError::generic_err("Invalid Token Factory type: CosmWasm, Kujira, or Injective only")
+    })?;
 
-    state.token_factory_type.save(deps.storage, &token_factory_type)?;
+    state
+        .token_factory_type
+        .save(deps.storage, &token_factory_type)?;
 
     let steak_denom = format!("factory/{0}/{1}", env.contract.address, msg.steak_denom);
     let steak_denom_msg = msg.steak_denom;
@@ -80,28 +86,37 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     state.steak_minted.save(deps.storage, &Uint128::zero())?;
 
     if let Some(dust) = msg.dust_collector {
-        state.dust_collector.save(deps.storage, &Some(deps.api.addr_validate(&dust)?))?
+        state
+            .dust_collector
+            .save(deps.storage, &Some(deps.api.addr_validate(&dust)?))?
     } else {
         state.dust_collector.save(deps.storage, &None)?
     }
     let c = match state.token_factory_type.load(deps.storage)? {
         TokenFactoryType::CosmWasm => {
             <token_factory::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
-                token_factory::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
+                token_factory::denom::MsgCreateDenom {
+                    sender: env.contract.address.to_string(),
+                    subdenom: steak_denom_msg,
+                },
+            )
         }
-        TokenFactoryType::Kujira => {
-            <kujira::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
-                kujira::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
-        }
-        TokenFactoryType::Injective => {
-            <injective::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
-                injective::denom::MsgCreateDenom { sender: env.contract.address.to_string(), subdenom: steak_denom_msg })
-        }
+        TokenFactoryType::Kujira => <kujira::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+            kujira::denom::MsgCreateDenom {
+                sender: env.contract.address.to_string(),
+                subdenom: steak_denom_msg,
+            },
+        ),
+        TokenFactoryType::Injective => <injective::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+            injective::denom::MsgCreateDenom {
+                sender: env.contract.address.to_string(),
+                subdenom: steak_denom_msg,
+            },
+        ),
     };
 
     Ok(Response::new().add_message(c))
 }
-
 
 //--------------------------------------------------------------------------------------------------
 // Bonding and harvesting logics
@@ -115,7 +130,15 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
 /// smallest amount of delegation. If delegations become severely unbalance as a result of this
 /// (e.g. when a single user makes a very big deposit), anyone can invoke `ExecuteMsg::Rebalance`
 /// to balance the delegations.
-pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg: Option<String>) -> StdResult<Response> {
+///
+pub fn bond(
+    deps: DepsMut,
+    env: Env,
+    receiver: Addr,
+    funds: Vec<Coin>,
+    bond_msg: Option<String>,
+    mint_steak: bool,
+) -> StdResult<Response> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
     let amount_to_bond = parse_received_fund(&funds, &denom)?;
@@ -139,7 +162,12 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
     // Query the current delegations made to validators, and find the validator with the smallest
     // delegated amount through a linear search
     // The code for linear search is a bit uglier than using `sort_by` but cheaper: O(n) vs O(n * log(n))
-    let delegations_non_active = query_delegations(&deps.querier, &non_active_validator_list, &env.contract.address, &denom)?;
+    let delegations_non_active = query_delegations(
+        &deps.querier,
+        &non_active_validator_list,
+        &env.contract.address,
+        &denom,
+    )?;
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
 
     let mut validator = &delegations[0].validator;
@@ -155,60 +183,88 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
         amount: amount_to_bond.u128(),
         denom: denom.clone(),
     };
-
-    // Query the current supply of Steak and compute the amount to mint
-    //   let usteak_supply = steak_minted;
-    let usteak_to_mint = compute_mint_amount(steak_minted, amount_to_bond, &delegations, &delegations_non_active);
-    state.steak_minted.save(deps.storage, &(steak_minted + usteak_to_mint))?;
-    // TODO deal with multiple token returns
-    state.prev_denom.save(
-        deps.storage,
-        &get_denom_balance(&deps.querier, env.contract.address.clone(), denom.clone())?,
-    )?;
-
-    let delegate_submsg = SubMsg::reply_on_success(
-        new_delegation.to_cosmos_msg(),
-        REPLY_REGISTER_RECEIVED_COINS,
-    );
-
-    let mint_msg = match token_factory_type {
-        TokenFactoryType::CosmWasm => {
-            <token_factory::denom::MsgMint as Into<CosmosMsg>>::into(token_factory::denom::MsgMint {
-                sender: env.contract.address.to_string(),
-                amount: Some(token_factory::denom::Coin {
-                    denom: steak_denom.clone(),
-                    amount: usteak_to_mint.to_string(),
-                }),
-            })
-        }
-        TokenFactoryType::Kujira => {
-            <kujira::denom::MsgMint as Into<CosmosMsg>>::into(kujira::denom::MsgMint {
-                sender: env.contract.address.to_string(),
-                recipient: env.contract.address.to_string(),
-                amount: Some(kujira::denom::Coin {
-                    denom: steak_denom.clone(),
-                    amount: usteak_to_mint.to_string(),
-                }),
-            })
-        }
-        TokenFactoryType::Injective => {
-            <injective::denom::MsgMint as Into<CosmosMsg>>::into(injective::denom::MsgMint {
-                sender: env.contract.address.to_string(),
-                amount: Some(injective::denom::Coin {
-                    denom: steak_denom.clone(),
-                    amount: usteak_to_mint.to_string(),
-                }),
-            })
-        }
+    let delegate_submsg = SubMsg {
+        msg: new_delegation.to_cosmos_msg(),
+        id: REPLY_REGISTER_RECEIVED_COINS,
+        gas_limit: None,
+        reply_on: ReplyOn::Never,
     };
 
-    let contract_info = deps.querier.query_wasm_contract_info(receiver.to_string());
+    if mint_steak {
+        // Query the current supply of Steak and compute the amount to mint
+        //   let usteak_supply = steak_minted;
+        let usteak_to_mint = compute_mint_amount(
+            steak_minted,
+            amount_to_bond,
+            &delegations,
+            &delegations_non_active,
+        );
+        state
+            .steak_minted
+            .save(deps.storage, &(steak_minted + usteak_to_mint))?;
+        // TODO deal with multiple token returns
+        state.prev_denom.save(
+            deps.storage,
+            &get_denom_balance(&deps.querier, env.contract.address.clone(), denom.clone())?,
+        )?;
 
-    // send the uSteak, optionally calling a smart contract
-    let send_transfer_msg: CosmosMsg = match contract_info {
-        Ok(_) => {
-            if let Some(exec_msg) = bond_msg {
-                if exec_msg == SPECIAL_SEND_MESSAGE_TO_TRANSFER { // this is for backwards compatibility only
+        let mint_msg = match token_factory_type {
+            TokenFactoryType::CosmWasm => <token_factory::denom::MsgMint as Into<CosmosMsg>>::into(
+                token_factory::denom::MsgMint {
+                    sender: env.contract.address.to_string(),
+                    amount: Some(token_factory::denom::Coin {
+                        denom: steak_denom.clone(),
+                        amount: usteak_to_mint.to_string(),
+                    }),
+                },
+            ),
+            TokenFactoryType::Kujira => {
+                <kujira::denom::MsgMint as Into<CosmosMsg>>::into(kujira::denom::MsgMint {
+                    sender: env.contract.address.to_string(),
+                    recipient: env.contract.address.to_string(),
+                    amount: Some(kujira::denom::Coin {
+                        denom: steak_denom.clone(),
+                        amount: usteak_to_mint.to_string(),
+                    }),
+                })
+            }
+            TokenFactoryType::Injective => {
+                <injective::denom::MsgMint as Into<CosmosMsg>>::into(injective::denom::MsgMint {
+                    sender: env.contract.address.to_string(),
+                    amount: Some(injective::denom::Coin {
+                        denom: steak_denom.clone(),
+                        amount: usteak_to_mint.to_string(),
+                    }),
+                })
+            }
+        };
+
+        let contract_info = deps.querier.query_wasm_contract_info(receiver.to_string());
+
+        // send the uSteak, optionally calling a smart contract
+        let send_transfer_msg: CosmosMsg = match contract_info {
+            Ok(_) => {
+                if let Some(exec_msg) = bond_msg {
+                    if exec_msg == SPECIAL_SEND_MESSAGE_TO_TRANSFER {
+                        // this is for backwards compatibility only
+                        CosmosMsg::Bank(BankMsg::Send {
+                            to_address: receiver.to_string(),
+                            amount: vec![Coin {
+                                denom: steak_denom,
+                                amount: usteak_to_mint,
+                            }],
+                        })
+                    } else {
+                        CosmosMsg::Wasm(WasmMsg::Execute {
+                            contract_addr: receiver.to_string(),
+                            msg: to_binary(&exec_msg)?,
+                            funds: vec![Coin {
+                                denom: steak_denom,
+                                amount: usteak_to_mint,
+                            }],
+                        })
+                    }
+                } else {
                     CosmosMsg::Bank(BankMsg::Send {
                         to_address: receiver.to_string(),
                         amount: vec![Coin {
@@ -216,51 +272,44 @@ pub fn bond(deps: DepsMut, env: Env, receiver: Addr, funds: Vec<Coin>, bond_msg:
                             amount: usteak_to_mint,
                         }],
                     })
-                } else {
-                    CosmosMsg::Wasm(WasmMsg::Execute {
-                        contract_addr: receiver.to_string(),
-                        msg: to_binary(&exec_msg)?,
-                        funds: vec![Coin {
-                            denom: steak_denom,
-                            amount: usteak_to_mint,
-                        }],
-                    })
                 }
-            } else {
-                CosmosMsg::Bank(BankMsg::Send {
-                    to_address: receiver.to_string(),
-                    amount: vec![Coin {
-                        denom: steak_denom,
-                        amount: usteak_to_mint,
-                    }],
-                })
             }
-        }
-        Err(_) => {
-            CosmosMsg::Bank(BankMsg::Send {
+            Err(_) => CosmosMsg::Bank(BankMsg::Send {
                 to_address: receiver.to_string(),
                 amount: vec![Coin {
                     denom: steak_denom,
                     amount: usteak_to_mint,
                 }],
-            })
-        }
-    };
+            }),
+        };
 
-    let event = Event::new("steakhub/bonded")
-        .add_attribute("time", env.block.time.seconds().to_string())
-        .add_attribute("height", env.block.height.to_string())
-        .add_attribute("steak_receiver", receiver)
-        .add_attribute("denom_bonded", denom)
-        .add_attribute("denom_amount", amount_to_bond)
-        .add_attribute("usteak_minted", usteak_to_mint);
+        let event = Event::new("steakhub/bonded")
+            .add_attribute("time", env.block.time.seconds().to_string())
+            .add_attribute("height", env.block.height.to_string())
+            .add_attribute("steak_receiver", receiver)
+            .add_attribute("denom_bonded", denom)
+            .add_attribute("denom_amount", amount_to_bond)
+            .add_attribute("usteak_minted", usteak_to_mint);
 
-    Ok(Response::new()
-        .add_submessage(delegate_submsg)
-        .add_messages(vec![mint_msg, send_transfer_msg])
-        //   .add_message(send_msg)
-        .add_event(event)
-        .add_attribute("action", "steakhub/bond"))
+        Ok(Response::new()
+            .add_submessage(delegate_submsg)
+            .add_messages(vec![mint_msg, send_transfer_msg])
+            //   .add_message(send_msg)
+            .add_event(event)
+            .add_attribute("action", "steakhub/bond"))
+    } else {
+        let event = Event::new("steakhub/bonded-nomint")
+            .add_attribute("time", env.block.time.seconds().to_string())
+            .add_attribute("height", env.block.height.to_string())
+            .add_attribute("from", receiver)
+            .add_attribute("denom_bonded", denom)
+            .add_attribute("denom_amount", amount_to_bond);
+
+        Ok(Response::new()
+            .add_submessage(delegate_submsg)
+            .add_event(event)
+            .add_attribute("action", "steakhub/bond-nomint"))
+    }
 }
 
 pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
@@ -275,13 +324,13 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         .querier
         .query_all_delegations(&env.contract.address)?
         .into_iter()
-        .map(|d| {
-            SubMsg::reply_on_success(
-                CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
-                    validator: d.validator,
-                }),
-                REPLY_REGISTER_RECEIVED_COINS,
-            )
+        .map(|d| SubMsg {
+            id: REPLY_REGISTER_RECEIVED_COINS,
+            msg: CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward {
+                validator: d.validator,
+            }),
+            gas_limit: None,
+            reply_on: ReplyOn::Never,
         })
         .collect::<Vec<_>>();
 
@@ -362,11 +411,10 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
         let fee_type = state.fee_account_type.load(deps.storage)?;
 
         let send_msgs = match fee_type {
-            FeeType::Wallet =>
-                vec![CosmosMsg::Bank(BankMsg::Send {
-                    to_address: fee_account.to_string(),
-                    amount: vec![Coin::new(fee_amount.into(), &denom)],
-                })],
+            FeeType::Wallet => vec![CosmosMsg::Bank(BankMsg::Send {
+                to_address: fee_account.to_string(),
+                amount: vec![Coin::new(fee_amount.into(), &denom)],
+            })],
             FeeType::FeeSplit => {
                 let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit { flush: false };
 
@@ -451,7 +499,11 @@ pub fn queue_unbond(
     let state = State::default();
     let steak_denom = state.steak_denom.load(deps.storage)?;
 
-    let usteak_to_burn = funds.iter().filter(|p| p.denom == steak_denom).map(|steak_funds| steak_funds.amount).sum::<Uint128>();
+    let usteak_to_burn = funds
+        .iter()
+        .filter(|p| p.denom == steak_denom)
+        .map(|steak_funds| steak_funds.amount)
+        .sum::<Uint128>();
     if funds.len() != 1 || usteak_to_burn.is_zero() {
         return Err(StdError::generic_err(format!(
             "you can only send {} tokens to unbond",
@@ -531,11 +583,20 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     // for unbonding we still need to look at
     // TODO verify denom
     let delegations = query_all_delegations(&deps.querier, &env.contract.address)?;
-    let delegations_active = query_delegations(&deps.querier, &active_validator_list, &env.contract.address, &denom)?;
+    let delegations_active = query_delegations(
+        &deps.querier,
+        &active_validator_list,
+        &env.contract.address,
+        &denom,
+    )?;
     // let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
-    let amount_to_unbond =
-        compute_unbond_amount(usteak_supply, pending_batch.usteak_to_burn, &delegations, &delegations_active);
+    let amount_to_unbond = compute_unbond_amount(
+        usteak_supply,
+        pending_batch.usteak_to_burn,
+        &delegations,
+        &delegations_active,
+    );
 
     let new_undelegations = compute_undelegations(amount_to_unbond, &delegations, &denom);
 
@@ -576,28 +637,34 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let undelegate_submsgs = new_undelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS))
+        .map(|d| SubMsg {
+            id: REPLY_REGISTER_RECEIVED_COINS,
+            msg: d.to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never,
+        })
         .collect::<Vec<_>>();
 
-
     let burn_msg = match token_factory_type {
-        TokenFactoryType::Kujira =>
+        TokenFactoryType::Kujira => {
             <kujira::denom::MsgBurn as Into<CosmosMsg>>::into(kujira::denom::MsgBurn {
                 sender: env.contract.address.to_string(),
                 amount: Some(kujira::denom::Coin {
                     denom: steak_denom,
                     amount: pending_batch.usteak_to_burn.to_string(),
                 }),
-            }),
-        TokenFactoryType::CosmWasm =>
-            <token_factory::denom::MsgBurn as Into<CosmosMsg>>::into(token_factory::denom::MsgBurn {
+            })
+        }
+        TokenFactoryType::CosmWasm => <token_factory::denom::MsgBurn as Into<CosmosMsg>>::into(
+            token_factory::denom::MsgBurn {
                 sender: env.contract.address.to_string(),
                 amount: Some(token_factory::denom::Coin {
                     denom: steak_denom,
                     amount: pending_batch.usteak_to_burn.to_string(),
                 }),
-            }),
-        TokenFactoryType::Injective =>
+            },
+        ),
+        TokenFactoryType::Injective => {
             <injective::denom::MsgBurn as Into<CosmosMsg>>::into(injective::denom::MsgBurn {
                 sender: env.contract.address.to_string(),
                 amount: Some(injective::denom::Coin {
@@ -605,10 +672,13 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
                     amount: pending_batch.usteak_to_burn.to_string(),
                 }),
             })
+        }
     };
     // yes.. this will fail if supply is less than the amount to burn. this is intentional.
-    state.steak_minted.save(deps.storage, &(usteak_supply - pending_batch.usteak_to_burn))?;
-
+    state.steak_minted.save(
+        deps.storage,
+        &(usteak_supply - pending_batch.usteak_to_burn),
+    )?;
 
     let event = Event::new("steakhub/unbond_submitted")
         .add_attribute("time", env.block.time.seconds().to_string())
@@ -745,11 +815,9 @@ pub fn withdraw_unbonded(
                 if batch.total_shares.is_zero() {
                     previous_batches().remove(deps.storage, request.id)?;
                 } else {
-                    previous_batches()
-                        .save(deps.storage, batch.id, &batch)?;
+                    previous_batches().save(deps.storage, batch.id, &batch)?;
                 }
-                unbond_requests()
-                    .remove(deps.storage, (request.id, user.as_ref()))?;
+                unbond_requests().remove(deps.storage, (request.id, user.as_ref()))?;
             }
         }
     }
@@ -805,7 +873,12 @@ pub fn rebalance(deps: DepsMut, env: Env, minimum: Uint128) -> StdResult<Respons
 
     let redelegate_submsgs = new_redelegations
         .iter()
-        .map(|rd| SubMsg::reply_on_success(rd.to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS))
+        .map(|rd| SubMsg {
+            id: REPLY_REGISTER_RECEIVED_COINS,
+            msg: rd.to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never,
+        })
         .collect::<Vec<_>>();
 
     let amount: u128 = new_redelegations.iter().map(|rd| rd.amount).sum();
@@ -871,7 +944,12 @@ pub fn remove_validator(
 
     let redelegate_submsgs = new_redelegations
         .iter()
-        .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS))
+        .map(|d| SubMsg {
+            id: REPLY_REGISTER_RECEIVED_COINS,
+            msg: d.to_cosmos_msg(),
+            gas_limit: None,
+            reply_on: ReplyOn::Never,
+        })
         .collect::<Vec<_>>();
 
     let event = Event::new("steak/validator_removed").add_attribute("validator", validator);
@@ -898,7 +976,6 @@ pub fn remove_validator_ex(
         ));
     }
     VALIDATORS.remove(deps.storage, &validator)?;
-
 
     let event = Event::new("steak/validator_removed_ex").add_attribute("validator", validator);
 
@@ -1054,39 +1131,50 @@ pub fn set_dust_collector(
 ) -> StdResult<Response> {
     let state = State::default();
 
-
     state.assert_owner(deps.storage, &sender)?;
     if let Some(ref dust_addr) = dust_collector {
-        state.dust_collector.save(deps.storage, &Some(deps.api.addr_validate(dust_addr)?))?;
+        state
+            .dust_collector
+            .save(deps.storage, &Some(deps.api.addr_validate(dust_addr)?))?;
     } else {
         state.dust_collector.save(deps.storage, &None)?;
     };
 
-    let event = Event::new("steak/set_dust_collector")
-        .add_attribute("dust_collector", dust_collector.unwrap_or("-cleared-".into()));
+    let event = Event::new("steak/set_dust_collector").add_attribute(
+        "dust_collector",
+        dust_collector.unwrap_or("-cleared-".into()),
+    );
 
     Ok(Response::new()
         .add_event(event)
         .add_attribute("action", "steakhub/set_dust_collector"))
 }
 
-pub fn collect_dust(deps: DepsMut, _env: Env, max_tokens: u64) -> StdResult<Response> {
+pub fn collect_dust(deps: DepsMut, env: Env, max_tokens: usize) -> StdResult<Response> {
     let state = State::default();
-
-    if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {
-        Ok(Response::new().add_attribute("dust", "tbd"))
+    let denom = state.denom.load(deps.storage)?;
+    let steak_denom = state.steak_denom.load(deps.storage)?;
+    let balances = deps.querier.query_all_balances(env.contract.address)?;
+    let balances_filtered = balances
+        .into_iter()
+        .filter(|p| !(p.denom == denom || p.denom == steak_denom))
+        .take(max_tokens)
+        .collect::<Vec<Coin>>();
+    if balances_filtered.is_empty() {
+        return Ok(Response::new().add_attribute("dust", "no-dust"));
+    }
+    if let Some(dust_addr) = state.dust_collector.load(deps.storage)? {
+        let balances_count = balances_filtered.len();
+        let msg = CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: dust_addr.to_string(),
+            funds: balances_filtered,
+            msg: to_binary(&pfc_dust_collector::dust_collector::ExecuteMsg::DustReceived {})?,
+        });
+        Ok(Response::new()
+            .add_attribute("dust", format!("sent {} tokens", balances_count))
+            .add_message(msg))
     } else {
         Ok(Response::new().add_attribute("dust", "dust-collector-called"))
-    }
-}
-
-pub fn return_denom(deps: DepsMut, _env: Env, _funds: Vec<Coin>) -> StdResult<Response> {
-    let state = State::default();
-
-    if let Some(_dust_addr) = state.dust_collector.load(deps.storage)? {
-        Ok(Response::new().add_attribute("dust", "returned"))
-    } else {
-        Err(StdError::generic_err("No Dust collector set"))
     }
 }
 
@@ -1102,20 +1190,25 @@ pub fn redelegate(
     state.assert_owner(deps.storage, &sender)?;
     let denom = state.denom.load(deps.storage)?;
 
-    let delegation = query_delegation(&deps.querier, &validator_from, &env.contract.address, &denom)?;
-
-    let redelegation_msg = SubMsg::reply_on_success(Redelegation::new(
+    let delegation = query_delegation(
+        &deps.querier,
         &validator_from,
-        &validator_to,
-        delegation.amount,
+        &env.contract.address,
         &denom,
-    ).to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS);
+    )?;
+
+    let redelegation_msg = SubMsg {
+        id: REPLY_REGISTER_RECEIVED_COINS,
+        msg: Redelegation::new(&validator_from, &validator_to, delegation.amount, &denom)
+            .to_cosmos_msg(),
+        gas_limit: None,
+        reply_on: ReplyOn::Never,
+    };
 
     state.prev_denom.save(
         deps.storage,
         &get_denom_balance(&deps.querier, env.contract.address, denom)?,
     )?;
-
 
     let event = Event::new("steak/redelegate")
         .add_attribute("validator_from", validator_from)

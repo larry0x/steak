@@ -1,5 +1,5 @@
-use std::str::FromStr;
 use cosmwasm_schema::cw_serde;
+use std::str::FromStr;
 //
 use cosmwasm_std::{Decimal, Uint128};
 
@@ -7,9 +7,9 @@ use crate::hub::CallbackMsg;
 
 #[cw_serde]
 pub enum TokenFactoryType {
-    CosmWasm =1,
-    Kujira =2,
-    Injective =3
+    CosmWasm = 1,
+    Kujira = 2,
+    Injective = 3,
 }
 impl ToString for TokenFactoryType {
     fn to_string(&self) -> String {
@@ -63,7 +63,10 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Bond specified amount of Luna
-    Bond { receiver: Option<String>, exec_msg: Option<String> },
+    Bond {
+        receiver: Option<String>,
+        exec_msg: Option<String>,
+    },
     /// Bond specified amount of Luna
     Unbond { receiver: Option<String> },
 
@@ -92,7 +95,10 @@ pub enum ExecuteMsg {
     /// Use redelegations to balance the amounts of Luna delegated to validators
     Rebalance { minimum: Uint128 },
     /// redelegate stake from one validator to another
-    Redelegate { validator_from: String, validator_to: String },
+    Redelegate {
+        validator_from: String,
+        validator_to: String,
+    },
     /// Update Luna amounts in unbonding batches to reflect any slashing or rounding errors
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
@@ -112,8 +118,7 @@ pub enum ExecuteMsg {
     /// Set Dust Collector Contract
     SetDustCollector { dust_collector: Option<String> },
     /// Collect the Dust
-    CollectDust { max_tokens: u64},
+    CollectDust { max_tokens: u32 },
     /// Return the Dust in shiny 'base denom'
     ReturnDenom {},
 }
-

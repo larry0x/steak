@@ -21,7 +21,7 @@ cw-storage-plus = "0.13"
 pfc-steak = { path = "../../packages/steak" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 pfc-fee-split = "0.2.3"
-pfc-dust-collector = "0.1.0"
+#pfc-dust-collector = {path = "../../packages/pfc-dust-collector"}
 funds-distributor-api = {git="https://github.com/terra-money/enterprise-contracts.git" , branch="main"}
 #[dev-dependencies]
 #serde = { version = "1.0.103", default-features = false, features = ["derive"] }

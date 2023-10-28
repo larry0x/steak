@@ -1,11 +1,15 @@
-use cosmwasm_std::{Binary, Deps, DepsMut, entry_point, Env, MessageInfo, Reply, Response, StdError, StdResult, to_binary};
-use cw2::{ContractVersion, get_contract_version, set_contract_version};
+use cosmwasm_std::{
+    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdError,
+    StdResult,
+};
+use cw2::{get_contract_version, set_contract_version, ContractVersion};
+use std::convert::TryInto;
 
 use pfc_steak::hub::{CallbackMsg, MigrateMsg, QueryMsg};
 use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
 
-use crate::{execute, queries};
 use crate::state::State;
+use crate::{execute, queries};
 
 //use crate::helpers::{ unwrap_reply};
 
@@ -41,6 +45,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 .unwrap_or(info.sender),
             info.funds,
             exec_msg,
+            true,
         ),
         ExecuteMsg::Unbond { receiver } => execute::queue_unbond(
             deps,
@@ -48,7 +53,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             receiver
                 .map(|s| api.addr_validate(&s))
                 .transpose()?
-                .unwrap_or(info.sender), info.funds,
+                .unwrap_or(info.sender),
+            info.funds,
         ),
         ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
             deps,
@@ -71,9 +77,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::RemoveValidatorEx { validator } => {
             execute::remove_validator_ex(deps, env, info.sender, validator)
         }
-        ExecuteMsg::Redelegate { validator_from,validator_to } => {
-            execute::redelegate(deps, env, info.sender, validator_from,validator_to)
-        }        
+        ExecuteMsg::Redelegate {
+            validator_from,
+            validator_to,
+        } => execute::redelegate(deps, env, info.sender, validator_from, validator_to),
 
         ExecuteMsg::TransferOwnership { new_owner } => {
             execute::transfer_ownership(deps, info.sender, new_owner)
@@ -83,9 +90,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env, minimum),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
-        ExecuteMsg::TransferFeeAccount { fee_account_type, new_fee_account } => {
-            execute::transfer_fee_account(deps, info.sender, fee_account_type, new_fee_account)
-        }
+        ExecuteMsg::TransferFeeAccount {
+            fee_account_type,
+            new_fee_account,
+        } => execute::transfer_fee_account(deps, info.sender, fee_account_type, new_fee_account),
         ExecuteMsg::UpdateFee { new_fee } => execute::update_fee(deps, info.sender, new_fee),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
         ExecuteMsg::PauseValidator { validator } => {
@@ -94,14 +102,26 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::UnPauseValidator { validator } => {
             execute::unpause_validator(deps, env, info.sender, validator)
         }
-        ExecuteMsg::SetUnbondPeriod { unbond_period } => execute::set_unbond_period(deps, env, info.sender, unbond_period),
+        ExecuteMsg::SetUnbondPeriod { unbond_period } => {
+            execute::set_unbond_period(deps, env, info.sender, unbond_period)
+        }
 
-        ExecuteMsg::SetDustCollector { dust_collector } => { execute::set_dust_collector(deps, env, info.sender, dust_collector) }
-        ExecuteMsg::CollectDust { max_tokens } => { execute::collect_dust(deps, env, max_tokens) }
-        ExecuteMsg::ReturnDenom {} => { execute::return_denom(deps, env, info.funds) }
+        ExecuteMsg::SetDustCollector { dust_collector } => {
+            execute::set_dust_collector(deps, env, info.sender, dust_collector)
+        }
+        ExecuteMsg::CollectDust { max_tokens } => {
+            let max_tokens_usize_r = max_tokens.try_into();
+            if let Ok(max_tokens_usize) = max_tokens_usize_r {
+                execute::collect_dust(deps, env, max_tokens_usize)
+            } else {
+                Err(StdError::generic_err("max_tokens too large"))
+            }
+        }
+        ExecuteMsg::ReturnDenom {} => {
+            execute::bond(deps, env, info.sender, info.funds, None, false)
+        }
     }
 }
-
 
 fn callback(
     deps: DepsMut,
@@ -121,21 +141,14 @@ fn callback(
 }
 
 #[entry_point]
-pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
+pub fn reply(_deps: DepsMut, _env: Env, reply: Reply) -> StdResult<Response> {
     match reply.id {
-        REPLY_REGISTER_RECEIVED_COINS => {
-            execute::collect_dust(deps, env,10)
-        }
-        _ => {
-            Err(StdError::generic_err(format!(
-                "invalid reply id: {}  {:?}",
-                reply.id,
-                reply.result
-            ))
-            )
-        }
+        REPLY_REGISTER_RECEIVED_COINS => Ok(Response::default()),
+        _ => Err(StdError::generic_err(format!(
+            "invalid reply id: {}  {:?}",
+            reply.id, reply.result
+        ))),
     }
-
 }
 
 #[entry_point]
@@ -186,16 +199,19 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
             #[allow(clippy::single_match)]
             "0" => {}
             "3.0.1" | "3.0.2" => {
-                let  state = State::default();
+                let state = State::default();
                 let kuji = state.kuji_token_factory.load(deps.storage)?;
                 if kuji {
-                    state.token_factory_type.save(deps.storage,&TokenFactoryType::Kujira)?
+                    state
+                        .token_factory_type
+                        .save(deps.storage, &TokenFactoryType::Kujira)?
                 } else {
-                    state.token_factory_type.save(deps.storage,&TokenFactoryType::CosmWasm)?
+                    state
+                        .token_factory_type
+                        .save(deps.storage, &TokenFactoryType::CosmWasm)?
                 }
-
             }
-                _ => {}
+            _ => {}
         },
         _ => {
             return Err(StdError::generic_err(

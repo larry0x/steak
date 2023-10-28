@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, Binary, Coin, CosmosMsg, Decimal, Empty, StdResult, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{
+    to_binary, Addr, Binary, Coin, CosmosMsg, Decimal, Empty, StdResult, Uint128, WasmMsg,
+};
 use cw20::Cw20ReceiveMsg;
 use cw20_base::msg::InstantiateMarketingInfo as Cw20InstantiateMarketingInfo;
 use schemars::JsonSchema;
@@ -9,8 +11,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 pub enum Cw20HookMsg {
     Distribute {},
-    Transfer{}
+    Transfer {},
 }
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 pub enum EnterpriseCw20HookMsg {
     Distribute {},
@@ -57,41 +60,69 @@ pub enum ExecuteMsg {
     /// Implements the Cw20 receiver interface
     Receive(Cw20ReceiveMsg),
     /// Bond specified amount of Luna
-    Bond { receiver: Option<String>, exec_msg: Option<Binary> },
+    Bond {
+        receiver: Option<String>,
+        exec_msg: Option<Binary>,
+    },
     /// Bond specified amount of Luna, just minting it directly (cw-20 version only)
-    BondEx { receiver: Option<String> },
+    BondEx {
+        receiver: Option<String>,
+    },
     /// Withdraw Luna that have finished unbonding in previous batches
-    WithdrawUnbonded { receiver: Option<String> },
+    WithdrawUnbonded {
+        receiver: Option<String>,
+    },
     /// Withdraw Luna that has finished unbonding in previous batches, for given address
-    WithdrawUnbondedAdmin { address: String },
+    WithdrawUnbondedAdmin {
+        address: String,
+    },
     /// Add a validator to the whitelist; callable by the owner
-    AddValidator { validator: String },
+    AddValidator {
+        validator: String,
+    },
     /// Remove a validator from the whitelist; callable by the owner
-    RemoveValidator { validator: String },
+    RemoveValidator {
+        validator: String,
+    },
     /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for typos
-    RemoveValidatorEx { validator: String },
+    RemoveValidatorEx {
+        validator: String,
+    },
 
     /// Pause a validator from accepting new delegations
-    PauseValidator { validator: String },
+    PauseValidator {
+        validator: String,
+    },
     /// Unpause a validator from accepting new delegations
-    UnPauseValidator { validator: String },
+    UnPauseValidator {
+        validator: String,
+    },
 
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
-    TransferOwnership { new_owner: String },
+    TransferOwnership {
+        new_owner: String,
+    },
     /// Accept an ownership transfer
     AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
     /// Use redelegations to balance the amounts of Luna delegated to validators
-    Rebalance { minimum: Uint128 },
+    Rebalance {
+        minimum: Uint128,
+    },
     /// redelegate stake from one validator to another
-    Redelegate { validator_from: String, validator_to: String },
+    Redelegate {
+        validator_from: String,
+        validator_to: String,
+    },
     /// Update Luna amounts in unbonding batches to reflect any slashing or rounding errors
     Reconcile {},
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
     /// Set unbond period
-    SetUnbondPeriod { unbond_period: u64 },
+    SetUnbondPeriod {
+        unbond_period: u64,
+    },
 
     /// Transfer Fee collection account to another account
     TransferFeeAccount {
@@ -99,13 +130,19 @@ pub enum ExecuteMsg {
         new_fee_account: String,
     },
     /// Update fee collection amount
-    UpdateFee { new_fee: Decimal },
+    UpdateFee {
+        new_fee: Decimal,
+    },
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
     // Set The Duster.
-    SetDustCollector { dust_collector: Option<String> },
+    SetDustCollector {
+        dust_collector: Option<String>,
+    },
     /// Collect the Dust
-    CollectDust {},
+    CollectDust {
+        max_tokens: u32,
+    },
     /// Return the Dust in shiny 'base denom'
     ReturnDenom {},
 }
@@ -193,7 +230,7 @@ pub struct ConfigResponse {
     pub validators: Vec<String>,
     pub paused_validators: Vec<String>,
     pub dust_collector: Option<String>,
-    pub token_factory: Option<String>
+    pub token_factory: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]
