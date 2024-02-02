@@ -1,0 +1,15 @@
+{
+  "owner": "kujira1lu92zj8q6cmrptu09rp3343x9969r9qrva5t90",
+  "epoch_period": 259200,
+  "unbond_period": 1209600,
+  "validators": [
+    "kujiravaloper1670dvuv348eynr9lsmdrhqu3g7vpmzx9ugf8fk"
+  ],
+  "denom": "ukuji",
+  "steak_denom": "boneKuji",
+  "fee_account": "kujira1lu92zj8q6cmrptu09rp3343x9969r9qrva5t90",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "Wallet",
+  "token_factory": "Kuji"
+}

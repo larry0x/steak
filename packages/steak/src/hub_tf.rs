@@ -10,6 +10,7 @@ pub enum TokenFactoryType {
     CosmWasm = 1,
     Kujira = 2,
     Injective = 3,
+    Osmosis = 4,
 }
 impl ToString for TokenFactoryType {
     fn to_string(&self) -> String {
@@ -17,6 +18,7 @@ impl ToString for TokenFactoryType {
             TokenFactoryType::CosmWasm => String::from("CosmWasm"),
             TokenFactoryType::Kujira => String::from("Kujira"),
             TokenFactoryType::Injective => String::from("Injective"),
+            TokenFactoryType::Osmosis => String::from("Osmosis"),
         }
     }
 }
@@ -27,6 +29,7 @@ impl FromStr for TokenFactoryType {
             "CosmWasm" => Ok(TokenFactoryType::CosmWasm),
             "Kujira" => Ok(TokenFactoryType::Kujira),
             "Injective" => Ok(TokenFactoryType::Injective),
+            "Osmosis" => Ok(TokenFactoryType::Osmosis),
             _ => Err(()),
         }
     }

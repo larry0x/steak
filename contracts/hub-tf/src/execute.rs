@@ -16,13 +16,13 @@ use crate::helpers::{
     get_denom_balance, parse_received_fund, query_all_delegations, query_delegation,
     query_delegations,
 };
-use crate::kujira;
 use crate::math::{
     compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
     compute_unbond_amount, compute_undelegations, reconcile_batches,
 };
 use crate::state::{previous_batches, unbond_requests, State, VALIDATORS, VALIDATORS_ACTIVE};
 use crate::{injective, token_factory};
+use crate::{kujira, osmosis};
 //use crate::token_factory::denom::{MsgBurn, MsgCreateDenom, MsgMint};
 use crate::types::{Coins, Delegation, Redelegation};
 
@@ -109,6 +109,12 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
         ),
         TokenFactoryType::Injective => <injective::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
             injective::denom::MsgCreateDenom {
+                sender: env.contract.address.to_string(),
+                subdenom: steak_denom_msg,
+            },
+        ),
+        TokenFactoryType::Osmosis => <osmosis::denom::MsgCreateDenom as Into<CosmosMsg>>::into(
+            osmosis::denom::MsgCreateDenom {
                 sender: env.contract.address.to_string(),
                 subdenom: steak_denom_msg,
             },
@@ -235,6 +241,16 @@ pub fn bond(
                         denom: steak_denom.clone(),
                         amount: usteak_to_mint.to_string(),
                     }),
+                })
+            }
+            TokenFactoryType::Osmosis => {
+                <osmosis::denom::MsgMint as Into<CosmosMsg>>::into(osmosis::denom::MsgMint {
+                    sender: env.contract.address.to_string(),
+                    amount: Some(osmosis::denom::Coin {
+                        denom: steak_denom.clone(),
+                        amount: usteak_to_mint.to_string(),
+                    }),
+                    mint_to_address: env.contract.address.to_string(),
                 })
             }
         };
@@ -671,6 +687,16 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
                     denom: steak_denom,
                     amount: pending_batch.usteak_to_burn.to_string(),
                 }),
+            })
+        }
+        TokenFactoryType::Osmosis => {
+            <osmosis::denom::MsgBurn as Into<CosmosMsg>>::into(osmosis::denom::MsgBurn {
+                sender: env.contract.address.to_string(),
+                amount: Some(osmosis::denom::Coin {
+                    denom: steak_denom,
+                    amount: pending_batch.usteak_to_burn.to_string(),
+                }),
+                burn_from_address: env.contract.address.to_string(),
             })
         }
     };
