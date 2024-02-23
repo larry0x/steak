@@ -124,4 +124,6 @@ pub enum ExecuteMsg {
     CollectDust { max_tokens: u32 },
     /// Return the Dust in shiny 'base denom'
     ReturnDenom {},
+    /// change tokenfactory type (ADMIN only)
+    ChangeTokenFactory { token_factory_type: String },
 }

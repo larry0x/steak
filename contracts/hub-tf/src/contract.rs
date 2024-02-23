@@ -120,6 +120,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::ReturnDenom {} => {
             execute::bond(deps, env, info.sender, info.funds, None, false)
         }
+        ExecuteMsg::ChangeTokenFactory { token_factory_type } => {
+            execute::change_token_factory(deps, info.sender, &token_factory_type)
+        }
     }
 }
 
@@ -186,13 +189,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 #[entry_point]
 pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
-    let contract_version = match get_contract_version(deps.storage) {
-        Ok(version) => version,
-        Err(_) => ContractVersion {
-            contract: "steak-hub-tf".to_string(),
-            version: "0".to_string(),
-        },
-    };
+    let contract_version = get_contract_version(deps.storage).unwrap_or_else(|_| ContractVersion {
+        contract: "steak-hub-tf".to_string(),
+        version: "0".to_string(),
+    });
     match contract_version.contract.as_ref() {
         #[allow(clippy::single_match)]
         "steak-hub-tf" => match contract_version.version.as_ref() {

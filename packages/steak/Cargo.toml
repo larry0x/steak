@@ -1,6 +1,6 @@
 [package]
 name = "pfc-steak"
-version = "3.0.11"
+version = "3.0.12"
 authors = ["larry <gm@larry.engineer>", "PFC <pfc-validator@protonmail.com>"]
 edition = "2018"
 description = "Liquid steaking protocol for the cosmos"

@@ -1246,3 +1246,24 @@ pub fn redelegate(
         .add_event(event)
         .add_attribute("action", "steakhub/redelegate"))
 }
+
+pub fn change_token_factory(
+    deps: DepsMut,
+    sender: Addr,
+    token_factory_type: &str,
+) -> StdResult<Response> {
+    let state = State::default();
+
+    state.assert_owner(deps.storage, &sender)?;
+
+    let tf = TokenFactoryType::from_str(token_factory_type)
+        .map_err(|_| StdError::generic_err("Invalid Token Factory type"))?;
+
+    state.token_factory_type.save(deps.storage, &tf)?;
+    let event = Event::new("steak/change_token_factory")
+        .add_attribute("token_factory_type", token_factory_type);
+
+    Ok(Response::new()
+        .add_event(event)
+        .add_attribute("action", "steakhub/change_token_factory"))
+}
