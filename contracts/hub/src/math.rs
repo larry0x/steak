@@ -1,8 +1,6 @@
-use std::{cmp, cmp::Ordering};
-use std::collections::HashMap;
+use std::{cmp, cmp::Ordering, collections::HashMap};
 
 use cosmwasm_std::Uint128;
-
 use pfc_steak::hub::Batch;
 
 use crate::types::{Delegation, Redelegation, Undelegation};
@@ -32,8 +30,8 @@ pub(crate) fn compute_mint_amount(
 
 /// Compute the amount of `native` to unbond for a specific `usteak` burn amount
 ///
-/// There is no way `usteak` total supply is zero when the user is senting a non-zero amount of `usteak`
-/// to burn, so we don't need to handle division-by-zero here
+/// There is no way `usteak` total supply is zero when the user is senting a non-zero amount of
+/// `usteak` to burn, so we don't need to handle division-by-zero here
 pub(crate) fn compute_unbond_amount(
     usteak_supply: Uint128,
     usteak_to_burn: Uint128,
@@ -145,10 +143,11 @@ pub(crate) fn compute_redelegations_for_removal(
     new_redelegations
 }
 
-/// Compute redelegation moves that will make each validator's delegation the targeted amount (hopefully
-/// this sentence makes sense)
+/// Compute redelegation moves that will make each validator's delegation the targeted amount
+/// (hopefully this sentence makes sense)
 ///
-/// This algorithm does not guarantee the minimal number of moves, but is the best I can some up with...
+/// This algorithm does not guarantee the minimal number of moves, but is the best I can some up
+/// with...
 pub(crate) fn compute_redelegations_for_rebalancing(
     validators_active: Vec<String>,
     current_delegations: &[Delegation],
@@ -169,7 +168,8 @@ pub(crate) fn compute_redelegations_for_rebalancing(
     for (i, d) in current_delegations.iter().enumerate() {
         let remainder_for_validator: u128 = u128::from((i + 1) as u128 <= remainder);
         let native_for_validator = native_per_validator + remainder_for_validator;
-        // eprintln!("{} amount ={} native={} min={}", d.validator, d.amount, native_for_validator, min_difference);
+        // eprintln!("{} amount ={} native={} min={}", d.validator, d.amount, native_for_validator,
+        // min_difference);
         match d.amount.cmp(&native_for_validator) {
             Ordering::Greater => {
                 if d.amount - native_for_validator > min_difference.u128() {
@@ -179,17 +179,18 @@ pub(crate) fn compute_redelegations_for_rebalancing(
                         &d.denom,
                     ));
                 }
-            }
+            },
             Ordering::Less => {
-                if validators_active.contains(&d.validator) &&
-                    native_for_validator - d.amount > min_difference.u128() {
+                if validators_active.contains(&d.validator)
+                    && native_for_validator - d.amount > min_difference.u128()
+                {
                     dst_delegations.push(Delegation::new(
                         &d.validator,
                         native_for_validator - d.amount,
                         &d.denom,
                     ));
                 }
-            }
+            },
             Ordering::Equal => (),
         }
     }
@@ -227,9 +228,9 @@ pub(crate) fn compute_redelegations_for_rebalancing(
 // Batch logics
 //--------------------------------------------------------------------------------------------------
 
-/// If the received native amount after the unbonding period is less than expected, e.g. due to rounding
-/// error or the validator(s) being slashed, then deduct the difference in amount evenly from each
-/// unreconciled batch.
+/// If the received native amount after the unbonding period is less than expected, e.g. due to
+/// rounding error or the validator(s) being slashed, then deduct the difference in amount evenly
+/// from each unreconciled batch.
 ///
 /// The idea of "reconciling" is based on Stader's implementation:
 /// https://github.com/stader-labs/stader-liquid-token/blob/v0.2.1/contracts/staking/src/contract.rs#L968-L1048

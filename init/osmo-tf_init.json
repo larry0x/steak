@@ -1,0 +1,16 @@
+{
+  "owner": "osmo1lu92zj8q6cmrptu09rp3343x9969r9qr4w9r7h",
+  "epoch_period": 259200,
+  "unbond_period": 1209600,
+  "validators": [
+    "osmovaloper14ts0j42qkpr43a3tgxr7zz6l6zdf7hdes5jpma",
+    "osmovaloper135p8cjwa3hnnnksjxchda0a6339z9zm7cudyxn"
+  ],
+  "denom": "uosmo",
+  "steak_denom": "boneOsmo",
+  "fee_account": "osmo1ctrfxgxdjqgd0usaepzdan2razpd3sge7jvckakh036yzm24ymgsnktjf8",
+  "fee_amount": "0.10",
+  "max_fee_amount": "0.10",
+  "fee_account_type": "Wallet",
+  "token_factory": "Osmosis"
+}

@@ -51,7 +51,10 @@ impl Cw20Querier {
                 let balance = contract_balances
                     .get(address)
                     .ok_or_else(|| SystemError::InvalidRequest {
-                        error: format!("[mock] balance not set for cw20 `{}` and user `{}`", contract_addr, address),
+                        error: format!(
+                            "[mock] balance not set for cw20 `{}` and user `{}`",
+                            contract_addr, address
+                        ),
                         request: Default::default(),
                     })
                     .unwrap();

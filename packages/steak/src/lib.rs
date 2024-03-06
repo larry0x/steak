@@ -4,8 +4,9 @@ pub mod hub_tf;
 // this was copied from eris-staking's branch of STEAK.
 //
 mod decimal_checked_ops {
-    use cosmwasm_std::{Decimal, Decimal256, Fraction, OverflowError, StdError, Uint128, Uint256};
     use std::{convert::TryInto, str::FromStr};
+
+    use cosmwasm_std::{Decimal, Decimal256, Fraction, OverflowError, StdError, Uint128, Uint256};
 
     // pub trait Decimal256CheckedOps {
     //     fn to_decimal(self) -> Result<Decimal, StdError>;

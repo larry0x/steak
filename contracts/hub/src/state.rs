@@ -1,6 +1,5 @@
 use cosmwasm_std::{Addr, Coin, Decimal, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
-
 use pfc_steak::hub::{Batch, FeeType, PendingBatch, UnbondRequest};
 
 use crate::types::BooleanKey;
@@ -12,7 +11,7 @@ pub(crate) struct State<'a> {
     pub owner: Item<'a, Addr>,
     /// Pending ownership transfer, awaiting acceptance by the new owner
     pub new_owner: Item<'a, Addr>,
-    pub fee_account_type: Item<'a,FeeType>,
+    pub fee_account_type: Item<'a, FeeType>,
     /// Account to send fees to
     pub fee_account: Item<'a, Addr>,
     /// Current fee rate
@@ -80,7 +79,7 @@ impl Default for State<'static> {
             validators_active: Item::new("validators_active"),
             prev_denom: Item::new("prev_denom"),
             fee_account_type: Item::new("fee_account_type"),
-            dust_collector: Item::new("dust_collector")
+            dust_collector: Item::new("dust_collector"),
         }
     }
 }

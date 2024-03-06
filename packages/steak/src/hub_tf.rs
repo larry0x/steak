@@ -1,5 +1,6 @@
-use cosmwasm_schema::cw_serde;
 use std::str::FromStr;
+
+use cosmwasm_schema::cw_serde;
 //
 use cosmwasm_std::{Decimal, Uint128};
 
@@ -24,6 +25,7 @@ impl ToString for TokenFactoryType {
 }
 impl FromStr for TokenFactoryType {
     type Err = ();
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "CosmWasm" => Ok(TokenFactoryType::CosmWasm),
@@ -71,32 +73,53 @@ pub enum ExecuteMsg {
         exec_msg: Option<String>,
     },
     /// Bond specified amount of Luna
-    Unbond { receiver: Option<String> },
+    Unbond {
+        receiver: Option<String>,
+    },
 
     /// Withdraw Luna that have finished un-bonding in previous batches
-    WithdrawUnbonded { receiver: Option<String> },
+    WithdrawUnbonded {
+        receiver: Option<String>,
+    },
     /// Withdraw Luna that has finished unbonding in previous batches, for given address
-    WithdrawUnbondedAdmin { address: String },
+    WithdrawUnbondedAdmin {
+        address: String,
+    },
     /// Add a validator to the whitelist; callable by the owner
-    AddValidator { validator: String },
+    AddValidator {
+        validator: String,
+    },
     /// Remove a validator from the whitelist; callable by the owner
-    RemoveValidator { validator: String },
-    /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for typos
-    RemoveValidatorEx { validator: String },
+    RemoveValidator {
+        validator: String,
+    },
+    /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for
+    /// typos
+    RemoveValidatorEx {
+        validator: String,
+    },
 
     /// Pause a validator from accepting new delegations
-    PauseValidator { validator: String },
+    PauseValidator {
+        validator: String,
+    },
     /// Unpause a validator from accepting new delegations
-    UnPauseValidator { validator: String },
+    UnPauseValidator {
+        validator: String,
+    },
 
     /// Transfer ownership to another account; will not take effect unless the new owner accepts
-    TransferOwnership { new_owner: String },
+    TransferOwnership {
+        new_owner: String,
+    },
     /// Accept an ownership transfer
     AcceptOwnership {},
     /// Claim staking rewards, swap all for Luna, and restake
     Harvest {},
     /// Use redelegations to balance the amounts of Luna delegated to validators
-    Rebalance { minimum: Uint128 },
+    Rebalance {
+        minimum: Uint128,
+    },
     /// redelegate stake from one validator to another
     Redelegate {
         validator_from: String,
@@ -107,7 +130,9 @@ pub enum ExecuteMsg {
     /// Submit the current pending batch of unbonding requests to be unbonded
     SubmitBatch {},
     /// Set unbond period
-    SetUnbondPeriod { unbond_period: u64 },
+    SetUnbondPeriod {
+        unbond_period: u64,
+    },
 
     /// Transfer Fee collection account to another account
     TransferFeeAccount {
@@ -115,15 +140,23 @@ pub enum ExecuteMsg {
         new_fee_account: String,
     },
     /// Update fee collection amount
-    UpdateFee { new_fee: Decimal },
+    UpdateFee {
+        new_fee: Decimal,
+    },
     /// Callbacks; can only be invoked by the contract itself
     Callback(CallbackMsg),
     /// Set Dust Collector Contract
-    SetDustCollector { dust_collector: Option<String> },
+    SetDustCollector {
+        dust_collector: Option<String>,
+    },
     /// Collect the Dust
-    CollectDust { max_tokens: u32 },
+    CollectDust {
+        max_tokens: u32,
+    },
     /// Return the Dust in shiny 'base denom'
     ReturnDenom {},
     /// change tokenfactory type (ADMIN only)
-    ChangeTokenFactory { token_factory_type: String },
+    ChangeTokenFactory {
+        token_factory_type: String,
+    },
 }

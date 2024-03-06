@@ -1,17 +1,20 @@
-use std::collections::{BTreeSet, HashSet};
-use std::iter::FromIterator;
+use std::{
+    collections::{BTreeSet, HashSet},
+    iter::FromIterator,
+};
 
-use cosmwasm_std::{ Decimal, Deps, Env, Order, StdResult, Uint128};
+use cosmwasm_std::{Decimal, Deps, Env, Order, StdResult, Uint128};
 use cw_storage_plus::Bound;
-
 use pfc_steak::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem,
 };
 
-use crate::helpers::query_delegations;
-use crate::state;
-use crate::state::{State, VALIDATORS, VALIDATORS_ACTIVE};
+use crate::{
+    helpers::query_delegations,
+    state,
+    state::{State, VALIDATORS, VALIDATORS_ACTIVE},
+};
 
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
@@ -30,16 +33,12 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         validators_active.insert(validator);
     }
 
-
     let validator_active_vec: Vec<String> = Vec::from_iter(validators_active);
     let paused_validators: Vec<String> = Vec::from_iter(validators);
 
     Ok(ConfigResponse {
         owner: state.owner.load(deps.storage)?.into(),
-        new_owner: state
-            .new_owner
-            .may_load(deps.storage)?
-            .map(|addr| addr.into()),
+        new_owner: state.new_owner.may_load(deps.storage)?.map(|addr| addr.into()),
         steak_token: state.steak_denom.load(deps.storage)?,
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
@@ -50,15 +49,15 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,
         validators: validator_active_vec,
         paused_validators,
-        dust_collector: state.dust_collector.load(deps.storage)?.map( |a| a.to_string()),
-        token_factory: Some(state.token_factory_type.load(deps.storage)?.to_string())
+        dust_collector: state.dust_collector.load(deps.storage)?.map(|a| a.to_string()),
+        token_factory: Some(state.token_factory_type.load(deps.storage)?.to_string()),
     })
 }
 
 pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let state = State::default();
     let denom = state.denom.load(deps.storage)?;
-    let total_usteak = state.steak_minted.load(deps.storage)?;// query_cw20_total_supply(&deps.querier, &steak_token)?;
+    let total_usteak = state.steak_minted.load(deps.storage)?; // query_cw20_total_supply(&deps.querier, &steak_token)?;
     let mut validators: HashSet<String> = Default::default();
     for res in VALIDATORS.items(deps.storage, None, None, Order::Ascending) {
         validators.insert(res?);
@@ -69,7 +68,8 @@ pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     }
     validators.extend(validators_active);
     let validator_vec: Vec<String> = Vec::from_iter(validators);
-    let delegations = query_delegations(&deps.querier, &validator_vec, &env.contract.address, &denom)?;
+    let delegations =
+        query_delegations(&deps.querier, &validator_vec, &env.contract.address, &denom)?;
     let total_native: u128 = delegations.iter().map(|d| d.amount).sum();
 
     let exchange_rate = if total_usteak.is_zero() {
@@ -128,7 +128,7 @@ pub fn unbond_requests_by_batch(
             deps.api.addr_validate(&addr_str)?;
             addr_clone = addr_str;
             Some(Bound::exclusive(addr_clone.as_str()))
-        }
+        },
     };
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 

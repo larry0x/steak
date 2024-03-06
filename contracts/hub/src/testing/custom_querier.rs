@@ -1,16 +1,15 @@
 use std::collections::HashMap;
 
-use cosmwasm_std::testing::{BankQuerier, StakingQuerier, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, from_slice, Addr, Coin, Empty, FullDelegation, Querier, QuerierResult,
-    QueryRequest, SystemError, WasmQuery,
+    from_binary, from_slice,
+    testing::{BankQuerier, StakingQuerier, MOCK_CONTRACT_ADDR},
+    Addr, Coin, Empty, FullDelegation, Querier, QuerierResult, QueryRequest, SystemError,
+    WasmQuery,
 };
 use cw20::Cw20QueryMsg;
 
+use super::{cw20_querier::Cw20Querier, helpers::err_unsupported_query};
 use crate::types::Delegation;
-
-use super::cw20_querier::Cw20Querier;
-use super::helpers::err_unsupported_query;
 
 #[derive(Default)]
 pub(super) struct CustomQuerier {
@@ -28,7 +27,7 @@ impl Querier for CustomQuerier {
                     error: format!("Parsing query request: {}", e),
                     request: bin_request.into(),
                 })
-                .into()
+                .into();
             },
         };
         self.handle_query(&request)
@@ -51,9 +50,7 @@ impl CustomQuerier {
     }
 
     pub fn set_cw20_total_supply(&mut self, token: &str, total_supply: u128) {
-        self.cw20_querier
-            .total_supplies
-            .insert(token.to_string(), total_supply);
+        self.cw20_querier.total_supplies.insert(token.to_string(), total_supply);
     }
 
     pub fn set_bank_balances(&mut self, balances: &[Coin]) {

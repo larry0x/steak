@@ -1,15 +1,14 @@
-use cosmwasm_std::testing::{mock_env, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, Addr, BlockInfo, ContractInfo, Deps, Env, OwnedDeps, QuerierResult, SystemError,
-    SystemResult, Timestamp,
+    from_binary,
+    testing::{mock_env, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
+    Addr, BlockInfo, ContractInfo, Deps, Env, OwnedDeps, QuerierResult, SystemError, SystemResult,
+    Timestamp,
 };
+use pfc_steak::hub::QueryMsg;
 use serde::de::DeserializeOwned;
 
-use pfc_steak::hub::QueryMsg;
-
-use crate::contract::query;
-
 use super::custom_querier::CustomQuerier;
+use crate::contract::query;
 
 pub(super) fn err_unsupported_query<T: std::fmt::Debug>(request: T) -> QuerierResult {
     SystemResult::Err(SystemError::InvalidRequest {

@@ -2,12 +2,12 @@ use cosmwasm_std::{
     entry_point, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
     Storage,
 };
-use cw20_base::contract::{
-    execute as cw20_execute, instantiate as cw20_instantiate, query as cw20_query,
+use cw20_base::{
+    contract::{execute as cw20_execute, instantiate as cw20_instantiate, query as cw20_query},
+    msg::{ExecuteMsg, InstantiateMsg, QueryMsg},
+    state::{MinterData, TOKEN_INFO},
+    ContractError,
 };
-use cw20_base::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use cw20_base::state::{MinterData, TOKEN_INFO};
-use cw20_base::ContractError;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -29,8 +29,12 @@ pub fn execute(
     // For `burn`, we assert that the caller is the minter
     // For `burn_from`, we simply disable it
     match msg {
-        ExecuteMsg::Burn { .. } => assert_minter(deps.storage, &info.sender)?,
-        ExecuteMsg::BurnFrom { .. } => return Err(StdError::generic_err("`burn_from` command is disabled").into()),
+        ExecuteMsg::Burn {
+            ..
+        } => assert_minter(deps.storage, &info.sender)?,
+        ExecuteMsg::BurnFrom {
+            ..
+        } => return Err(StdError::generic_err("`burn_from` command is disabled").into()),
         _ => (),
     }
 
@@ -40,7 +44,11 @@ pub fn execute(
 fn assert_minter(storage: &dyn Storage, sender: &Addr) -> Result<(), ContractError> {
     let token_info = TOKEN_INFO.load(storage)?;
 
-    if let Some(MinterData { minter, .. }) = &token_info.mint {
+    if let Some(MinterData {
+        minter,
+        ..
+    }) = &token_info.mint
+    {
         if sender != minter {
             return Err(StdError::generic_err("only minter can execute token burn").into());
         }
@@ -56,10 +64,10 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::testing::{
-        mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
+    use cosmwasm_std::{
+        testing::{mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage},
+        OwnedDeps, Uint128,
     };
-    use cosmwasm_std::{OwnedDeps, Uint128};
     use cw20_base::state::{TokenInfo, BALANCES};
 
     use super::*;
@@ -84,19 +92,11 @@ mod tests {
             .unwrap();
 
         BALANCES
-            .save(
-                deps.as_mut().storage,
-                &Addr::unchecked("steak_hub"),
-                &Uint128::new(100)
-            )
+            .save(deps.as_mut().storage, &Addr::unchecked("steak_hub"), &Uint128::new(100))
             .unwrap();
 
         BALANCES
-            .save(
-                deps.as_mut().storage,
-                &Addr::unchecked("alice"),
-                &Uint128::new(100)
-            )
+            .save(deps.as_mut().storage, &Addr::unchecked("alice"), &Uint128::new(100))
             .unwrap();
 
         deps

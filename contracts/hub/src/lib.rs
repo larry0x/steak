@@ -8,6 +8,6 @@ pub mod queries;
 pub mod state;
 pub mod types;
 
+mod migrations;
 #[cfg(test)]
 mod testing;
-mod migrations;

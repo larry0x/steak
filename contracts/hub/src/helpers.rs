@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Addr, BalanceResponse, BankQuery, Coin, QuerierWrapper, QueryRequest, Reply, StdError, StdResult, SubMsgResponse, Uint128};
-use cw20::{ Cw20QueryMsg, TokenInfoResponse};
+use cosmwasm_std::{
+    Addr, BalanceResponse, BankQuery, Coin, QuerierWrapper, QueryRequest, Reply, StdError,
+    StdResult, SubMsgResponse, Uint128,
+};
+use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
 use crate::types::Delegation;
 
@@ -69,10 +72,7 @@ pub(crate) fn parse_coin(s: &str) -> StdResult<Coin> {
         }
     }
 
-    Err(StdError::generic_err(format!(
-        "failed to parse coin: {}",
-        s
-    )))
+    Err(StdError::generic_err(format!("failed to parse coin: {}", s)))
 }
 
 /// Find the amount of a denom sent along a message, assert it is non-zero, and no other denom were
@@ -100,7 +100,11 @@ pub(crate) fn parse_received_fund(funds: &[Coin], denom: &str) -> StdResult<Uint
     Ok(fund.amount)
 }
 
-pub fn get_denom_balance( querier: &QuerierWrapper,  account_addr: Addr, denom:String )-> StdResult<Uint128> {
+pub fn get_denom_balance(
+    querier: &QuerierWrapper,
+    account_addr: Addr,
+    denom: String,
+) -> StdResult<Uint128> {
     let balance: BalanceResponse = querier.query(&QueryRequest::Bank(BankQuery::Balance {
         address: account_addr.to_string(),
         denom,

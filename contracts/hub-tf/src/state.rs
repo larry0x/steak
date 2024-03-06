@@ -1,19 +1,22 @@
 use cosmwasm_std::{Addr, Coin, Decimal, StdError, StdResult, Storage, Uint128};
 use cw_item_set::Set;
-use cw_storage_plus::{Index, IndexedMap, IndexList, Item, MultiIndex};
-
-use pfc_steak::hub::{Batch, FeeType, PendingBatch, UnbondRequest};
-use pfc_steak::hub_tf::{ TokenFactoryType};
+use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
+use pfc_steak::{
+    hub::{Batch, FeeType, PendingBatch, UnbondRequest},
+    hub_tf::TokenFactoryType,
+};
 
 pub(crate) const BATCH_KEY_V101: &str = "previous_batches_101";
 pub(crate) const BATCH_KEY_OWNER_V101: &str = "previous_batches_owner_101";
 pub(crate) const UNBOND_KEY_V101: &str = "unbond_101";
 pub(crate) const UNBOND_KEY_USER_V101: &str = "unbond_owner_101";
 
-/// Validators who currently have delegations. This can be different due to being paused/re-delegations
+/// Validators who currently have delegations. This can be different due to being
+/// paused/re-delegations
 pub(crate) const VALIDATORS: Set<&str> = Set::new("validators_001", "validator_counter_001");
 /// Validators where we send delegations to.
-pub(crate) const VALIDATORS_ACTIVE: Set<&str> = Set::new("validators_active_001", "validator_active_counter_001");
+pub(crate) const VALIDATORS_ACTIVE: Set<&str> =
+    Set::new("validators_active_001", "validator_active_counter_001");
 
 // pub(crate) const BATCH_KEY_RECONCILED_V101: &str = "previous_batches__reconciled_101";
 
@@ -50,8 +53,8 @@ pub(crate) struct State<'a> {
     /// Previous batches that have started unbonding but not yet finished
     // pub previous_batches: IndexedMap<'a, u64, Batch, PreviousBatchesIndexes<'a>>,
     /// Users' shares in un-bonding batches
-    //pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest, UnbondRequestsIndexes<'a>>,
-    //  pub validators_active: Item<'a, Vec<String>>,
+    //pub unbond_requests: IndexedMap<'a, (u64, &'a Addr), UnbondRequest,
+    // UnbondRequestsIndexes<'a>>,  pub validators_active: Item<'a, Vec<String>>,
     /// coins in 'denom' held before reinvest was called.
     pub prev_denom: Item<'a, Uint128>,
 
@@ -63,7 +66,6 @@ pub(crate) struct State<'a> {
     /// INJ version of Token-factory
     pub token_factory_type: Item<'a, TokenFactoryType>,
 }
-
 
 impl Default for State<'static> {
     fn default() -> Self {
@@ -89,7 +91,7 @@ impl Default for State<'static> {
             fee_account_type: Item::new("fee_account_type"),
             kuji_token_factory: Item::new("kuji_token_factory"),
             dust_collector: Item::new("dust_collector"),
-            token_factory_type: Item::new("token_factory_type")
+            token_factory_type: Item::new("token_factory_type"),
         }
     }
 }
@@ -117,7 +119,11 @@ pub fn previous_batches<'a>() -> IndexedMap<'a, u64, Batch, PreviousBatchesIndex
     IndexedMap::new(
         BATCH_KEY_V101,
         PreviousBatchesIndexes {
-            reconciled: MultiIndex::new(previous_batches_reconciled_idx, BATCH_KEY_V101, BATCH_KEY_OWNER_V101),
+            reconciled: MultiIndex::new(
+                previous_batches_reconciled_idx,
+                BATCH_KEY_V101,
+                BATCH_KEY_OWNER_V101,
+            ),
         },
     )
 }
@@ -126,7 +132,8 @@ pub fn unbond_requests_user_idx(_pk: &[u8], d: &UnbondRequest) -> String {
     d.user.to_string()
 }
 
-pub fn unbond_requests<'a>() -> IndexedMap<'a, (u64, &'a str), UnbondRequest, UnbondRequestsIndexes<'a>> {
+pub fn unbond_requests<'a>()
+-> IndexedMap<'a, (u64, &'a str), UnbondRequest, UnbondRequestsIndexes<'a>> {
     IndexedMap::new(
         UNBOND_KEY_V101,
         UnbondRequestsIndexes {
@@ -135,14 +142,13 @@ pub fn unbond_requests<'a>() -> IndexedMap<'a, (u64, &'a str), UnbondRequest, Un
     )
 }
 
-
 pub struct PreviousBatchesIndexes<'a> {
     // pk goes to second tuple element
     pub reconciled: MultiIndex<'a, String, Batch, String>,
 }
 
 impl<'a> IndexList<Batch> for PreviousBatchesIndexes<'a> {
-    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item=&'_ dyn Index<Batch>> + '_> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<Batch>> + '_> {
         let v: Vec<&dyn Index<Batch>> = vec![&self.reconciled];
         Box::new(v.into_iter())
     }
@@ -154,7 +160,7 @@ pub struct UnbondRequestsIndexes<'a> {
 }
 
 impl<'a> IndexList<UnbondRequest> for UnbondRequestsIndexes<'a> {
-    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item=&'_ dyn Index<UnbondRequest>> + '_> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<UnbondRequest>> + '_> {
         let v: Vec<&dyn Index<UnbondRequest>> = vec![&self.user];
         Box::new(v.into_iter())
     }

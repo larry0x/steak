@@ -84,7 +84,8 @@ pub enum ExecuteMsg {
     RemoveValidator {
         validator: String,
     },
-    /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for typos
+    /// Remove a validator from the whitelist; callable by the owner. Does not undelegate. use for
+    /// typos
     RemoveValidatorEx {
         validator: String,
     },
@@ -152,7 +153,9 @@ pub enum ExecuteMsg {
 pub enum ReceiveMsg {
     /// Submit an unbonding request to the current unbonding queue; automatically invokes `unbond`
     /// if `epoch_time` has elapsed since when the last unbonding queue was executed.
-    QueueUnbond { receiver: Option<String> },
+    QueueUnbond {
+        receiver: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]
@@ -184,19 +187,21 @@ pub enum QueryMsg {
     /// Query an individual batch that has previously been submitted for unbonding but have not yet
     /// fully withdrawn. Response: `Batch`
     PreviousBatch(u64),
-    /// Enumerate all previous batches that have previously been submitted for unbonding but have not
-    /// yet fully withdrawn. Response: `Vec<Batch>`
+    /// Enumerate all previous batches that have previously been submitted for unbonding but have
+    /// not yet fully withdrawn. Response: `Vec<Batch>`
     PreviousBatches {
         start_after: Option<u64>,
         limit: Option<u32>,
     },
-    /// Enumerate all outstanding unbonding requests in a given batch. Response: `Vec<UnbondRequestsResponseByBatchItem>`
+    /// Enumerate all outstanding unbonding requests in a given batch. Response:
+    /// `Vec<UnbondRequestsResponseByBatchItem>`
     UnbondRequestsByBatch {
         id: u64,
         start_after: Option<String>,
         limit: Option<u32>,
     },
-    /// Enumerate all outstanding unbonding requests from given a user. Response: `Vec<UnbondRequestsByUserResponseItem>`
+    /// Enumerate all outstanding unbonding requests from given a user. Response:
+    /// `Vec<UnbondRequestsByUserResponseItem>`
     UnbondRequestsByUser {
         user: String,
         start_after: Option<u64>,
@@ -323,6 +328,7 @@ pub enum FeeType {
 
 impl FromStr for FeeType {
     type Err = ();
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "Wallet" => Ok(FeeType::Wallet),

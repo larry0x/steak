@@ -1,12 +1,12 @@
 use cosmwasm_std::{
-    Addr, Coin, Empty,  from_slice, FullDelegation, Querier, QuerierResult,
-    QueryRequest, SystemError, WasmQuery,
+    from_slice,
+    testing::{BankQuerier, StakingQuerier, MOCK_CONTRACT_ADDR},
+    Addr, Coin, Empty, FullDelegation, Querier, QuerierResult, QueryRequest, SystemError,
+    WasmQuery,
 };
-use cosmwasm_std::testing::{BankQuerier, MOCK_CONTRACT_ADDR, StakingQuerier};
-
-use crate::types::Delegation;
 
 use super::helpers::err_unsupported_query;
+use crate::types::Delegation;
 
 #[derive(Default)]
 pub(super) struct CustomQuerier {
@@ -23,8 +23,8 @@ impl Querier for CustomQuerier {
                     error: format!("Parsing query request: {}", e),
                     request: bin_request.into(),
                 })
-                    .into();
-            }
+                .into();
+            },
         };
         self.handle_query(&request)
     }
@@ -53,11 +53,9 @@ impl CustomQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match request {
             QueryRequest::Wasm(WasmQuery::Smart {
-                                   contract_addr: _,
-                                   msg,
-                               }) => {
-                err_unsupported_query(msg)
-            }
+                contract_addr: _,
+                msg,
+            }) => err_unsupported_query(msg),
 
             QueryRequest::Bank(query) => self.bank_querier.query(query),
 

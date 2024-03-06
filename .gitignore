@@ -37,3 +37,4 @@ scripts/keys/
 # Misc notes
 /notes*.txt
 /notes
+/prepared-tx.json

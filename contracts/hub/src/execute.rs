@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-use std::iter::FromIterator;
-use std::str::FromStr;
+use std::{collections::HashSet, iter::FromIterator, str::FromStr};
 
 use cosmwasm_std::{
     from_binary, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut,
@@ -9,24 +7,28 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 use cw20_base::msg::InstantiateMsg as Cw20InstantiateMsg;
+use pfc_steak::{
+    hub::{
+        Batch, CallbackMsg, Cw20HookMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch,
+        UnbondRequest,
+    },
+    DecimalCheckedOps,
+};
 
-use pfc_steak::hub::{
-    Batch, CallbackMsg, Cw20HookMsg, ExecuteMsg, FeeType, InstantiateMsg, PendingBatch,
-    UnbondRequest,
+use crate::{
+    contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS},
+    helpers::{
+        get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
+        query_delegations,
+    },
+    math::{
+        compute_mint_amount, compute_redelegations_for_rebalancing,
+        compute_redelegations_for_removal, compute_unbond_amount, compute_undelegations,
+        reconcile_batches,
+    },
+    state::State,
+    types::{Coins, Delegation, Redelegation},
 };
-use pfc_steak::DecimalCheckedOps;
-
-use crate::contract::{REPLY_INSTANTIATE_TOKEN, REPLY_REGISTER_RECEIVED_COINS};
-use crate::helpers::{
-    get_denom_balance, parse_received_fund, query_cw20_total_supply, query_delegation,
-    query_delegations,
-};
-use crate::math::{
-    compute_mint_amount, compute_redelegations_for_rebalancing, compute_redelegations_for_removal,
-    compute_unbond_amount, compute_undelegations, reconcile_batches,
-};
-use crate::state::State;
-use crate::types::{Coins, Delegation, Redelegation};
 
 //--------------------------------------------------------------------------------------------------
 // Instantiation
@@ -45,9 +47,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     let fee_type = FeeType::from_str(&msg.fee_account_type)
         .map_err(|_| StdError::generic_err("Invalid Fee type: Wallet or FeeSplit only"))?;
 
-    state
-        .owner
-        .save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
+    state.owner.save(deps.storage, &deps.api.addr_validate(&msg.owner)?)?;
     state.epoch_period.save(deps.storage, &msg.epoch_period)?;
     state.unbond_period.save(deps.storage, &msg.unbond_period)?;
     state.validators.save(deps.storage, &msg.validators)?;
@@ -58,9 +58,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
     state.fee_rate.save(deps.storage, &msg.fee_amount)?;
     state.fee_account_type.save(deps.storage, &fee_type)?;
 
-    state
-        .fee_account
-        .save(deps.storage, &deps.api.addr_validate(&msg.fee_account)?)?;
+    state.fee_account.save(deps.storage, &deps.api.addr_validate(&msg.fee_account)?)?;
 
     state.pending_batch.save(
         deps.storage,
@@ -70,13 +68,12 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
             est_unbond_start_time: env.block.time.seconds() + msg.epoch_period,
         },
     )?;
-    state
-        .validators_active
-        .save(deps.storage, &msg.validators)?;
+    state.validators_active.save(deps.storage, &msg.validators)?;
 
     Ok(Response::new().add_submessage(SubMsg::reply_on_success(
         CosmosMsg::Wasm(WasmMsg::Instantiate {
-            admin: Some(msg.owner), // use the owner as admin for now; can be changed later by a `MsgUpdateAdmin`
+            admin: Some(msg.owner), /* use the owner as admin for now; can be changed later by a
+                                     * `MsgUpdateAdmin` */
             code_id: msg.cw20_code_id,
             msg: to_binary(&Cw20InstantiateMsg {
                 name: msg.name,
@@ -153,7 +150,8 @@ pub fn bond(
 
     // Query the current delegations made to validators, and find the validator with the smallest
     // delegated amount through a linear search
-    // The code for linear search is a bit uglier than using `sort_by` but cheaper: O(n) vs O(n * log(n))
+    // The code for linear search is a bit uglier than using `sort_by` but cheaper: O(n) vs O(n *
+    // log(n))
     let delegations_non_active = query_delegations(
         &deps.querier,
         &non_active_validator_list,
@@ -178,21 +176,15 @@ pub fn bond(
 
     // Query the current supply of Steak and compute the amount to mint
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
-    let usteak_to_mint = compute_mint_amount(
-        usteak_supply,
-        amount_to_bond,
-        &delegations,
-        &delegations_non_active,
-    );
+    let usteak_to_mint =
+        compute_mint_amount(usteak_supply, amount_to_bond, &delegations, &delegations_non_active);
     state.prev_denom.save(
         deps.storage,
         &get_denom_balance(&deps.querier, env.contract.address.clone(), denom.clone())?,
     )?;
 
-    let delegate_submsg = SubMsg::reply_on_success(
-        new_delegation.to_cosmos_msg(),
-        REPLY_REGISTER_RECEIVED_COINS,
-    );
+    let delegate_submsg =
+        SubMsg::reply_on_success(new_delegation.to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS);
 
     let mint_msgs: Vec<CosmosMsg> = if mint_it {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -241,7 +233,7 @@ pub fn bond(
                         funds: vec![],
                     })
                 }
-            }
+            },
             Err(_) => {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: steak_token.to_string(),
@@ -252,7 +244,7 @@ pub fn bond(
                     })?,
                     funds: vec![],
                 })
-            }
+            },
         };
         vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -314,7 +306,8 @@ pub fn harvest(deps: DepsMut, env: Env) -> StdResult<Response> {
 }
 
 /// NOTE:
-/// 1. When delegation Native denom here, we don't need to use a `SubMsg` to handle the received coins,
+/// 1. When delegation Native denom here, we don't need to use a `SubMsg` to handle the received
+///    coins,
 /// because we have already withdrawn all claimable staking rewards previously in the same atomic
 /// execution.
 /// 2. Same as with `bond`, in the latest implementation we only delegate staking rewards with the
@@ -384,10 +377,12 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
                 amount: vec![Coin::new(fee_amount.into(), &denom)],
             })],
             FeeType::FeeSplit => {
-                let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit { flush: false };
+                let msg = pfc_fee_split::fee_split_msg::ExecuteMsg::Deposit {
+                    flush: false,
+                };
 
                 vec![msg.into_cosmos_msg(fee_account, vec![Coin::new(fee_amount.into(), &denom)])?]
-            }
+            },
         };
         Ok(Response::new()
             .add_message(new_delegation.to_cosmos_msg())
@@ -402,7 +397,8 @@ pub fn reinvest(deps: DepsMut, env: Env) -> StdResult<Response> {
     }
 }
 
-/// NOTE: a `SubMsgResponse` may contain multiple coin-receiving events, must handle them individually
+/// NOTE: a `SubMsgResponse` may contain multiple coin-receiving events, must handle them
+/// individually
 pub fn register_received_coins(
     deps: DepsMut,
     env: Env,
@@ -419,13 +415,11 @@ pub fn register_received_coins(
     }
 
     let state = State::default();
-    state
-        .unlocked_coins
-        .update(deps.storage, |coins| -> StdResult<_> {
-            let mut coins = Coins(coins);
-            coins.add_many(&received_coins)?;
-            Ok(coins.0)
-        })?;
+    state.unlocked_coins.update(deps.storage, |coins| -> StdResult<_> {
+        let mut coins = Coins(coins);
+        coins.add_many(&received_coins)?;
+        Ok(coins.0)
+    })?;
 
     Ok(Response::new().add_attribute("action", "steakhub/register_received_coins"))
 }
@@ -531,12 +525,8 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     // for unbonding we still need to look at
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
-    let delegations_active = query_delegations(
-        &deps.querier,
-        &active_validator_list,
-        &env.contract.address,
-        &denom,
-    )?;
+    let delegations_active =
+        query_delegations(&deps.querier, &active_validator_list, &env.contract.address, &denom)?;
     let usteak_supply = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
     let amount_to_bond = compute_unbond_amount(
@@ -552,10 +542,11 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
     // If validators misbehave and get slashed during the unbonding period, the contract can receive
     // LESS Luna than `amount_to_unbond` when unbonding finishes!
     //
-    // In this case, users who invokes `withdraw_unbonded` will have their txs failed as the contract
-    // does not have enough Luna balance.
+    // In this case, users who invokes `withdraw_unbonded` will have their txs failed as the
+    // contract does not have enough Luna balance.
     //
-    // I don't have a solution for this... other than to manually fund contract with the slashed amount.
+    // I don't have a solution for this... other than to manually fund contract with the slashed
+    // amount.
     state.previous_batches.save(
         deps.storage,
         pending_batch.id,
@@ -577,16 +568,15 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
             est_unbond_start_time: current_time + epoch_period,
         },
     )?;
-    state.prev_denom.save(
-        deps.storage,
-        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
-    )?;
+    state
+        .prev_denom
+        .save(deps.storage, &get_denom_balance(&deps.querier, env.contract.address, denom)?)?;
 
     let undelegate_submsgs = new_undelegations
         .iter()
         .map(|d| SubMsg::reply_on_success(d.to_cosmos_msg(), REPLY_REGISTER_RECEIVED_COINS))
         .collect::<Vec<_>>();
-    
+
     let event = Event::new("steakhub/unbond_submitted")
         .add_attribute("time", env.block.time.seconds().to_string())
         .add_attribute("height", env.block.height.to_string())
@@ -600,7 +590,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
             //        .add_message(burn_msg)
             .add_event(event));
     }
-    
+
     let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
         msg: to_binary(&Cw20ExecuteMsg::Burn {
@@ -645,14 +635,10 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
     let native_expected_unlocked = Coins(unlocked_coins).find(&denom).amount;
 
     let native_expected = native_expected_received + native_expected_unlocked;
-    let native_actual = deps
-        .querier
-        .query_balance(&env.contract.address, &denom)?
-        .amount;
+    let native_actual = deps.querier.query_balance(&env.contract.address, &denom)?.amount;
 
-    let native_to_deduct = native_expected
-        .checked_sub(native_actual)
-        .unwrap_or_else(|_| Uint128::zero());
+    let native_to_deduct =
+        native_expected.checked_sub(native_actual).unwrap_or_else(|_| Uint128::zero());
     if !native_to_deduct.is_zero() {
         reconcile_batches(&mut batches, native_expected - native_actual);
     }
@@ -662,19 +648,13 @@ pub fn reconcile(deps: DepsMut, env: Env) -> StdResult<Response> {
         state.previous_batches.save(deps.storage, batch.id, batch)?;
     }
 
-    let ids = batches
-        .iter()
-        .map(|b| b.id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    let ids = batches.iter().map(|b| b.id.to_string()).collect::<Vec<_>>().join(",");
 
     let event = Event::new("steakhub/reconciled")
         .add_attribute("ids", ids)
         .add_attribute("native_deducted", native_to_deduct.to_string());
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/reconcile"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/reconcile"))
 }
 
 pub fn withdraw_unbonded_admin(
@@ -719,16 +699,15 @@ pub fn withdraw_unbonded(
     // - is a _previous_ batch, not a _pending_ batch
     // - is reconciled
     // - has finished unbonding
-    // If not sure whether the batches have been reconciled, the user should first invoke `ExecuteMsg::Reconcile`
-    // before withdrawing.
+    // If not sure whether the batches have been reconciled, the user should first invoke
+    // `ExecuteMsg::Reconcile` before withdrawing.
     let mut total_native_to_refund = Uint128::zero();
     let mut ids: Vec<String> = vec![];
     for request in &requests {
         if let Ok(mut batch) = state.previous_batches.load(deps.storage, request.id) {
             if batch.reconciled && batch.est_unbond_end_time < current_time {
-                let native_to_refund = batch
-                    .amount_unclaimed
-                    .multiply_ratio(request.shares, batch.total_shares);
+                let native_to_refund =
+                    batch.amount_unclaimed.multiply_ratio(request.shares, batch.total_shares);
 
                 ids.push(request.id.to_string());
 
@@ -739,14 +718,10 @@ pub fn withdraw_unbonded(
                 if batch.total_shares.is_zero() {
                     state.previous_batches.remove(deps.storage, request.id)?;
                 } else {
-                    state
-                        .previous_batches
-                        .save(deps.storage, batch.id, &batch)?;
+                    state.previous_batches.save(deps.storage, batch.id, &batch)?;
                 }
 
-                state
-                    .unbond_requests
-                    .remove(deps.storage, (request.id, &user))?;
+                state.unbond_requests.remove(deps.storage, (request.id, &user))?;
             }
         }
     }
@@ -789,10 +764,9 @@ pub fn rebalance(deps: DepsMut, env: Env, minimum: Uint128) -> StdResult<Respons
     let new_redelegations =
         compute_redelegations_for_rebalancing(validators_active, &delegations, minimum);
 
-    state.prev_denom.save(
-        deps.storage,
-        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
-    )?;
+    state
+        .prev_denom
+        .save(deps.storage, &get_denom_balance(&deps.querier, env.contract.address, denom)?)?;
 
     let redelegate_submsgs = new_redelegations
         .iter()
@@ -826,14 +800,10 @@ pub fn add_validator(deps: DepsMut, sender: Addr, validator: String) -> StdResul
     if !validators_active.contains(&validator) {
         validators_active.push(validator.clone());
     }
-    state
-        .validators_active
-        .save(deps.storage, &validators_active)?;
+    state.validators_active.save(deps.storage, &validators_active)?;
     let event = Event::new("steakhub/validator_added").add_attribute("validator", validator);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/add_validator"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/add_validator"))
 }
 
 pub fn remove_validator(
@@ -849,9 +819,7 @@ pub fn remove_validator(
 
     let validators = state.validators.update(deps.storage, |mut validators| {
         if !validators.contains(&validator) {
-            return Err(StdError::generic_err(
-                "validator is not already whitelisted",
-            ));
+            return Err(StdError::generic_err("validator is not already whitelisted"));
         }
         validators.retain(|v| *v != validator);
         Ok(validators)
@@ -860,9 +828,7 @@ pub fn remove_validator(
     if !validators_active.contains(&validator) {
         validators_active.push(validator.clone());
     }
-    state
-        .validators_active
-        .save(deps.storage, &validators_active)?;
+    state.validators_active.save(deps.storage, &validators_active)?;
 
     let delegations = query_delegations(&deps.querier, &validators, &env.contract.address, &denom)?;
     let delegation_to_remove =
@@ -870,10 +836,9 @@ pub fn remove_validator(
     let new_redelegations =
         compute_redelegations_for_removal(&delegation_to_remove, &delegations, &denom);
 
-    state.prev_denom.save(
-        deps.storage,
-        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
-    )?;
+    state
+        .prev_denom
+        .save(deps.storage, &get_denom_balance(&deps.querier, env.contract.address, denom)?)?;
 
     let redelegate_submsgs = new_redelegations
         .iter()
@@ -900,9 +865,7 @@ pub fn remove_validator_ex(
 
     state.validators.update(deps.storage, |mut validators| {
         if !validators.contains(&validator) {
-            return Err(StdError::generic_err(
-                "validator is not already whitelisted",
-            ));
+            return Err(StdError::generic_err("validator is not already whitelisted"));
         }
         validators.retain(|v| *v != validator);
         Ok(validators)
@@ -910,9 +873,7 @@ pub fn remove_validator_ex(
 
     let event = Event::new("steak/validator_removed_ex").add_attribute("validator", validator);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/remove_validator_ex"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/remove_validator_ex"))
 }
 
 pub fn pause_validator(
@@ -925,23 +886,17 @@ pub fn pause_validator(
 
     state.assert_owner(deps.storage, &sender)?;
 
-    state
-        .validators_active
-        .update(deps.storage, |mut validators| {
-            if !validators.contains(&validator) {
-                return Err(StdError::generic_err(
-                    "validator is not already whitelisted",
-                ));
-            }
-            validators.retain(|v| *v != validator);
-            Ok(validators)
-        })?;
+    state.validators_active.update(deps.storage, |mut validators| {
+        if !validators.contains(&validator) {
+            return Err(StdError::generic_err("validator is not already whitelisted"));
+        }
+        validators.retain(|v| *v != validator);
+        Ok(validators)
+    })?;
 
     let event = Event::new("steak/pause_validator").add_attribute("validator", validator);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/pause_validator"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/pause_validator"))
 }
 
 pub fn unpause_validator(
@@ -957,15 +912,11 @@ pub fn unpause_validator(
     if !validators_active.contains(&validator) {
         validators_active.push(validator.clone());
     }
-    state
-        .validators_active
-        .save(deps.storage, &validators_active)?;
+    state.validators_active.save(deps.storage, &validators_active)?;
 
     let event = Event::new("steak/unpause_validator").add_attribute("validator", validator);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/unpause_validator"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/unpause_validator"))
 }
 
 pub fn set_unbond_period(
@@ -981,18 +932,14 @@ pub fn set_unbond_period(
     let event = Event::new("steak/set_unbond_period")
         .add_attribute("unbond_period", format!("{}", unbond_period));
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/set_unbond_period"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/set_unbond_period"))
 }
 
 pub fn transfer_ownership(deps: DepsMut, sender: Addr, new_owner: String) -> StdResult<Response> {
     let state = State::default();
 
     state.assert_owner(deps.storage, &sender)?;
-    state
-        .new_owner
-        .save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
+    state.new_owner.save(deps.storage, &deps.api.addr_validate(&new_owner)?)?;
 
     Ok(Response::new().add_attribute("action", "steakhub/transfer_ownership"))
 }
@@ -1004,9 +951,7 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
     let new_owner = state.new_owner.load(deps.storage)?;
 
     if sender != new_owner {
-        return Err(StdError::generic_err(
-            "unauthorized: sender is not new owner",
-        ));
+        return Err(StdError::generic_err("unauthorized: sender is not new owner"));
     }
 
     state.owner.save(deps.storage, &sender)?;
@@ -1016,9 +961,7 @@ pub fn accept_ownership(deps: DepsMut, sender: Addr) -> StdResult<Response> {
         .add_attribute("new_owner", new_owner)
         .add_attribute("previous_owner", previous_owner);
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/transfer_ownership"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/transfer_ownership"))
 }
 
 pub fn transfer_fee_account(
@@ -1035,9 +978,7 @@ pub fn transfer_fee_account(
 
     state.fee_account_type.save(deps.storage, &fee_type)?;
 
-    state
-        .fee_account
-        .save(deps.storage, &deps.api.addr_validate(&new_fee_account)?)?;
+    state.fee_account.save(deps.storage, &deps.api.addr_validate(&new_fee_account)?)?;
 
     Ok(Response::new().add_attribute("action", "steakhub/transfer_fee_account"))
 }
@@ -1056,9 +997,7 @@ pub fn update_fee(deps: DepsMut, sender: Addr, new_fee: Decimal) -> StdResult<Re
 
     state.assert_owner(deps.storage, &sender)?;
     if new_fee > state.max_fee_rate.load(deps.storage)? {
-        return Err(StdError::generic_err(
-            "refusing to set fee above maximum set",
-        ));
+        return Err(StdError::generic_err("refusing to set fee above maximum set"));
     }
     state.fee_rate.save(deps.storage, &new_fee)?;
 
@@ -1075,20 +1014,14 @@ pub fn set_dust_collector(
 
     state.assert_owner(deps.storage, &sender)?;
     if let Some(ref dust_addr) = dust_collector {
-        state
-            .dust_collector
-            .save(deps.storage, &Some(deps.api.addr_validate(dust_addr)?))?;
+        state.dust_collector.save(deps.storage, &Some(deps.api.addr_validate(dust_addr)?))?;
     } else {
         state.dust_collector.save(deps.storage, &None)?;
     };
-    let event = Event::new("steak/set_dust_collector").add_attribute(
-        "dust_collector",
-        dust_collector.unwrap_or("-cleared-".into()),
-    );
+    let event = Event::new("steak/set_dust_collector")
+        .add_attribute("dust_collector", dust_collector.unwrap_or("-cleared-".into()));
 
-    Ok(Response::new()
-        .add_event(event)
-        .add_attribute("action", "steakhub/set_dust_collector"))
+    Ok(Response::new().add_event(event).add_attribute("action", "steakhub/set_dust_collector"))
 }
 
 pub fn collect_dust(deps: DepsMut, _env: Env, _max_tokens: usize) -> StdResult<Response> {
@@ -1123,12 +1056,8 @@ pub fn redelegate(
     state.assert_owner(deps.storage, &sender)?;
     let denom = state.denom.load(deps.storage)?;
 
-    let delegation = query_delegation(
-        &deps.querier,
-        &validator_from,
-        &env.contract.address,
-        &denom,
-    )?;
+    let delegation =
+        query_delegation(&deps.querier, &validator_from, &env.contract.address, &denom)?;
 
     let redelegation_msg = SubMsg::reply_on_success(
         Redelegation::new(&validator_from, &validator_to, delegation.amount, &denom)
@@ -1136,10 +1065,9 @@ pub fn redelegate(
         REPLY_REGISTER_RECEIVED_COINS,
     );
 
-    state.prev_denom.save(
-        deps.storage,
-        &get_denom_balance(&deps.querier, env.contract.address, denom)?,
-    )?;
+    state
+        .prev_denom
+        .save(deps.storage, &get_denom_balance(&deps.querier, env.contract.address, denom)?)?;
 
     let event = Event::new("steak/redelegate")
         .add_attribute("validator_from", validator_from)

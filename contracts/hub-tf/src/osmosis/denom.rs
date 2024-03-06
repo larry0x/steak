@@ -1,7 +1,6 @@
 // source: https://github.com/White-Whale-Defi-Platform/white-whale-core/blob/feat/tokenfactory-lp/packages/pool-network/src/denom.rs
 
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 
 use osmosis_std_derive::CosmwasmExt;
 

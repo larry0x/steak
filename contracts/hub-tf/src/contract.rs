@@ -1,15 +1,16 @@
+use std::convert::TryInto;
+
 use cosmwasm_std::{
     entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdError,
     StdResult,
 };
 use cw2::{get_contract_version, set_contract_version, ContractVersion};
-use std::convert::TryInto;
+use pfc_steak::{
+    hub::{CallbackMsg, MigrateMsg, QueryMsg},
+    hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType},
+};
 
-use pfc_steak::hub::{CallbackMsg, MigrateMsg, QueryMsg};
-use pfc_steak::hub_tf::{ExecuteMsg, InstantiateMsg, TokenFactoryType};
-
-use crate::state::State;
-use crate::{execute, queries};
+use crate::{execute, queries, state::State};
 
 //use crate::helpers::{ unwrap_reply};
 
@@ -36,93 +37,97 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     let api = deps.api;
     match msg {
-        ExecuteMsg::Bond { receiver, exec_msg } => execute::bond(
+        ExecuteMsg::Bond {
+            receiver,
+            exec_msg,
+        } => execute::bond(
             deps,
             env,
-            receiver
-                .map(|s| api.addr_validate(&s))
-                .transpose()?
-                .unwrap_or(info.sender),
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
             info.funds,
             exec_msg,
             true,
         ),
-        ExecuteMsg::Unbond { receiver } => execute::queue_unbond(
+        ExecuteMsg::Unbond {
+            receiver,
+        } => execute::queue_unbond(
             deps,
             env,
-            receiver
-                .map(|s| api.addr_validate(&s))
-                .transpose()?
-                .unwrap_or(info.sender),
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
             info.funds,
         ),
-        ExecuteMsg::WithdrawUnbonded { receiver } => execute::withdraw_unbonded(
+        ExecuteMsg::WithdrawUnbonded {
+            receiver,
+        } => execute::withdraw_unbonded(
             deps,
             env,
             info.sender.clone(),
-            receiver
-                .map(|s| api.addr_validate(&s))
-                .transpose()?
-                .unwrap_or(info.sender),
+            receiver.map(|s| api.addr_validate(&s)).transpose()?.unwrap_or(info.sender),
         ),
-        ExecuteMsg::WithdrawUnbondedAdmin { address } => {
-            execute::withdraw_unbonded_admin(deps, env, info.sender, api.addr_validate(&address)?)
-        }
-        ExecuteMsg::AddValidator { validator } => {
-            execute::add_validator(deps, info.sender, validator)
-        }
-        ExecuteMsg::RemoveValidator { validator } => {
-            execute::remove_validator(deps, env, info.sender, validator)
-        }
-        ExecuteMsg::RemoveValidatorEx { validator } => {
-            execute::remove_validator_ex(deps, env, info.sender, validator)
-        }
+        ExecuteMsg::WithdrawUnbondedAdmin {
+            address,
+        } => execute::withdraw_unbonded_admin(deps, env, info.sender, api.addr_validate(&address)?),
+        ExecuteMsg::AddValidator {
+            validator,
+        } => execute::add_validator(deps, info.sender, validator),
+        ExecuteMsg::RemoveValidator {
+            validator,
+        } => execute::remove_validator(deps, env, info.sender, validator),
+        ExecuteMsg::RemoveValidatorEx {
+            validator,
+        } => execute::remove_validator_ex(deps, env, info.sender, validator),
         ExecuteMsg::Redelegate {
             validator_from,
             validator_to,
         } => execute::redelegate(deps, env, info.sender, validator_from, validator_to),
 
-        ExecuteMsg::TransferOwnership { new_owner } => {
-            execute::transfer_ownership(deps, info.sender, new_owner)
-        }
+        ExecuteMsg::TransferOwnership {
+            new_owner,
+        } => execute::transfer_ownership(deps, info.sender, new_owner),
         ExecuteMsg::AcceptOwnership {} => execute::accept_ownership(deps, info.sender),
         ExecuteMsg::Harvest {} => execute::harvest(deps, env),
-        ExecuteMsg::Rebalance { minimum } => execute::rebalance(deps, env, minimum),
+        ExecuteMsg::Rebalance {
+            minimum,
+        } => execute::rebalance(deps, env, minimum),
         ExecuteMsg::Reconcile {} => execute::reconcile(deps, env),
         ExecuteMsg::SubmitBatch {} => execute::submit_batch(deps, env),
         ExecuteMsg::TransferFeeAccount {
             fee_account_type,
             new_fee_account,
         } => execute::transfer_fee_account(deps, info.sender, fee_account_type, new_fee_account),
-        ExecuteMsg::UpdateFee { new_fee } => execute::update_fee(deps, info.sender, new_fee),
+        ExecuteMsg::UpdateFee {
+            new_fee,
+        } => execute::update_fee(deps, info.sender, new_fee),
         ExecuteMsg::Callback(callback_msg) => callback(deps, env, info, callback_msg),
-        ExecuteMsg::PauseValidator { validator } => {
-            execute::pause_validator(deps, env, info.sender, validator)
-        }
-        ExecuteMsg::UnPauseValidator { validator } => {
-            execute::unpause_validator(deps, env, info.sender, validator)
-        }
-        ExecuteMsg::SetUnbondPeriod { unbond_period } => {
-            execute::set_unbond_period(deps, env, info.sender, unbond_period)
-        }
+        ExecuteMsg::PauseValidator {
+            validator,
+        } => execute::pause_validator(deps, env, info.sender, validator),
+        ExecuteMsg::UnPauseValidator {
+            validator,
+        } => execute::unpause_validator(deps, env, info.sender, validator),
+        ExecuteMsg::SetUnbondPeriod {
+            unbond_period,
+        } => execute::set_unbond_period(deps, env, info.sender, unbond_period),
 
-        ExecuteMsg::SetDustCollector { dust_collector } => {
-            execute::set_dust_collector(deps, env, info.sender, dust_collector)
-        }
-        ExecuteMsg::CollectDust { max_tokens } => {
+        ExecuteMsg::SetDustCollector {
+            dust_collector,
+        } => execute::set_dust_collector(deps, env, info.sender, dust_collector),
+        ExecuteMsg::CollectDust {
+            max_tokens,
+        } => {
             let max_tokens_usize_r = max_tokens.try_into();
             if let Ok(max_tokens_usize) = max_tokens_usize_r {
                 execute::collect_dust(deps, env, max_tokens_usize)
             } else {
                 Err(StdError::generic_err("max_tokens too large"))
             }
-        }
+        },
         ExecuteMsg::ReturnDenom {} => {
             execute::bond(deps, env, info.sender, info.funds, None, false)
-        }
-        ExecuteMsg::ChangeTokenFactory { token_factory_type } => {
-            execute::change_token_factory(deps, info.sender, &token_factory_type)
-        }
+        },
+        ExecuteMsg::ChangeTokenFactory {
+            token_factory_type,
+        } => execute::change_token_factory(deps, info.sender, &token_factory_type),
     }
 }
 
@@ -133,9 +138,7 @@ fn callback(
     callback_msg: CallbackMsg,
 ) -> StdResult<Response> {
     if env.contract.address != info.sender {
-        return Err(StdError::generic_err(
-            "callbacks can only be invoked by the contract itself",
-        ));
+        return Err(StdError::generic_err("callbacks can only be invoked by the contract itself"));
     }
 
     match callback_msg {
@@ -161,29 +164,20 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::State {} => to_binary(&queries::state(deps, env)?),
         QueryMsg::PendingBatch {} => to_binary(&queries::pending_batch(deps)?),
         QueryMsg::PreviousBatch(id) => to_binary(&queries::previous_batch(deps, id)?),
-        QueryMsg::PreviousBatches { start_after, limit } => {
-            to_binary(&queries::previous_batches(deps, start_after, limit)?)
-        }
+        QueryMsg::PreviousBatches {
+            start_after,
+            limit,
+        } => to_binary(&queries::previous_batches(deps, start_after, limit)?),
         QueryMsg::UnbondRequestsByBatch {
             id,
             start_after,
             limit,
-        } => to_binary(&queries::unbond_requests_by_batch(
-            deps,
-            id,
-            start_after,
-            limit,
-        )?),
+        } => to_binary(&queries::unbond_requests_by_batch(deps, id, start_after, limit)?),
         QueryMsg::UnbondRequestsByUser {
             user,
             start_after,
             limit,
-        } => to_binary(&queries::unbond_requests_by_user(
-            deps,
-            user,
-            start_after,
-            limit,
-        )?),
+        } => to_binary(&queries::unbond_requests_by_user(deps, user, start_after, limit)?),
     }
 }
 
@@ -197,27 +191,21 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response
         #[allow(clippy::single_match)]
         "steak-hub-tf" => match contract_version.version.as_ref() {
             #[allow(clippy::single_match)]
-            "0" => {}
+            "0" => {},
             "3.0.1" | "3.0.2" => {
                 let state = State::default();
                 let kuji = state.kuji_token_factory.load(deps.storage)?;
                 if kuji {
-                    state
-                        .token_factory_type
-                        .save(deps.storage, &TokenFactoryType::Kujira)?
+                    state.token_factory_type.save(deps.storage, &TokenFactoryType::Kujira)?
                 } else {
-                    state
-                        .token_factory_type
-                        .save(deps.storage, &TokenFactoryType::CosmWasm)?
+                    state.token_factory_type.save(deps.storage, &TokenFactoryType::CosmWasm)?
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         },
         _ => {
-            return Err(StdError::generic_err(
-                "contract name is not the same. aborting {}",
-            ));
-        }
+            return Err(StdError::generic_err("contract name is not the same. aborting {}"));
+        },
     }
     /*
     let state = State::default();

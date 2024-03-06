@@ -1,24 +1,29 @@
-use std::collections::{BTreeSet, HashSet};
-use std::iter::FromIterator;
+use std::{
+    collections::{BTreeSet, HashSet},
+    iter::FromIterator,
+};
 
 use cosmwasm_std::{Addr, Decimal, Deps, Env, Order, StdResult, Uint128};
 use cw_storage_plus::{Bound, CwIntKey};
-
 use pfc_steak::hub::{
     Batch, ConfigResponse, PendingBatch, StateResponse, UnbondRequestsByBatchResponseItem,
     UnbondRequestsByUserResponseItem,
 };
 
-use crate::helpers::{query_cw20_total_supply, query_delegations};
-use crate::state::State;
+use crate::{
+    helpers::{query_cw20_total_supply, query_delegations},
+    state::State,
+};
 
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 
 pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
     let state = State::default();
-    let mut validators: BTreeSet<String> = BTreeSet::from_iter(state.validators.load(deps.storage)?);
-    let validators_active: BTreeSet<String> = BTreeSet::from_iter(state.validators_active.load(deps.storage)?);
+    let mut validators: BTreeSet<String> =
+        BTreeSet::from_iter(state.validators.load(deps.storage)?);
+    let validators_active: BTreeSet<String> =
+        BTreeSet::from_iter(state.validators_active.load(deps.storage)?);
 
     for v in validators_active.iter() {
         validators.remove(v);
@@ -28,10 +33,7 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
 
     Ok(ConfigResponse {
         owner: state.owner.load(deps.storage)?.into(),
-        new_owner: state
-            .new_owner
-            .may_load(deps.storage)?
-            .map(|addr| addr.into()),
+        new_owner: state.new_owner.may_load(deps.storage)?.map(|addr| addr.into()),
         steak_token: state.steak_token.load(deps.storage)?.into(),
         epoch_period: state.epoch_period.load(deps.storage)?,
         unbond_period: state.unbond_period.load(deps.storage)?,
@@ -42,8 +44,8 @@ pub fn config(deps: Deps) -> StdResult<ConfigResponse> {
         max_fee_rate: state.max_fee_rate.load(deps.storage)?,
         validators: validator_active_vec,
         paused_validators,
-        dust_collector:None,
-        token_factory:None
+        dust_collector: None,
+        token_factory: None,
     })
 }
 
@@ -55,11 +57,13 @@ pub fn state(deps: Deps, env: Env) -> StdResult<StateResponse> {
     let total_usteak = query_cw20_total_supply(&deps.querier, &steak_token)?;
 
     let mut validators: HashSet<String> = HashSet::from_iter(state.validators.load(deps.storage)?);
-    let validators_active: HashSet<String> = HashSet::from_iter(state.validators_active.load(deps.storage)?);
+    let validators_active: HashSet<String> =
+        HashSet::from_iter(state.validators_active.load(deps.storage)?);
     validators.extend(validators_active);
     let validator_vec: Vec<String> = Vec::from_iter(validators);
 
-    let delegations = query_delegations(&deps.querier, &validator_vec, &env.contract.address, &denom)?;
+    let delegations =
+        query_delegations(&deps.querier, &validator_vec, &env.contract.address, &denom)?;
     let total_native: u128 = delegations.iter().map(|d| d.amount).sum();
 
     let exchange_rate = if total_usteak.is_zero() {
@@ -121,7 +125,7 @@ pub fn unbond_requests_by_batch(
         Some(addr_str) => {
             addr = deps.api.addr_validate(&addr_str)?;
             Some(Bound::exclusive(&addr))
-        }
+        },
     };
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
