@@ -274,7 +274,7 @@ pub(crate) fn reconcile_batches(batches: &mut [Batch], native_to_deduct: Uint128
 
         if !remaining_underflow.is_zero() {
             // the remaining underflow will be applied by oldest batch first.
-            for (_, batch) in batches.iter_mut().enumerate() {
+            for  batch in batches.iter_mut() {//} .enumerate() {
                 if !batch.amount_unclaimed.is_zero() && !remaining_underflow.is_zero() {
                     if batch.amount_unclaimed >= remaining_underflow {
                         batch.amount_unclaimed -= remaining_underflow;

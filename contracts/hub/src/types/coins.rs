@@ -48,8 +48,9 @@ impl Coins {
     pub fn find(&self, denom: &str) -> Coin {
         self.0
             .iter()
-            .cloned()
             .find(|coin| coin.denom == denom)
+            .cloned()
+
             .unwrap_or_else(|| Coin::new(0, denom))
     }
 }

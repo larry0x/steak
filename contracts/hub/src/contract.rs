@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply,
+    entry_point, from_json, to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply,
     Response, StdError, StdResult,
 };
 use cw2::{get_contract_version, set_contract_version, ContractVersion};
@@ -138,7 +138,7 @@ fn receive(
     cw20_msg: Cw20ReceiveMsg,
 ) -> StdResult<Response> {
     let api = deps.api;
-    match from_binary(&cw20_msg.msg)? {
+    match from_json(&cw20_msg.msg)? {
         ReceiveMsg::QueueUnbond {
             receiver,
         } => {
@@ -191,24 +191,24 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> StdResult<Response> {
 #[entry_point]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&queries::config(deps)?),
-        QueryMsg::State {} => to_binary(&queries::state(deps, env)?),
-        QueryMsg::PendingBatch {} => to_binary(&queries::pending_batch(deps)?),
-        QueryMsg::PreviousBatch(id) => to_binary(&queries::previous_batch(deps, id)?),
+        QueryMsg::Config {} => to_json_binary(&queries::config(deps)?),
+        QueryMsg::State {} => to_json_binary(&queries::state(deps, env)?),
+        QueryMsg::PendingBatch {} => to_json_binary(&queries::pending_batch(deps)?),
+        QueryMsg::PreviousBatch(id) => to_json_binary(&queries::previous_batch(deps, id)?),
         QueryMsg::PreviousBatches {
             start_after,
             limit,
-        } => to_binary(&queries::previous_batches(deps, start_after, limit)?),
+        } => to_json_binary(&queries::previous_batches(deps, start_after, limit)?),
         QueryMsg::UnbondRequestsByBatch {
             id,
             start_after,
             limit,
-        } => to_binary(&queries::unbond_requests_by_batch(deps, id, start_after, limit)?),
+        } => to_json_binary(&queries::unbond_requests_by_batch(deps, id, start_after, limit)?),
         QueryMsg::UnbondRequestsByUser {
             user,
             start_after,
             limit,
-        } => to_binary(&queries::unbond_requests_by_user(deps, user, start_after, limit)?),
+        } => to_json_binary(&queries::unbond_requests_by_user(deps, user, start_after, limit)?),
     }
 }
 

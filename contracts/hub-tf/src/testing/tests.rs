@@ -1,10 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{
-    testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Order, OwnedDeps, ReplyOn,
-    StdError, SubMsg, Uint128, WasmMsg,
-};
+use cosmwasm_std::{testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR},  Addr, BankMsg, Coin, CosmosMsg, Decimal, DistributionMsg, Order, OwnedDeps, ReplyOn, StdError, SubMsg, Uint128, WasmMsg, to_json_binary};
 use pfc_steak::{
     hub::{
         Batch, CallbackMsg, ConfigResponse, PendingBatch, QueryMsg, StateResponse, UnbondRequest,
@@ -381,7 +377,7 @@ fn harvesting() {
             id: 0,
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::Reinvest {})).unwrap(),
+                msg: to_json_binary(&ExecuteMsg::Callback(CallbackMsg::Reinvest {})).unwrap(),
                 funds: vec![],
             }),
             gas_limit: None,
@@ -608,7 +604,7 @@ fn queuing_unbond() {
             id: 0,
             msg: CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::SubmitBatch {}).unwrap(),
+                msg: to_json_binary(&ExecuteMsg::SubmitBatch {}).unwrap(),
                 funds: vec![],
             }),
             gas_limit: None,
@@ -1068,12 +1064,11 @@ fn withdrawing_unbonded() {
     );
 
     let err = previous_batches().load(deps.as_ref().storage, 2u64.into()).unwrap_err();
-    assert_eq!(
-        err,
-        StdError::NotFound {
-            kind: "pfc_steak::hub::Batch".to_string()
-        }
-    );
+    match err { StdError::NotFound {..} => {}, _=> {
+        panic!("Should have been not found")
+    } };
+
+    
 
     // User 1's unbond requests in batches 1 and 2 should have been deleted
     let err1 = unbond_requests()
@@ -1083,18 +1078,14 @@ fn withdrawing_unbonded() {
         .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_1").as_str()))
         .unwrap_err();
 
-    assert_eq!(
-        err1,
-        StdError::NotFound {
-            kind: "pfc_steak::hub::UnbondRequest".to_string()
-        }
-    );
-    assert_eq!(
-        err2,
-        StdError::NotFound {
-            kind: "pfc_steak::hub::UnbondRequest".to_string()
-        }
-    );
+    match err1 { StdError::NotFound {..} => {}, _=> {
+        panic!("Should have been not found")
+    } };
+
+    match err2 { StdError::NotFound {..} => {}, _=> {
+        panic!("Should have been not found")
+    } };
+
 
     // User 3 attempt to withdraw; also specifying a receiver
     let res = execute(
@@ -1123,23 +1114,19 @@ fn withdrawing_unbonded() {
 
     // Batch 1 and user 2's unbonding request should have been purged from storage
     let err = previous_batches().load(deps.as_ref().storage, 1u64.into()).unwrap_err();
-    assert_eq!(
-        err,
-        StdError::NotFound {
-            kind: "pfc_steak::hub::Batch".to_string()
-        }
-    );
+    match err { StdError::NotFound {..} => {}, _=> {
+        panic!("Should have been not found")
+    } };
+
 
     let err = unbond_requests()
         .load(deps.as_ref().storage, (1u64.into(), &Addr::unchecked("user_3").as_str()))
         .unwrap_err();
 
-    assert_eq!(
-        err,
-        StdError::NotFound {
-            kind: "pfc_steak::hub::UnbondRequest".to_string()
-        }
-    );
+    match err { StdError::NotFound {..} => {}, _=> {
+        panic!("Should have been not found")
+    } };
+
 }
 
 #[test]

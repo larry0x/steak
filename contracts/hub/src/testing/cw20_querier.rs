@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cosmwasm_std::{to_binary, QuerierResult, SystemError, Uint128};
+use cosmwasm_std::{to_json_binary, QuerierResult, SystemError, Uint128};
 use cw20::{BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 
 use super::helpers::err_unsupported_query;
@@ -26,7 +26,7 @@ impl Cw20Querier {
                     })
                     .unwrap();
 
-                Ok(to_binary(&TokenInfoResponse {
+                Ok(to_json_binary(&TokenInfoResponse {
                     name: "".to_string(),
                     symbol: "".to_string(),
                     decimals: 0,
@@ -59,7 +59,7 @@ impl Cw20Querier {
                     })
                     .unwrap();
 
-                Ok(to_binary(&BalanceResponse {
+                Ok(to_json_binary(&BalanceResponse {
                     balance: Uint128::new(*balance),
                 })
                 .into())

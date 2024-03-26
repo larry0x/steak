@@ -1,7 +1,7 @@
 use std::{collections::HashSet, iter::FromIterator, str::FromStr};
 
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event,
+    to_json_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event,
     Order, ReplyOn, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use pfc_steak::{
@@ -266,7 +266,7 @@ pub fn bond(
                     } else {
                         CosmosMsg::Wasm(WasmMsg::Execute {
                             contract_addr: receiver.to_string(),
-                            msg: to_binary(&exec_msg)?,
+                            msg: to_json_binary(&exec_msg)?,
                             funds: vec![Coin {
                                 denom: steak_denom,
                                 amount: usteak_to_mint,
@@ -543,7 +543,7 @@ pub fn queue_unbond(
     if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.into(),
-            msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
+            msg: to_json_binary(&ExecuteMsg::SubmitBatch {})?,
             funds: vec![],
         }));
     }
@@ -1138,7 +1138,7 @@ pub fn collect_dust(deps: DepsMut, env: Env, max_tokens: usize) -> StdResult<Res
         let msg = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: dust_addr.to_string(),
             funds: balances_filtered,
-            msg: to_binary(&pfc_dust_collector::dust_collector::ExecuteMsg::DustReceived {})?,
+            msg: to_json_binary(&pfc_dust_collector::dust_collector::ExecuteMsg::DustReceived {})?,
         });
         Ok(Response::new()
             .add_attribute("dust", format!("sent {} tokens", balances_count))

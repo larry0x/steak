@@ -1,7 +1,7 @@
 use std::{collections::HashSet, iter::FromIterator, str::FromStr};
 
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut,
+    from_json, to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut,
     DistributionMsg, Env, Event, Order, Response, StdError, StdResult, SubMsg, SubMsgResponse,
     Uint128, WasmMsg,
 };
@@ -75,7 +75,7 @@ pub fn instantiate(deps: DepsMut, env: Env, msg: InstantiateMsg) -> StdResult<Re
             admin: Some(msg.owner), /* use the owner as admin for now; can be changed later by a
                                      * `MsgUpdateAdmin` */
             code_id: msg.cw20_code_id,
-            msg: to_binary(&Cw20InstantiateMsg {
+            msg: to_json_binary(&Cw20InstantiateMsg {
                 name: msg.name,
                 symbol: msg.symbol,
                 decimals: msg.decimals,
@@ -189,7 +189,7 @@ pub fn bond(
     let mint_msgs: Vec<CosmosMsg> = if mint_it {
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: steak_token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Mint {
+            msg: to_json_binary(&Cw20ExecuteMsg::Mint {
                 recipient: receiver.to_string(),
                 amount: usteak_to_mint,
             })?,
@@ -201,10 +201,10 @@ pub fn bond(
         let send_transfer_msg: CosmosMsg = match contract_info {
             Ok(_) => {
                 if let Some(exec_msg) = bond_msg {
-                    match from_binary(&exec_msg)? {
+                    match from_json(exec_msg)? {
                         Cw20HookMsg::Transfer {} => CosmosMsg::Wasm(WasmMsg::Execute {
                             contract_addr: steak_token.to_string(),
-                            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                            msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                                 recipient: receiver.to_string(),
                                 amount: usteak_to_mint,
                             })?,
@@ -212,10 +212,10 @@ pub fn bond(
                         }),
                         Cw20HookMsg::Distribute {} => CosmosMsg::Wasm(WasmMsg::Execute {
                             contract_addr: steak_token.to_string(),
-                            msg: to_binary(&Cw20ExecuteMsg::Send {
+                            msg: to_json_binary(&Cw20ExecuteMsg::Send {
                                 contract: receiver.to_string(),
                                 amount: usteak_to_mint,
-                                msg: to_binary(
+                                msg: to_json_binary(
                                     &funds_distributor_api::msg::Cw20HookMsg::Distribute {},
                                 )?,
                             })?,
@@ -225,7 +225,7 @@ pub fn bond(
                 } else {
                     CosmosMsg::Wasm(WasmMsg::Execute {
                         contract_addr: steak_token.to_string(),
-                        msg: to_binary(&Cw20ExecuteMsg::Send {
+                        msg: to_json_binary(&Cw20ExecuteMsg::Send {
                             contract: receiver.to_string(),
                             amount: usteak_to_mint,
                             msg: Default::default(),
@@ -237,7 +237,7 @@ pub fn bond(
             Err(_) => {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: steak_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                         recipient: receiver.to_string(),
                         amount: usteak_to_mint,
                         //  msg: Default::default(),
@@ -249,7 +249,7 @@ pub fn bond(
         vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: steak_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                msg: to_json_binary(&Cw20ExecuteMsg::Mint {
                     recipient: env.contract.address.to_string(), //receiver.to_string(),
                     amount: usteak_to_mint,
                 })?,
@@ -482,7 +482,7 @@ pub fn queue_unbond(
     if env.block.time.seconds() >= pending_batch.est_unbond_start_time {
         msgs.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.into(),
-            msg: to_binary(&ExecuteMsg::SubmitBatch {})?,
+            msg: to_json_binary(&ExecuteMsg::SubmitBatch {})?,
             funds: vec![],
         }));
     }
@@ -593,7 +593,7 @@ pub fn submit_batch(deps: DepsMut, env: Env) -> StdResult<Response> {
 
     let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: steak_token.into(),
-        msg: to_binary(&Cw20ExecuteMsg::Burn {
+        msg: to_json_binary(&Cw20ExecuteMsg::Burn {
             amount: pending_batch.usteak_to_burn,
         })?,
         funds: vec![],

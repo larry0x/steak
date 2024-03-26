@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    from_binary,
+    from_json,
     testing::{mock_env, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
     Addr, BlockInfo, ContractInfo, Deps, Env, OwnedDeps, QuerierResult, SystemError, SystemResult,
     Timestamp,
@@ -41,5 +41,5 @@ pub(super) fn mock_env_at_timestamp(timestamp: u64) -> Env {
 }
 
 pub(super) fn query_helper<T: DeserializeOwned>(deps: Deps, msg: QueryMsg) -> T {
-    from_binary(&query(deps, mock_env(), msg).unwrap()).unwrap()
+    from_json(&query(deps, mock_env(), msg).unwrap()).unwrap()
 }

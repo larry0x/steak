@@ -1,9 +1,4 @@
-use cosmwasm_std::{
-    from_binary,
-    testing::{mock_env, MockApi, MockStorage, MOCK_CONTRACT_ADDR},
-    Addr, BlockInfo, ContractInfo, Deps, Env, OwnedDeps, QuerierResult, SystemError, SystemResult,
-    Timestamp,
-};
+use cosmwasm_std::{ testing::{mock_env, MockApi, MockStorage, MOCK_CONTRACT_ADDR}, Addr, BlockInfo, ContractInfo, Deps, Env, OwnedDeps, QuerierResult, SystemError, SystemResult, Timestamp, from_json};
 use pfc_steak::hub::QueryMsg;
 use serde::de::DeserializeOwned;
 
@@ -43,5 +38,5 @@ pub(super) fn mock_env_at_timestamp(timestamp: u64) -> Env {
 pub(super) fn query_helper<T: DeserializeOwned>(deps: Deps, msg: QueryMsg) -> T {
     let bin = query(deps, mock_env(), msg).unwrap();
     //eprintln!("Query Response {:?}",&bin);
-    from_binary(&bin).unwrap()
+    from_json(&bin).unwrap()
 }
